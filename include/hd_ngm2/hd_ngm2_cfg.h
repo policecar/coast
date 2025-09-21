@@ -33,6 +33,7 @@ inline neuron_group_t::params_t basic_cng(
             );
         np.default_branch_interval = 5000;
         np.dendrite_params.resize(3); // 5
+        np.random_seed = rnd_seed++;
         for (auto &dp : np.dendrite_params) {
             dp.permanence_threshold            = 0.3;
             dp.input_size                      = input_size;

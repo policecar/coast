@@ -80,7 +80,10 @@ void neuron_group_t::process()
         std::execution::par,
         neurons.begin(),neurons.end(),
         [&](auto &neuron) {
-            out[neuron.id] = neuron.get_response();
+            out[neuron.id] = neuron.get_response(); // writing into out from different threads is a performance
+                                                    // problem as it is very cache unfriendly. This problem will go
+                                                    // away as soon as the parallelization moves up to the level
+                                                    // of the simulation.
         }
     );
 

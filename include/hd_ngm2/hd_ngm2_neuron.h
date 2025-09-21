@@ -7,7 +7,6 @@
 
 #include <vector>
 #include <array>
-#include <span>
 #include <functional>
 #include <random>
 
@@ -17,15 +16,21 @@
 
 namespace ngm2 {
 
+
+/*
+ * The main neuron model is defined within this class. It is used by the neuron group model.
+ */
 class neuron_t {
 
 public:
     using learning_window_t = std::pair<sigmoid_shape_t,sigmoid_shape_t>;
 
+    // see helper function "basic_cng" in hd_ngm2_cfg.h for usable default values
     struct params_t {
         std::vector<dendrite_t::params_t> dendrite_params;
-        std::size_t                       default_branch_interval; // suggestion: 5000
-        learning_window_t                 default_activity_learning_window; // suggestion: [sn:0.6 / tp:0.33],[sn:0.6 / tp:0.66]
+        std::size_t                       default_branch_interval;
+        learning_window_t                 default_activity_learning_window;
+        int                               random_seed;
     };
 
 private:
