@@ -7,6 +7,10 @@
 
 #include "hd_ngm2_neuron_group.h"
 
+/*
+ * utility function to generate a default parameterization of a cortical neuron group without apical dendrites
+ */
+
 namespace ngm2 {
 inline neuron_group_t::params_t basic_cng(
     partial_id_t id,
