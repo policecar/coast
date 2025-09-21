@@ -155,7 +155,7 @@ void fbgd::update()
                 continue;
             node_update = {0.0f, 0.0f};
             // get starting indices of all cells we want to look at
-            if (cur_cell != cur_node.cell_id) {
+            if (cur_cell != static_cast<int>(cur_node.cell_id)) {
                 cur_cell = static_cast<int>(cur_node.cell_id);
                 nb_tmp.clear();
                 int center_x = cur_cell % cell_cnt;
@@ -240,9 +240,11 @@ void fbgd::update()
                 );
 
                 for (auto &sib : sib_tmp) {
+                    auto node_from = nodes[node_look_up[sib.from]];
+                    auto node_to   = nodes[node_look_up[sib.to]];
                     const std::array<float,2> sib_delta {
-                        cur_node.pos[0] - other_node.pos[0],
-                        cur_node.pos[1] - other_node.pos[1]
+                        node_from.pos[0] - node_to.pos[0],
+                        node_from.pos[1] - node_to.pos[1]
                     };
                     const float sib_dist = std::sqrt(std::max(min_dist,
                             delta[0] * delta[0] +

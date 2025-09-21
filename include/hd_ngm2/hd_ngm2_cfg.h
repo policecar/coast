@@ -35,13 +35,14 @@ inline neuron_group_t::params_t basic_cng(
         np.dendrite_params.resize(3); // 5
         np.random_seed = rnd_seed++;
         for (auto &dp : np.dendrite_params) {
-            dp.permanence_threshold            = 0.3;
+            dp.permanence_threshold            = 0.3f;
             dp.input_size                      = input_size;
             dp.input_ids                       = input_ids;
             dp.default_accumulated_theta_thres = 2.0f;
             dp.default_min_mismatch_deviation  = 1.0f;
             dp.default_min_mismatch_percentage = 0.002f;
             dp.default_mismatch_smoothing      = 0.001f;
+            dp.default_mismatch_act_thres      = 0.8f;
             dp.default_primary_learning_rate   = 0.01f * learning_multiplier;
             dp.default_secondary_learning_rate = 0.0001f * learning_multiplier;
             dp.max_branch_level                = 2;//3;

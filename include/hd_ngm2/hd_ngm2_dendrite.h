@@ -9,7 +9,6 @@
 #include <vector>
 #include <unordered_map>
 #include <random>
-#include <span>
 #include <tuple>
 #include <functional>
 #include <set>
@@ -18,19 +17,25 @@
 
 
 namespace ngm2 {
+/*
+ * Type wrapper for input / output space IDs
+ */
+using partial_id_t = std::size_t;
 
-using partial_id_t   = std::size_t;
-
+/*
+ * Main model of a dendritic branch used by the neuron model.
+ */
 class dendrite_t {
 
 public:
 
     enum class type_t {
-        apical,
-        proximal,
+        apical,          // this type of dendrite modulates the neurons activity (if present)
+        proximal,        // main type of dendrite that determines the neuron activity
         TYPE_COUNT
     };
 
+    // see helper function "basic_cng" in hd_ngm2_cfg.h for usable default values
     struct params_t {
         type_t      type;
         std::size_t input_size;
@@ -38,19 +43,24 @@ public:
         float       permanence_threshold;
         uint8_t     max_branch_level;
         int         rnd_seed;
-        float       default_primary_learning_rate;   // suggestion: 0.01
-        float       default_secondary_learning_rate; // suggestion: 0.0001
-        float       default_mismatch_smoothing;      // suggestion: 0.001
-        float       default_accumulated_theta_thres; // suggestion: 2.0
-        float       default_min_mismatch_deviation;  // suggestion: 1.0
-        float       default_min_mismatch_percentage; // suggestion: 0.05
+        float       default_primary_learning_rate;
+        float       default_secondary_learning_rate;
+        float       default_mismatch_act_thres;
+        float       default_mismatch_smoothing;
+        float       default_accumulated_theta_thres;
+        float       default_min_mismatch_deviation;
+        float       default_min_mismatch_percentage;
     };
 
+    // helper type wrappers to deal with SOA (struct of arrays)
     using syn_tuple_t     = std::tuple<float, float, float, uint16_t, uint8_t>;
     using syn_tuple_ref_t = std::tuple<float&,float&,float&,uint16_t&,uint8_t&>;
 
     using seg_id_t = uint16_t;
 
+    // main data structure to model the synapses on the dendritic branch.
+    // the data structure is layout as "struct of arrays" (SOA) to allow for optimal
+    // cache friendliness and facilitate SIMD optimization by the compiler
     struct synapses_t {
         std::vector<float>    permanence;
         std::vector<float>    mismatch;
@@ -58,10 +68,12 @@ public:
         std::vector<seg_id_t> segment_idx;
         std::vector<uint8_t>  input_inc;
 
+        // helper functions to manage SOA layout
         void reserve(std::size_t size);
         void resize(std::size_t size);
         [[nodiscard]] std::size_t size() const;
 
+        // operator overload to access all members synchronously (where needed)
         syn_tuple_ref_t operator[](std::size_t idx);
         syn_tuple_t     operator[](std::size_t idx) const;
     };
@@ -82,6 +94,7 @@ private:
     float              accumulated_theta_thres;
     float              min_mismatch_deviation;
     float              min_mismatch_percentage;
+    float              mismatch_act_thres;
     float              last_max_inp;
 
     // helper structures
