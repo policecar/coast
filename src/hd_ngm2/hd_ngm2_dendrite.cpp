@@ -13,6 +13,8 @@
 #include "hd_ngm2_tools.h"
 
 namespace ngm2 {
+
+
 void dendrite_t::synapses_t::reserve(std::size_t size)
 {
     permanence.reserve(size);
@@ -72,10 +74,8 @@ dendrite_t::dendrite_t(params_t _params) :
     synapses.reserve(params.input_size * 2);
     synapses.resize(params.input_size);
     std::poisson_distribution<> rdis(static_cast<int>(100.0f * params.permanence_threshold * 1.f));
-    //std::uniform_real_distribution<float> rdis(0.2f, params.permanence_threshold + 0.02f);
     for (std::size_t i = 0; i < params.input_size; ++i) {
         synapses.permanence[i]    = std::clamp(static_cast<float>(rdis(rgen)) / 100.0f, 0.0f, 1.0f);
-//        synapses.permanence[i]    = rdis(rgen);
         synapses.mismatch[i]      = 0.0f;
         synapses.adapt_history[i] = 0.0f;
         synapses.segment_idx[i]   = 1;
@@ -156,7 +156,6 @@ float dendrite_t::get_response()
     auto cur_inp_it    = cur_input.begin();
     auto cur_inp_end   = cur_input.end();
     float nse = cur_stats.nse;
-    float avg_nse = nse;
     std::uniform_real_distribution<float> dis1 { 0.0f, cur_stats.max_val / 2.0f };
     for (std::size_t i = 0; i < syn_cnt; ++i) {
         if (cur_inp_it == cur_inp_end) {
@@ -167,7 +166,6 @@ float dendrite_t::get_response()
             cur_inp_it  = cur_input.begin();
             cur_inp_end = cur_input.end();
             nse = std::min(cur_stats.nse,nse);
-            avg_nse += nse;
             dis1 = std::uniform_real_distribution<float> {0.0f, cur_stats.max_val / 2.0f};
         }
         if (synapses.permanence[i] > params.permanence_threshold) {
@@ -183,17 +181,9 @@ float dendrite_t::get_response()
                     segment_activity[synapses.segment_idx[i]] = 0.0f;
             }
 
-            // the thing below might be a bit too aggressive...
-            /*
-            if (dis1(rgen) > *cur_inp_it) {
-                segment_activity[synapses.segment_idx[i]] -= synapses.permanence[i]/2.0;
-            }
-            */
-
         }
         cur_inp_it += synapses.input_inc[i];
     }
-    avg_nse /= static_cast<float>(input_mem.size());
 
     // push activities and perm_cnts to the leafs
     const std::size_t leaf_begin = (max_segment_idx + 1) / 2;

@@ -36,7 +36,6 @@ void softmax(auto &vec, float beta = 1.0f)
         }
     } else {
         std::ranges::fill(vec,zero);
-        //std::fill(vec.begin(),vec.end(),zero);
     }
 }
 
@@ -106,86 +105,11 @@ inline float normalized_shannon_entropy(std::span<const float> vec)
 }
 
 
-inline void local_inhibition(std::span<float> vec, float strength = 1.0f, float rnd_activity = 0.0f)
-{
-    // desired behavior: strong signals suppress weak signals...
-    // semi-strong signals should stand up better to the suppression than weak signals
-    static std::mt19937 rgen {};
-    std::uniform_real_distribution<float> dis(0.0,rnd_activity);
-    if (vec.empty())
-        return;
-    float max_val = std::reduce(vec.begin(),vec.end(),0.0f,[](float a, float b){ return std::max(a,b); });
-    if (!std::isnormal(max_val))
-        return;
-    for (auto &val : vec) {
-        auto max_ratio = val / max_val;
-        val *= std::pow(max_ratio,strength);
-        val += dis(rgen);
-        val = std::clamp(val,0.0f,1.0f);
-    }
-}
 
-inline void local_inhibition2(std::span<float> vec, [[maybe_unused]] float strength = 1.0f)
+inline void local_inhibition(std::span<float> vec, float strength = 1.0f)
 {
     // desired behavior: strong signals suppress weak signals...
     // semi-strong signals should stand up better to the suppression than weak signals
-    if (vec.empty())
-        return;
-    float max_val = std::reduce(vec.begin(),vec.end(),0.0f,[](float a, float b){ return std::max(a,b); });
-    if (!std::isnormal(max_val))
-        return;
-    const float act_thres = max_val * max_val;
-    for (auto &val : vec) {
-        if (val < act_thres)
-            val = 0.0f;
-    }
-}
-
-inline void local_inhibition3(std::span<float> vec, float strength = 1.0f)
-{
-    // desired behavior: strong signals suppress weak signals...
-    // semi-strong signals should stand up better to the suppression than weak signals
-    constexpr std::size_t hist_size = 100;
-    std::array<float,hist_size> histogram {};
-    if (vec.empty())
-        return;
-    // determine max
-    float max_val = std::reduce(vec.begin(),vec.end(),0.0f,[](float a, float b){ return std::max(a,b); });
-    if (!std::isnormal(max_val))
-        return;
-    // create cumulative histogram
-    std::ranges::fill(histogram,0.0f);
-    const float vec_size = static_cast<float>(vec.size());
-    for (auto &val : vec) {
-        histogram[std::clamp(static_cast<std::size_t>(std::round(val * static_cast<float>(hist_size))),
-                             0ul,
-                             hist_size - 1)] += 1.0f / vec_size;
-    }
-    for (std::size_t hi = 1; hi < hist_size; ++hi) {
-        histogram[hi] += histogram[hi-1];
-    }
-    // rescale vector
-    for (auto &val : vec) {
-        /*
-        val = std::pow(histogram[std::clamp(static_cast<std::size_t>(std::round(val * static_cast<float>(hist_size))),
-                                            0ul,
-                                            hist_size - 1)],
-                       1.0f / (1.0f - 1.0f/strength)) * max_val;
-                       */
-        val = histogram[std::clamp(static_cast<std::size_t>(std::round(val * static_cast<float>(hist_size))),
-                                   0ul,
-                                   hist_size - 1)] * max_val;
-        auto max_ratio = val / max_val;
-        val *= std::pow(max_ratio,strength);
-    }
-}
-
-inline void local_inhibition4(std::span<float> vec, float strength = 1.0f, float rnd_activity = 0.0f)
-{
-    // desired behavior: strong signals suppress weak signals...
-    // semi-strong signals should stand up better to the suppression than weak signals
-    static std::mt19937 rgen {};
-    std::uniform_real_distribution<float> dis(0.0,rnd_activity);
     if (vec.empty())
         return;
     const float max_val = std::reduce(vec.begin(),vec.end(),0.0f,[](float a, float b){ return std::max(a,b); });
@@ -195,34 +119,10 @@ inline void local_inhibition4(std::span<float> vec, float strength = 1.0f, float
     for (auto &val : vec) {
         auto max_ratio = val / max_val;
         val *= std::pow(max_ratio, 1.0f + (strength-1.0f) * nse_fact );
-        val += dis(rgen);
         val = std::clamp(val,0.0f,1.0f);
     }
 }
 
-inline void local_inhibition5(std::span<float> vec, float strength = 1.0f, float rnd_activity = 0.0f)
-{
-    // desired behavior: strong signals suppress weak signals...
-    // semi-strong signals should stand up better to the suppression than weak signals
-    static std::mt19937 rgen {};
-    if (vec.empty())
-        return;
-
-    softmax(vec,strength);
-
-    normalize(vec);
-
-    /*
-    const float nse = normalized_shannon_entropy(vec);
-    std::uniform_real_distribution<float> dis(0.0,(1.0 - nse) * rnd_activity);
-
-    for (auto &val : vec) {
-        val = val * (1.0f - rnd_activity) + dis(rgen);
-        val = std::clamp(val,0.0f,1.0f);
-    }
-    */
-
-}
 
 }
 

@@ -46,6 +46,9 @@ private:
 public:
     explicit neuron_t(params_t _params);
 
+    // id of the neuron within the neuron group
+    std::size_t id;
+
     // param read access
     [[nodiscard]] const params_t& get_params() const { return params; }
 

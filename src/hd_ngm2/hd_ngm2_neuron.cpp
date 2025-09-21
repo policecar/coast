@@ -14,7 +14,8 @@ neuron_t::neuron_t(params_t _params) :
     branch_interval(params.default_branch_interval),
     activity_learning_window(params.default_activity_learning_window),
     energy(1.0f),
-    rgen(params.dendrite_params[0].rnd_seed)
+    rgen(params.dendrite_params[0].rnd_seed),
+    id(-1)
 {
     // create dendrites
     dendrites.reserve(params.dendrite_params.size());

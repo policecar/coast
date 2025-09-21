@@ -19,9 +19,11 @@ inline neuron_group_t::params_t basic_cng(
 
     neuron_group_t::params_t ngm_params;
     ngm_params.id = id;
+    ngm_params.random_seed = rnd_seed++;
     ngm_params.default_weight_filter = { 0.5, 0.33 };
     ngm_params.default_common_learning_rate = 0.0001f * learning_multiplier;
     ngm_params.default_local_inhibition_strength = 5.0f;
+    ngm_params.default_stochastic_win_thres = 0.8f;
     ngm_params.neuron_params.resize(neuron_cnt);
     for (auto &np : ngm_params.neuron_params) {
         np.default_activity_learning_window =
@@ -31,7 +33,6 @@ inline neuron_group_t::params_t basic_cng(
             );
         np.default_branch_interval = 5000;
         np.dendrite_params.resize(3); // 5
-        int seed = rnd_seed++;
         for (auto &dp : np.dendrite_params) {
             dp.permanence_threshold            = 0.3;
             dp.input_size                      = input_size;
@@ -43,7 +44,7 @@ inline neuron_group_t::params_t basic_cng(
             dp.default_primary_learning_rate   = 0.01f * learning_multiplier;
             dp.default_secondary_learning_rate = 0.0001f * learning_multiplier;
             dp.max_branch_level                = 2;//3;
-            dp.rnd_seed                        = seed++;
+            dp.rnd_seed                        = rnd_seed++;
             dp.type = ngm2::dendrite_t::type_t::proximal;
         }
     }
