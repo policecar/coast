@@ -1,2 +1,2 @@
 # coast
-Coherent active state dynamics
+Coherent active state dynamics in self-organizing systems
