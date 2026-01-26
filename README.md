@@ -4,13 +4,13 @@ Coherent active state dynamics in self-organizing systems
 ## Dependencies
 
 - CMake 3.15+
-- raylib 3.0+
+- SDL2
 - Intel TBB
 - HDF5
 
 On macOS, GCC 15 is required for C++23 features (default clang lacks some):
 ```bash
-brew install gcc@15 raylib tbb hdf5
+brew install gcc@15 sdl2 tbb hdf5
 ```
 
 ## Build
