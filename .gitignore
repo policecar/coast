@@ -6,6 +6,7 @@
 
 # claude
 .claude
+CLAUDE_SESSION.md
 
 # Build
 build*/
