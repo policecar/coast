@@ -38,6 +38,10 @@ public:
     const dataset::cfg_store& get_datasets_cfg() const { return global_cfg.datasets; }
     const ngm2::cfg_store&    get_ngm2_cfg()     const { return global_cfg.ngm2;     }
     const sim::sim_cfg_t&     get_sim_cfg()      const { return global_cfg.sim;      }
+
+    // Mutable access for configuration editing
+    loader::global_cfg_t& get_config() { return global_cfg; }
+    const loader::global_cfg_t& get_config() const { return global_cfg; }
 };
 
 }

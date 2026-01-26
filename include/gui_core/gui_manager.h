@@ -10,6 +10,8 @@
 #include "hd_ngm2_neuron_group.h"
 #include "vec_ring_buffer.h"
 #include "ngm_flat_vis.h"
+#include "json_loader.h"
+#include "config_editor.h"
 
 namespace coast {
 
@@ -34,7 +36,8 @@ public:
         sim::env& sim_env,
         std::vector<ngm2::neuron_group_t>& groups,
         std::vector<vec_ring_buffer>& ring_buffers,
-        std::vector<ngm_flat_vis>& visualizations
+        std::vector<ngm_flat_vis>& visualizations,
+        loader::global_cfg_t& config
     );
 
     /**
@@ -75,6 +78,10 @@ private:
     std::vector<ngm2::neuron_group_t>& groups;
     std::vector<vec_ring_buffer>& ring_buffers;
     std::vector<ngm_flat_vis>& visualizations;
+    loader::global_cfg_t& config;
+
+    // Configuration editor
+    config_editor cfg_editor;
 
     // Dialog visibility state
     bool show_control = false;
@@ -105,7 +112,6 @@ private:
     void render_neuron_windows();
     void render_activity_plot();
     void render_network_editor();
-    void render_config_editor();
 };
 
 } // namespace coast

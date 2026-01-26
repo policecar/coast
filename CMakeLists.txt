@@ -44,6 +44,9 @@ add_executable(coast
         # GUI manager (menu bar, dialogs)
         src/gui_core/gui_manager.cpp
         include/gui_core/gui_manager.h
+        # Configuration editor
+        src/gui_core/config_editor.cpp
+        include/gui_core/config_editor.h
 
         # Dear ImGui core
         3rd_party/imgui/imconfig.h
