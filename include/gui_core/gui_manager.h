@@ -95,6 +95,11 @@ private:
     // Simulation control state
     bool simulation_running = false;
     int steps_per_frame = 100;
+    bool auto_steps = false;
+    int auto_steps_cooldown = 0;
+    static constexpr int AUTO_STEPS_COOLDOWN_FRAMES = 10;
+    static constexpr float AUTO_STEPS_TARGET_FPS = 35.0f;
+    static constexpr float AUTO_STEPS_P_COEFFICIENT = 0.4f;
 
     // Visualization configuration
     vis_config_t vis_config;
