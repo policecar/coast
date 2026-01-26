@@ -6,16 +6,18 @@
 #define VEC_RING_BUFFER_H
 
 #include <cstdint>
-#include<span>
-#include<raylib.h>
-#include<vector>
+#include <span>
+#include <vector>
+
+#include "color_types.h"
+#include "gl_texture.h"
 
 namespace coast {
 
 class vec_ring_buffer {
 
-    Texture2D texture {};
-    std::vector<Color> pixel_data {};
+    gl_texture texture;
+    std::vector<color_t> pixel_data;
 
     uint16_t vec_size;
     uint16_t ring_size;
@@ -26,8 +28,16 @@ public:
     vec_ring_buffer(uint16_t _vec_size, uint16_t _ring_size);
 
     void update(const std::span<float> &data, bool auto_norm = true, float min_val = 0.0f, float max_val = 1.0f);
-    void paint(Vector2 pos, float rot = 0.0f, float scale = 1.0f);
 
+    // Render in ImGui window. Returns false if window was closed.
+    bool render_imgui(const char* label, float scale = 1.0f);
+
+    // Get texture for custom rendering
+    [[nodiscard]] const gl_texture& get_texture() const { return texture; }
+    [[nodiscard]] uint16_t get_width() const { return ring_size; }
+    [[nodiscard]] uint16_t get_height() const { return vec_size; }
+
+    // No longer needed - RAII handles cleanup
     void free_resources();
 };
 

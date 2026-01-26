@@ -4,6 +4,9 @@
 # IDEs
 .idea
 
+# claude
+.claude
+
 # Build
 build*/
 cmake-build-*

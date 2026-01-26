@@ -1,3 +1,4 @@
+
 //
 // Created by jk on 08.09.25.
 //
@@ -7,7 +8,8 @@
 
 #include "vec_group_vis.h"
 #include "hd_ngm2_neuron_group.h"
-#include <raylib.h>
+#include "color_types.h"
+#include "gl_texture.h"
 
 namespace coast {
 
@@ -30,17 +32,24 @@ private:
 
     params_t params;
     const ngm2::neuron_group_t& ng;
-    Texture2D texture {};
-    std::vector<Color> pixel_data {};
+    gl_texture texture;
+    std::vector<color_t> pixel_data;
     uint32_t px_width {};
     uint32_t px_height {};
+
+    // Zoom state
+    float zoom_level = 1.0f;
 
 public:
     explicit ngm_flat_vis(const ngm2::neuron_group_t& neuron_group, params_t _params);
 
     void update();
 
-    void paint(Vector2 pos, float scale);
+    // Render in ImGui window with scroll and zoom support. Returns false if window was closed.
+    bool render_imgui(const char* label, float scale = 1.0f);
+
+    // Get texture for custom rendering
+    [[nodiscard]] const gl_texture& get_texture() const { return texture; }
 
     void free_resources();
 

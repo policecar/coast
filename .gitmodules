@@ -1,9 +1,12 @@
 [submodule "3rd_party/imgui"]
 	path = 3rd_party/imgui
 	url = git@github.com:ocornut/imgui.git
-[submodule "3rd_party/rlImGui"]
-	path = 3rd_party/rlImGui
-	url = git@github.com:raylib-extras/rlImGui.git
 [submodule "3rd_party/json"]
 	path = 3rd_party/json
 	url = git@github.com:nlohmann/json.git
+[submodule "3rd_party/implot"]
+	path = 3rd_party/implot
+	url = https://github.com/epezent/implot.git
+[submodule "3rd_party/imnodes"]
+	path = 3rd_party/imnodes
+	url = https://github.com/Nelarius/imnodes.git

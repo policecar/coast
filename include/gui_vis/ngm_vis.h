@@ -9,7 +9,8 @@
 #include <random>
 #include "hd_ngm2.h"
 #include "fbgd.h"
-#include "raylib.h"
+#include "color_types.h"
+#include "gl_texture.h"
 
 namespace coast {
 
@@ -23,8 +24,8 @@ class ngm_vis {
         fbgd::node_id_t node_id = 0;
         uint8_t used = 0;
 
-        Texture2D texture {};
-        std::vector<Color> pixel_data {};
+        gl_texture texture;
+        std::vector<color_t> pixel_data;
 
         uint32_t synapse_count = 0;
     };
@@ -41,8 +42,8 @@ class ngm_vis {
 
     std::vector<uint8_t> tmp_tree;
 
-    void get_pixel_data(int width, int height, uint16_t leaf_idx, std::size_t max_idx, const ngm2::dendrite_t::synapses_t &synapses, std::vector<Color> &output);
-    static Texture2D get_texture(int width, int height, Color *data);
+    void get_pixel_data(int width, int height, uint16_t leaf_idx, std::size_t max_idx, const ngm2::dendrite_t::synapses_t &synapses, std::vector<color_t> &output);
+    static gl_texture get_texture(int width, int height, const color_t *data);
 
 public:
     ~ngm_vis();
@@ -53,7 +54,9 @@ public:
 
     void free_resources();
 
-    void paint(
+    // Render in ImGui window using ImDrawList
+    void render_imgui(
+        const char* label,
         const std::vector<fbgd::node>& vis_nodes,
         const std::vector<fbgd::edge>& vis_edges,
         const std::vector<uint32_t>&   vis_node_lu

@@ -6,11 +6,12 @@
 
 #include "ngm_flat_vis.h"
 
+#include <algorithm>
 #include <oneapi/tbb/task_arena.h>
 
+#include "imgui.h"
+
 namespace coast {
-
-
 
 ngm_flat_vis::ngm_flat_vis(const ngm2::neuron_group_t &neuron_group, const params_t _params) :
     params(_params),
@@ -53,23 +54,16 @@ ngm_flat_vis::ngm_flat_vis(const ngm2::neuron_group_t &neuron_group, const param
         }
     }
     // create actual pixel data
-    pixel_data.resize(px_width * px_height, Color {255,255,0,255});
-    Image texture_img {
-        pixel_data.data(),
-        static_cast<int>(px_width),
-        static_cast<int>(px_height),
-        1,
-        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-    };
-    texture = LoadTextureFromImage(texture_img);
+    pixel_data.resize(px_width * px_height, color_t{255, 255, 0, 255});
+    texture = gl_texture(static_cast<int>(px_width), static_cast<int>(px_height), pixel_data.data());
 }
 
 void ngm_flat_vis::update()
 {
-    Color black { 0,0,0,255 };
-    Color white { 255,255,255,255 };
-    gradient<2> def_grad ( std::array<Color,2> {black,white} );
-    uint32_t group_pos_x  = 0;
+    color_t black{0, 0, 0, 255};
+    color_t white{255, 255, 255, 255};
+    gradient<2> def_grad(std::array<color_t, 2>{black, white});
+    uint32_t group_pos_x = 0;
     uint32_t group_pos_y = 0;
     std::size_t neuron_cnt = ng.get_neuron_count();
     for (std::size_t n = 0; n < neuron_cnt; ++n) {
@@ -81,17 +75,19 @@ void ngm_flat_vis::update()
             auto &dendrite = neuron.get_dendrite(d);
             const uint32_t max_rep_cnt = (dendrite.get_max_segment_idx() + 1) / 2;
             params.vis_params.vec_cnt = max_rep_cnt;
-            vec_group_vis vis {params.vis_params};
+            vec_group_vis vis{params.vis_params};
             const uint32_t rep_cnt = dendrite.get_representation_count();
             if (rep_cnt > max_rep_cnt) {
-                std::printf("too many representations: %u vs %u\n",rep_cnt,max_rep_cnt);
+                std::printf("too many representations: %u vs %u\n", rep_cnt, max_rep_cnt);
                 auto mask = dendrite.get_leaf_mask();
                 for (auto m : mask)
-                    std::printf("%u,",m);
+                    std::printf("%u,", m);
                 std::printf("\n");
             }
             for (uint32_t r = 0; r < rep_cnt; ++r)
-                vis.update_vec<2>(r,dendrite.get_representation(r),def_grad,px_pos_t{group_pos_x,group_pos_y},pixel_data_t{pixel_data,px_width,px_height});
+                vis.update_vec<2>(r, dendrite.get_representation(r), def_grad,
+                                  px_pos_t{group_pos_x, group_pos_y},
+                                  pixel_data_t{pixel_data, px_width, px_height});
             const uint32_t dendrite_width = vis.get_total_width();
             const uint32_t dendrite_height = vis.get_total_height();
             switch (params.layout) {
@@ -112,18 +108,50 @@ void ngm_flat_vis::update()
             } break;
         }
     }
-    UpdateTexture(texture,pixel_data.data());
+    texture.update(pixel_data);
 }
 
-void ngm_flat_vis::paint(Vector2 pos, float scale)
+bool ngm_flat_vis::render_imgui(const char* label, float scale)
 {
-    DrawTextureEx(texture, pos, 0.0f, scale, WHITE );
+    bool open = true;
+    if (ImGui::Begin(label, &open)) {
+        // Zoom controls
+        ImGui::Text("Zoom: %.1fx", zoom_level);
+        ImGui::SameLine();
+        if (ImGui::Button("-")) {
+            zoom_level = std::max(0.25f, zoom_level - 0.25f);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("+")) {
+            zoom_level = std::min(4.0f, zoom_level + 0.25f);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            zoom_level = 1.0f;
+        }
+
+        ImGui::Separator();
+
+        if (texture.is_valid()) {
+            // Calculate scaled size
+            float effective_scale = scale * zoom_level;
+            ImVec2 size(static_cast<float>(texture.get_width()) * effective_scale,
+                        static_cast<float>(texture.get_height()) * effective_scale);
+
+            // Scrollable region with both horizontal and vertical scrollbars
+            ImGui::BeginChild("ScrollRegion", ImVec2(0, 0), false,
+                              ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::Image(texture.as_imgui_texture(), size);
+            ImGui::EndChild();
+        }
+    }
+    ImGui::End();
+    return open;
 }
 
 void ngm_flat_vis::free_resources()
 {
-    if (IsTextureValid(texture))
-        UnloadTexture(texture);
+    texture.release();
 }
 
 ngm_flat_vis::params_t ngm_flat_vis::get_default(uint32_t rep_width, uint32_t rep_height)

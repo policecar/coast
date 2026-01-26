@@ -10,7 +10,8 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
-#include <raylib.h>
+
+#include "color_types.h"
 
 namespace coast {
 
@@ -18,15 +19,15 @@ template<uint8_t N>
     requires (N >= 2)
 class gradient {
 
-    const std::array<Color,N> grad_colors;
+    const std::array<color_t, N> grad_colors;
 
 public:
 
-    explicit gradient(const std::array<Color,N> &gradient_colors) :
+    explicit gradient(const std::array<color_t, N> &gradient_colors) :
         grad_colors(gradient_colors)
     {}
 
-    Color operator[](float grad_pos) const {
+    color_t operator[](float grad_pos) const {
         float grad_pos_c = std::clamp(grad_pos, 0.0f, 1.0f);
         const float scaled_idx = grad_pos_c * static_cast<float>(N-1);
         const uint32_t lower_idx = std::clamp(static_cast<uint32_t>(std::floor(scaled_idx)),0u,static_cast<uint32_t>(N-1));
@@ -36,8 +37,8 @@ public:
             return grad_colors[lower_idx];
         }
         // regular case
-        Color a = grad_colors[lower_idx];
-        Color b = grad_colors[upper_idx];
+        color_t a = grad_colors[lower_idx];
+        color_t b = grad_colors[upper_idx];
         const float frac = scaled_idx - static_cast<uint32_t>(scaled_idx);
         return {
             static_cast<uint8_t>(std::lerp(static_cast<float>(a.r),static_cast<float>(b.r),frac)),

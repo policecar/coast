@@ -3,10 +3,10 @@
 //
 #include <cstdio>
 #include <cassert>
-#include <raylib.h>
-#include "ngm_vis.h"
-
 #include <algorithm>
+
+#include "ngm_vis.h"
+#include "imgui.h"
 
 namespace coast {
 
@@ -15,7 +15,7 @@ void ngm_vis::get_pixel_data(
     uint16_t leaf_idx,
     std::size_t max_idx,
     const ngm2::dendrite_t::synapses_t &synapses,
-    std::vector<Color> &output
+    std::vector<color_t> &output
 )
 {
     output.resize(width*height);
@@ -42,17 +42,9 @@ void ngm_vis::get_pixel_data(
         }
 }
 
-Texture2D ngm_vis::get_texture(int width, int height, Color *data)
+gl_texture ngm_vis::get_texture(int width, int height, const color_t *data)
 {
-    Image texture_img {
-        data,
-        width,
-        height,
-        1,
-        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-    };
-    Texture2D tex = LoadTextureFromImage(texture_img);
-    return tex;
+    return gl_texture(width, height, data);
 }
 
 ngm_vis::~ngm_vis()
@@ -84,7 +76,6 @@ void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
     nodes.resize(nodes_size);
 
     // fill nodes
-    //group_node = vis.add_node();
     auto grid_cnt = static_cast<std::size_t>(std::ceil(std::sqrt(static_cast<float>(neuron_cnt))));
     const float grid_spacing = coast::fbgd::get_region_size() / static_cast<float>(grid_cnt+2);
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx ) {
@@ -101,7 +92,7 @@ void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
             vis.add_node({xp,yp}, true, root_node_idx), //fbgd::node_id_t node_id
             1,               //uint8_t used
             {},
-            std::vector<Color>(),
+            std::vector<color_t>(),
             0
         };
         // go over all branches and create nodes where necessary
@@ -116,8 +107,8 @@ void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
             std::size_t syn_cnt = synapses.size();
             for (std::size_t i = 0; i < syn_cnt; ++i) {
                 if (nodes[segment_base + synapses.segment_idx[i]].used == 0) {
-                    Texture2D tex;
-                    std::vector<Color> pdata;
+                    gl_texture tex;
+                    std::vector<color_t> pdata;
                     if (leaf_mask[synapses.segment_idx[i]]) {
                         get_pixel_data(28,28,synapses.segment_idx[i],max_segment,synapses,pdata);
                         tex = get_texture(28,28,pdata.data());
@@ -128,8 +119,8 @@ void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
                         synapses.segment_idx[i], //uint16_t    segment_idx
                         vis.add_node({xp + rdis(rgen) * (grid_spacing / 3), yp + rdis(rgen) * (grid_spacing / 3)},false,segment_base + synapses.segment_idx[i]),      //fbgd::node_id_t node_id
                         1,                    //uint8_t used
-                        tex,
-                        pdata,
+                        std::move(tex),
+                        std::move(pdata),
                         0
                     };
                 }
@@ -149,7 +140,6 @@ void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
             }
             vis.add_edge(nodes[root_node_idx].node_id, nodes[segment_base + 1].node_id);
         }
-        //vis.add_edge(group_node, nodes[root_node_idx].node_id);
 
     }
 }
@@ -160,8 +150,6 @@ void ngm_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
         node.synapse_count = 0;
 
     std::size_t neuron_cnt = ng.get_neuron_count();
-    //auto grid_cnt = static_cast<std::size_t>(std::ceil(std::sqrt(static_cast<float>(neuron_cnt))));
-    //const float grid_spacing = ngm::fbgd::get_region_size() / static_cast<float>(grid_cnt);
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx ) {
         const ngm2::neuron_t &cur_neuron = ng.get_neuron(neuron_idx);
 
@@ -180,23 +168,17 @@ void ngm_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
                 if (cur_node.pixel_data.empty() == false)
                 {
                     if (leaf_mask[synapses.segment_idx[i]] == 0) {
-                        //if (IsTextureValid(cur_node.texture))
-                            //UnloadTexture(cur_node.texture);
                         cur_node.pixel_data.clear();
                     } else {
                         get_pixel_data(28,28,synapses.segment_idx[i],max_segment,synapses,cur_node.pixel_data);
-                        //if (IsTextureValid(cur_node.texture))
-                            UpdateTexture(cur_node.texture,cur_node.pixel_data.data());
-                        //else
-                        //    cur_node.texture = get_texture(28,28,cur_node.pixel_data.data());
-
+                        cur_node.texture.update(cur_node.pixel_data);
                     }
                 } else if (cur_node.used == 0) {
                     auto &vis_pos = vis.get_node_pos(nodes[segment_base + synapses.segment_idx[i]/2].node_id);
                     float vx = vis_pos[0] + rdis(rgen) * 0.0001f;
                     float vy = vis_pos[1] + rdis(rgen) * 0.0001f;
-                    Texture2D tex;
-                    std::vector<Color> pdata;
+                    gl_texture tex;
+                    std::vector<color_t> pdata;
                     if (leaf_mask[synapses.segment_idx[i]]) {
                         get_pixel_data(28,28,synapses.segment_idx[i],max_segment,synapses,pdata);
                         tex = get_texture(28,28,pdata.data());
@@ -207,8 +189,8 @@ void ngm_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
                         synapses.segment_idx[i], //uint16_t    segment_idx
                         vis.add_node({vx,vy},false, segment_base + synapses.segment_idx[i]),      //fbgd::node_id_t node_id
                         2,                    //uint8_t used
-                        tex,
-                        pdata,
+                        std::move(tex),
+                        std::move(pdata),
                         0
                     };
                 }
@@ -229,8 +211,6 @@ void ngm_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
             }
         }
     }
-
-
 }
 
 void ngm_vis::update_representations(const ngm2::neuron_group_t &ng)
@@ -248,85 +228,87 @@ void ngm_vis::update_representations(const ngm2::neuron_group_t &ng)
             const auto &synapses = cur_branch.get_synapses();
             std::size_t syn_cnt = synapses.size();
             for (std::size_t i = 0; i < syn_cnt; ++i) {
-            //for (const auto &synapse : synapses) {
                 auto &cur_node = nodes[segment_base + synapses.segment_idx[i]];
                 if (cur_node.pixel_data.empty() == false)
                 {
                     get_pixel_data(28,28,synapses.segment_idx[i],max_segment,synapses,cur_node.pixel_data);
-                    //if (IsTextureValid(cur_node.texture))
-                        UpdateTexture(cur_node.texture,cur_node.pixel_data.data());
-                    //else
-                    //    cur_node.texture = get_texture(28,28,cur_node.pixel_data.data());
-                    //UpdateTexture(cur_node.texture,cur_node.pixel_data.data());
+                    cur_node.texture.update(cur_node.pixel_data);
                 }
             }
         }
     }
-
 }
 
 void ngm_vis::free_resources()
 {
-
     for (auto &node : nodes){
-        if (IsTextureValid(node.texture))
-            UnloadTexture(node.texture);
+        node.texture.release();
         node.pixel_data.clear();
     }
-
 }
 
-void ngm_vis::paint(const std::vector<fbgd::node> &vis_nodes, const std::vector<fbgd::edge> &vis_edges,
-                    const std::vector<uint32_t> &vis_node_lu)
+void ngm_vis::render_imgui(const char* label,
+                           const std::vector<fbgd::node> &vis_nodes,
+                           const std::vector<fbgd::edge> &vis_edges,
+                           const std::vector<uint32_t> &vis_node_lu)
 {
-    // perform basic rendering
-    constexpr float draw_scale_y = 1000.0f;
-    constexpr float draw_scale_x = 1500.0f;
+    ImGui::Begin(label);
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+    ImVec2 canvas_size = ImGui::GetContentRegionAvail();
+
+    // Draw canvas background
+    draw_list->AddRectFilled(canvas_pos,
+        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+        IM_COL32(30, 30, 30, 255));
+
+    // Scale factors
+    const float region_size = fbgd::get_region_size();
+    auto transform = [&](float x, float y) -> ImVec2 {
+        return ImVec2(
+            canvas_pos.x + (x / region_size) * canvas_size.x,
+            canvas_pos.y + (y / region_size) * canvas_size.y
+        );
+    };
+
+    // Draw edges
     for (auto &edge : vis_edges) {
         const auto &vnode1 = vis_nodes[vis_node_lu[edge.from]];
         const auto &vnode2 = vis_nodes[vis_node_lu[edge.to]];
         if (vnode1.node_id > vnode2.node_id)
             continue;
-        const Vector2 pos1 {
-            vnode1.pos[0] * draw_scale_x,
-            vnode1.pos[1] * draw_scale_y
-        };
-        const Vector2 pos2 {
-            vnode2.pos[0] * draw_scale_x,
-            vnode2.pos[1] * draw_scale_y
-        };
+        ImVec2 pos1 = transform(vnode1.pos[0], vnode1.pos[1]);
+        ImVec2 pos2 = transform(vnode2.pos[0], vnode2.pos[1]);
+
         auto node_idx = std::any_cast<std::size_t>(vnode2.payload);
         auto &node2 = nodes[node_idx];
         float sc_ratio = static_cast<float>(node2.synapse_count) / (28.0f * 28.0f);
+        float thickness = 2.f + 8.f * sc_ratio;
 
-        DrawLineEx(pos1, pos2, 2.f + 8.f * sc_ratio, BLUE);
+        draw_list->AddLine(pos1, pos2, IM_COL32(0, 121, 241, 255), thickness);
     }
 
+    // Draw nodes
     for (auto &vis_node : vis_nodes) {
         auto node_idx = std::any_cast<std::size_t>(vis_node.payload);
         auto &node = nodes[node_idx];
-        if (node.pixel_data.empty() == false) {
-            float scale = 1.0f;
-            Vector2 pos = {
-                vis_node.pos[0] * draw_scale_x - static_cast<float>(node.texture.width) * scale / 2,
-                vis_node.pos[1] * draw_scale_y - static_cast<float>(node.texture.height) * scale / 2,
-            };
-            DrawTextureEx(
-                node.texture,
-                pos,
-                0.0f,
-                scale,
-                WHITE
-            );
+        ImVec2 pos = transform(vis_node.pos[0], vis_node.pos[1]);
+
+        if (node.pixel_data.empty() == false && node.texture.is_valid()) {
+            float scale = canvas_size.x / 1500.0f;  // Approximate scale
+            float w = static_cast<float>(node.texture.get_width()) * scale;
+            float h = static_cast<float>(node.texture.get_height()) * scale;
+            ImVec2 tex_pos(pos.x - w / 2, pos.y - h / 2);
+            draw_list->AddImage(node.texture.as_imgui_texture(),
+                tex_pos, ImVec2(tex_pos.x + w, tex_pos.y + h));
         } else {
-            DrawCircle(
-                static_cast<int>(vis_node.pos[0] * draw_scale_x),
-                static_cast<int>(vis_node.pos[1] * draw_scale_y),
-                node.segment_idx == 0 ? 6.0f : 3.0f,
-                node.segment_idx == 0 ? ORANGE : BLACK
-            );
+            float radius = node.segment_idx == 0 ? 6.0f : 3.0f;
+            ImU32 color = node.segment_idx == 0 ? IM_COL32(255, 161, 0, 255) : IM_COL32(0, 0, 0, 255);
+            draw_list->AddCircleFilled(pos, radius, color);
         }
     }
+
+    ImGui::End();
 }
 
 } // ngm

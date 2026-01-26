@@ -1,19 +1,13 @@
 #include <vector>
-#include <functional>
-#include <random>
-#include <string>
-#include <string_view>
 #include <iostream>
-#include <map>
-
-#include <raylib.h>
 
 #include "json_loader.h"
 #include "sim_env.h"
 #include "sim_builder.h"
 #include "sim_builder_interface.h"
 
-#include "ray_app.h"
+#include "sdl_app.h"
+#include "gui_manager.h"
 
 // visualization
 #include "vec_ring_buffer.h"
@@ -76,7 +70,7 @@ int main(int argc, char **argv)
      * This object represents the main GUI-application that we use for visualization. It provides a number of hooks
      * to which we can register functions that are called at the respective parts of the GUI-loop.
      */
-    ray_app main_app;
+    sdl_app main_app("COAST - Neural Simulation");
 
     /*
      * Set up ring buffer visualizations that represent the outputs of the neuron groups.
@@ -126,87 +120,39 @@ int main(int argc, char **argv)
     }
 
 
-    // variable to control the number of simulation steps per GUI-frame
-    int process_steps_per_frame = 1000;
+    /*
+     * Set up GUI manager for menu bar and dialogs.
+     */
+    gui_manager gui(main_app, simulation_environment, groups, vrbs, visualizations);
 
     /*
      * Registering a state update function to be called during the state-update-phase of the GUI-loop.
-     * Local variables are captured by reference. In each GUI-loop iteration we perform "process_steps_per_frame"
-     * iterations of the simulation and then update the visualizations of the representations learned by the
-     * neuron groups.
+     * In each GUI-loop iteration we perform "steps_per_frame" iterations of the simulation
+     * and then update the visualizations of the representations learned by the neuron groups.
      */
     main_app.register_state_func(
         [&] {
-            for (int i = 0; i < process_steps_per_frame; ++i) {
-                simulation_environment.process();
-                simulation_environment.swap_io();
-            }
-            for (auto& vis : visualizations) {
-                vis.update();
-            }
-        }
-    );
-
-    // loading a font we need for printing status output
-    Font deja = LoadFont("../3rd_party/DejaVuSans.ttf");
-
-    /*
-     * Registering a draw function to be called during the draw-phase of the GUI-loop.
-     * Local variables are captured by reference. We start drawing by clearing the
-     * background, drawing some info about our current FPS and then print the status
-     * information of each simulation entity
-     */
-    main_app.register_draw_func(
-        [&] {
-            ClearBackground(RAYWHITE);
-            DrawFPS(10, 10);
-            for (int line = 40; auto &io_ent : simulation_environment.iterate_entities()) {
-                DrawTextEx(deja,io_ent.status_str().c_str(),Vector2(10,line),18, 1,BLACK);
-                line += 60;
+            if (gui.is_simulation_running()) {
+                for (int i = 0; i < gui.get_steps_per_frame(); ++i) {
+                    simulation_environment.process();
+                    simulation_environment.swap_io();
+                }
+                for (auto& vis : visualizations) {
+                    vis.update();
+                }
             }
         }
     );
 
     /*
-     * Registering another draw function that is concerned with all the visualization components.
-     * Local variables are captured by reference. Vertical offsets currently managed haphazardly, but for now it'll do.
+     * Registering GUI callback for menu bar and dialogs.
      */
-    main_app.register_draw_func(
-        [&]() {
-            float y_offset = 300.0f;
-            for (auto& vrb : vrbs) {
-                vrb.paint({5.0f, y_offset}, 0.0f, 2.0f);
-                y_offset += 110.0f;
-            }
-
-            constexpr float first_scale = 0.75f;
-            for (std::size_t i = 0; i < visualizations.size(); ++i) {
-                float scale = (i == 0) ? first_scale : 1.0f;
-                visualizations[i].paint({5.0f, y_offset}, scale);
-                y_offset += static_cast<float>(visualizations[i].get_height()) * scale + 10.0f;
-            }
-        }
-    );
-
-    /*
-     * Registering a dear imgui function that we can use to draw imgui-dialogs on top of the visualization.
-     * Local variables are captured by reference. We Just define a bunch of sliders to play around with some settings
-     * during the simulation. The values of the respective variables are directly manipulated through their references.
-     * As we do not explicitly create an imgui dialog, the elements will be placed within a default dialog.
-     */
-    /*
     main_app.register_gui_func(
-        [&]()
-        {
-            ImGui::SliderInt("dataset_change_interval", &dataset_ptr->get_change_interval(), 0, 500);
-            ImGui::SliderInt("process samples per frame", &process_steps_per_frame, 0, 1000);
-            for (std::size_t i = 0; i < groups.size(); ++i) {
-                std::string label = "group " + std::to_string(i+1) + " inhibition";
-                ImGui::SliderFloat(label.c_str(), &groups[i].get_local_inhibition_strength(), 0.1, 20.0);
-            }
+        [&] {
+            gui.render_menu_bar();
+            gui.render_dialogs();
         }
     );
-    */
 
     /*
      * Registering a function that performs some clean-up operations after the application window is closed.
@@ -229,4 +175,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-

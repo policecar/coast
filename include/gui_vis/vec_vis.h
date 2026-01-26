@@ -9,17 +9,16 @@
 #include <cstdint>
 #include <span>
 #include <vector>
-#include <raylib.h>
 
-#include <gradient.h>
-#include <numeric>
+#include "color_types.h"
+#include "gradient.h"
 
 namespace coast {
 
 struct pixel_data_t {
-    std::span<Color> data;
-    uint32_t         width;
-    uint32_t         height;
+    std::span<color_t> data;
+    uint32_t           width;
+    uint32_t           height;
 };
 
 struct px_pos_t {
@@ -48,13 +47,10 @@ public:
     template<uint32_t N>
     void update(std::span<const float> vec_data, const gradient<N> &colors, const px_pos_t out_pos, const pixel_data_t &output) {
         assert(vec_data.size() >= params.rep_width * params.rep_height);
-        //float max_val = std::reduce(vec_data.begin(),vec_data.end(),0.0f,[](float a, float b){ return std::max(a,b);});
-        //if (!std::isnormal(max_val)) max_val = 1.0f;
         for (uint32_t y = 0; y < params.rep_height; ++y)
             for (uint32_t x = 0; x < params.rep_width; ++x) {
                 const uint32_t data_idx = y * params.rep_width + x;
-                //const Color cur_color = colors[vec_data[data_idx] / max_val];
-                const Color cur_color = colors[vec_data[data_idx]];
+                const color_t cur_color = colors[vec_data[data_idx]];
                 for (uint32_t ey = 0; ey < params.elem_height; ++ey)
                     for (uint32_t ex = 0; ex < params.elem_width; ++ex) {
                         const uint32_t out_x = out_pos.x + x * params.elem_width  + ex;
