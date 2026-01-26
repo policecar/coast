@@ -6,6 +6,8 @@
 #define HD_NGM2_NEURON_GROUP_H
 
 #include <vector>
+#include <unordered_map>
+#include <string>
 #include <functional>
 #include <span>
 #include <random>
@@ -13,6 +15,10 @@
 #include "io_entity.h"
 #include "io_buffer.h"
 #include "hd_ngm2_neuron.h"
+#include "hd_ngm2_cfg.h"
+#include "hd_ngm2_tools.h"
+
+using namespace sim;
 
 namespace ngm2 {
 
@@ -22,22 +28,10 @@ namespace ngm2 {
  */
 class neuron_group_t : public sim::io_entity {
 
-public:
-    // see helper function "basic_cng" in hd_ngm2_cfg.h for usable default values
-    struct params_t {
-        partial_id_t                    id;
-        std::vector<neuron_t::params_t> neuron_params;
-        float                           default_local_inhibition_strength;
-        float                           default_common_learning_rate;
-        sigmoid_shape_t                 default_weight_filter;
-        float                           default_stochastic_win_thres;
-        int                             random_seed;
-    };
-
-private:
-    const params_t params;
+    const neuron_group_params_t params;
 
     // derived params
+    output_id_t              id;
     std::vector<std::size_t> inp_ids;
 
     // state
@@ -53,19 +47,22 @@ private:
 
 public:
     // main constructor the sets up the neuron group
-    explicit neuron_group_t(params_t  _params);
+    explicit neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id);
+
+    // io initialization
+    void init_io(const std::unordered_map<std::string,output_channel_t> &input_map);
 
     // read-only parameter access
-    [[nodiscard]] const params_t& get_params() const { return params; }
+    [[nodiscard]] const neuron_group_params_t& get_params() const { return params; }
 
     // core functionality / io_entity interface
     void set_outp_func(std::function<std::span<float>()> outp_func) override;
-    void set_inp_func(partial_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func) override;
+    void set_inp_func(output_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func) override;
 
     // main function that models one processing step of the neuron group
     void process() override;
 
-    [[nodiscard]] std::size_t get_outp_id() const override;
+    [[nodiscard]] sim::output_id_t get_outp_id() const override;
     [[nodiscard]] std::size_t get_outp_size() const override;
     [[nodiscard]] std::span<const std::size_t> get_inp_ids() const override;
 

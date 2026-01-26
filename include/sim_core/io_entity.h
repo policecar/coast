@@ -12,6 +12,9 @@
 
 namespace sim {
 
+using output_id_t = std::size_t;
+using output_channel_t = std::pair<output_id_t,std::size_t>;
+
 struct io_entity {
 
     virtual ~io_entity() = default;
@@ -21,7 +24,7 @@ struct io_entity {
 
     virtual void process() = 0;
 
-    [[nodiscard]] virtual std::size_t get_outp_id() const = 0;
+    [[nodiscard]] virtual output_id_t get_outp_id() const = 0;
     [[nodiscard]] virtual std::size_t get_outp_size() const = 0;
     [[nodiscard]] virtual std::span<const std::size_t> get_inp_ids() const = 0;
 

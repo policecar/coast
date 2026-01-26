@@ -2,35 +2,69 @@
 // Created by jk on 26.08.25.
 //
 #include <algorithm>
+#include <ranges>
 #include "hd_ngm2_neuron.h"
+
+#include "hd_ngm2_tools.h"
 
 namespace ngm2 {
 
 /*
  * main initialization of a neuron
  */
-neuron_t::neuron_t(params_t _params) :
-    params( std::move(_params) ),
+neuron_t::neuron_t(const cfg_store &cs, const std::string &type, int seed_delta) :
+    params( [&cs,&type]() -> neuron_params_t
+            {
+                  if (const auto it = cs.neurons.find(type); it != cs.neurons.cend())
+                      return it->second;
+                  return neuron_params_t {};
+            }() ),
     neuron_activity(0.0f),
     dendrite_type_activity(),
     input_count(0),
     branch_interval(params.default_branch_interval),
     activity_learning_window(params.default_activity_learning_window),
     energy(1.0f),
-    rgen(params.random_seed),
+    rgen(params.random_seed + seed_delta),
     id(-1)
 {
     // create dendrites
-    dendrites.reserve(params.dendrite_params.size());
-    for (const auto &dp : params.dendrite_params)
-        dendrites.emplace_back(dp);
+    std::size_t dendrite_cnt = 0;
+    for (const auto &d : params.dendrites)
+        dendrite_cnt += d.dendrite_count;
+    dendrites.reserve(dendrite_cnt);
+    int rnd_delta = (params.random_seed + seed_delta) * 1000;
+    for (const auto &d : params.dendrites)
+        for (std::size_t n = 0; n < d.dendrite_count; ++n)
+            dendrites.emplace_back(cs,d.dendrite_cfg,rnd_delta++);
+}
+
+void neuron_t::init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map)
+{
+    std::size_t cur_dendrite_idx = 0;
+    for (const auto &d : params.dendrites) {
+        // create mapping
+        std::unordered_map<std::string,sim::output_channel_t> dendrite_input_map;
+        for (const auto &cmap : params.channel_mappings
+                              | std::views::filter( [&d] (const auto &elem) { return elem.to_name == d.name; }))
+        {
+            auto it = input_map.find(cmap.from_channel);
+            if (it == input_map.cend())
+                throw std::runtime_error("no matching source (from_channel) in neuron found! channel name: " + cmap.from_channel);
+            dendrite_input_map[cmap.to_channel] = it->second;
+        }
+        for (std::size_t k = 0; k < d.dendrite_count; ++k) {
+            auto &cur_dendrite = dendrites[cur_dendrite_idx++];
+            cur_dendrite.init_input(dendrite_input_map);
+        }
+    }
 }
 
 /*
  * interface function that allows the neuron group to hand over functions that provide access to the respective
  * input buffers. We do not store these functions here in the neuron, but hand it over to the dendrites...
  */
-void neuron_t::set_inp_func(partial_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func)
+void neuron_t::set_inp_func(sim::output_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func)
 {
     for (auto &dendrite : dendrites)
         dendrite.set_inp_func(id,inp_func);
@@ -45,8 +79,8 @@ float neuron_t::get_response()
 {
     // generate indices from the possible types of dendrites. Currently, only apical and proximal dendrites are
     // modelled.
-    constexpr int ai = static_cast<int>(dendrite_t::type_t::apical);
-    constexpr int pi = static_cast<int>(dendrite_t::type_t::proximal);
+    constexpr int ai = static_cast<int>(dendrite_type_t::apical);
+    constexpr int pi = static_cast<int>(dendrite_type_t::proximal);
 
     // reset the neuron activity and initialized the type-specific activities. The initialization value of the
     // apical activity is used as a sentinel in case no apical dendrites are present. Note that neuron_activity is
@@ -142,4 +176,3 @@ std::size_t neuron_t::get_synapse_count() const
 }
 
 }
-

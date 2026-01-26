@@ -7,14 +7,21 @@
 #include <algorithm>
 #include <cassert>
 #include <execution>
+#include <ranges>
 
 namespace ngm2 {
 
 /*
  * Main initialization of the neuron group
  */
-neuron_group_t::neuron_group_t(params_t  _params) :
-    params                    ( std::move( _params )                     ),
+neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id) :
+    params                    ( [&cs,&type]() -> neuron_group_params_t
+                                {
+                                      if (const auto it = cs.neuron_groups.find(type); it != cs.neuron_groups.cend())
+                                          return it->second;
+                                      return neuron_group_params_t {};
+                                }()                                      ),
+    id                        ( output_id                                ),
     local_inhibition_strength ( params.default_local_inhibition_strength ),
     common_learning_rate      ( params.default_common_learning_rate      ),
     weight_filter             ( params.default_weight_filter             ),
@@ -23,21 +30,57 @@ neuron_group_t::neuron_group_t(params_t  _params) :
 {
     // temporary set to gather all input IDs from the dendrites of all
     // neurons in this group
-    std::set<partial_id_t> tmp;
+
+    //std::set<partial_id_t> tmp;
 
     // create neurons and collect the input IDs in the temporary set
-    neurons.reserve(params.neuron_params.size());
-    for (const auto &np : params.neuron_params) {
-        auto &new_neuron = neurons.emplace_back(np);
-        new_neuron.id    = neurons.size()-1;
-        for (const auto &dp : np.dendrite_params) {
-            tmp.insert_range(dp.input_ids);
+    std::size_t neuron_cnt = 0;
+    for (const auto &n : params.neurons)
+        neuron_cnt += n.neuron_count;
+    neurons.reserve(neuron_cnt);
+    int seed_delta = 0;
+    for (const auto &n : params.neurons)
+        for (std::size_t k = 0; k < n.neuron_count; ++k) {
+            auto &new_neuron = neurons.emplace_back(cs,n.neuron_cfg,seed_delta++);
+            new_neuron.id    = neurons.size()-1;
+            /*
+            for (const auto &d : new_neuron.get_dendrites()) {
+                tmp.insert_range(d.get_params().input_ids);
+            }
+            */
         }
-    }
 
     // copy the set of input IDs over to the inp_ids vector
+    /*
     inp_ids.resize(tmp.size());
     std::ranges::copy(tmp,inp_ids.begin());
+    */
+}
+
+void neuron_group_t::init_io(const std::unordered_map<std::string,output_channel_t> &input_map){
+    // init inp_ids array
+    inp_ids.clear();
+    for (output_channel_t oc : input_map | std::views::values) {
+        inp_ids.push_back(oc.first);
+    }
+    // init neuron inputs
+    std::size_t cur_neuron_idx = 0;
+    for (const auto &n : params.neurons) {
+        // create mapping
+        std::unordered_map<std::string,output_channel_t> neuron_input_map;
+        for (const auto &cmap : params.channel_mappings
+                              | std::views::filter( [&n] (const auto &elem) { return elem.to_name == n.name; }))
+        {
+            auto it = input_map.find(cmap.from_channel);
+            if (it == input_map.cend())
+                throw std::runtime_error("no matching source (from_channel) in neuron group found! channel name: " + cmap.from_channel);
+            neuron_input_map[cmap.to_channel] = it->second;
+        }
+        for (std::size_t k = 0; k < n.neuron_count; ++k) {
+            auto &cur_neuron = neurons[cur_neuron_idx++];
+            cur_neuron.init_input(neuron_input_map);
+        }
+    }
 }
 
 /*
@@ -56,7 +99,7 @@ void neuron_group_t::set_outp_func(std::function<std::span<float>()> outp_func)
  * functions here in the group, but hand it over to the neurons (which will in turn hand it
  * over to their dendrites...)
  */
-void neuron_group_t::set_inp_func(partial_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func)
+void neuron_group_t::set_inp_func(output_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func)
 {
     for (auto &neuron : neurons)
         neuron.set_inp_func(id,inp_func);
@@ -135,10 +178,12 @@ void neuron_group_t::process()
 }
 
 // interface function that allows the simulation environment to query the output ID of this io entity
-std::size_t neuron_group_t::get_outp_id() const
+
+sim::output_id_t neuron_group_t::get_outp_id() const
 {
-    return params.id;
+    return id;
 }
+
 
 // interface function that allows the simulation environment to query the output size of this io entity
 std::size_t neuron_group_t::get_outp_size() const

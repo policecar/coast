@@ -4,8 +4,18 @@
 # IDEs
 .idea
 
-# 
+# Build
+build*/
 cmake-build-*
+
+# Data files
+data/
+
+# Local docs/plans
+docs/
+
+# imgui state
+imgui.ini
 
 # Prerequisites
 *.d

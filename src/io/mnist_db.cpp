@@ -10,8 +10,9 @@
 #include <iostream>
 #include <numeric>
 #include <limits>
+#include <ranges>
 
-namespace mdb {
+namespace mnist {
 
 uint8_t idx_file::bswap(uint8_t x)
 {
@@ -104,13 +105,12 @@ mnist_db::mnist_db(const std::string &img_file, const std::string &label_file) :
         return;
     }
 
-    for (auto &val : norm_img_data) {
-        std::size_t idx = &val - norm_img_data.data();
+    for (auto [fval,ival] : std::views::zip(norm_img_data,img_data.get_u8())) {
         // addition of epsilon is a ROOT thing and just needed for easier visualization
-        val = std::numeric_limits<float>::epsilon() +
-              static_cast<float>(img_data.get_u8().at(idx)) /
-                  (255.0f + std::numeric_limits<float>::epsilon()*2);
+        //fval = static_cast<float>(ival) / (255.0f + std::numeric_limits<float>::epsilon()*2);
+        fval = static_cast<float>(ival) / 255.0f;
     }
+
 }
 
 void mnist_db::print_info() const

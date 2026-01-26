@@ -14,7 +14,7 @@
 #include <utility>
 #include <iostream>
 
-namespace mdb {
+namespace mnist {
 
 class idx_file {
 

@@ -60,7 +60,7 @@ public:
             auto [new_it,inserted] = entities.insert( {std::type_index(typeid(T)), std::make_unique<typed_entity_vec<T>>() } );
             it = new_it;
         }
-        typed_entity_vec<T> *ev = dynamic_cast<typed_entity_vec<T>*>(it->second.get());
+        auto ev = dynamic_cast<typed_entity_vec<T>*>(it->second.get());
         ev->emplace_back(params...);
     }
 
@@ -87,6 +87,8 @@ public:
     }
 
     std::generator<io_entity&> iterate_entities();
+
+    io_entity* get_entity(output_id_t output_id);
 
     void process();
     void swap_io();

@@ -11,16 +11,12 @@
 #include <random>
 #include <tuple>
 #include <functional>
-#include <set>
 
 #include "io_buffer.h"
-
+#include "hd_ngm2_cfg.h"
+#include "io_entity.h"
 
 namespace ngm2 {
-/*
- * Type wrapper for input / output space IDs
- */
-using partial_id_t = std::size_t;
 
 /*
  * Main model of a dendritic branch used by the neuron model.
@@ -28,29 +24,6 @@ using partial_id_t = std::size_t;
 class dendrite_t {
 
 public:
-
-    enum class type_t {
-        apical,          // this type of dendrite modulates the neurons activity (if present)
-        proximal,        // main type of dendrite that determines the neuron activity
-        TYPE_COUNT
-    };
-
-    // see helper function "basic_cng" in hd_ngm2_cfg.h for usable default values
-    struct params_t {
-        type_t      type;
-        std::size_t input_size;
-        std::set<partial_id_t> input_ids;
-        float       permanence_threshold;
-        uint8_t     max_branch_level;
-        int         rnd_seed;
-        float       default_primary_learning_rate;
-        float       default_secondary_learning_rate;
-        float       default_mismatch_act_thres;
-        float       default_mismatch_smoothing;
-        float       default_accumulated_theta_thres;
-        float       default_min_mismatch_deviation;
-        float       default_min_mismatch_percentage;
-    };
 
     // helper type wrappers to deal with SOA (struct of arrays)
     using syn_tuple_t     = std::tuple<float, float, float, uint16_t, uint8_t>;
@@ -79,7 +52,10 @@ public:
     };
 
 private:
-    const params_t params;
+    const dendrite_params_t params;
+
+    std::size_t input_size;
+    std::set<sim::output_id_t> input_ids;
 
     // derived params
     const seg_id_t    max_segment_idx;
@@ -99,7 +75,7 @@ private:
 
     // helper structures
     std::unordered_map<
-        partial_id_t,
+        sim::output_id_t,
         std::function<sim::io_buffer::inp_buf_t()>
     > input_mem;
 
@@ -108,13 +84,16 @@ private:
     // helper functions
     static constexpr seg_id_t calc_max_segment_idx(seg_id_t max_branch_level);
 public:
-    explicit dendrite_t(params_t _params);
+    dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
+
+    // input initialization
+    void init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map);
 
     // param read access
-    const params_t& get_params() const { return params; }
+    const dendrite_params_t& get_params() const { return params; }
 
     // the core processing functions
-    void set_inp_func(partial_id_t id, std::function<sim::io_buffer::inp_buf_t()> inp_func);
+    void set_inp_func(sim::output_id_t id, std::function<sim::io_buffer::inp_buf_t()> inp_func);
     float get_response();
     void  adapt_synapses(float max_activity, float weight);
     void  adapt_branches();

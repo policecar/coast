@@ -2,8 +2,10 @@
 // Created by jk on 04.09.25.
 //
 
+#include <algorithm>
 #include <ranges>
 #include <cstdio>
+#include <optional>
 
 #include "sim_env.h"
 
@@ -41,6 +43,19 @@ std::generator<io_entity &> env::iterate_entities()
         for (std::size_t i = 0; i < ev_size; ++i)
             co_yield ev->as_base(i);
     }
+}
+
+io_entity* env::get_entity(output_id_t output_id)
+{
+    for (auto &ev : entities | std::views::values ) {
+        std::size_t ev_size = ev->get_size();
+        for (std::size_t i = 0; i < ev_size; ++i) {
+            io_entity &cur_entity = ev->as_base(i);
+            if (cur_entity.get_outp_id() == output_id)
+                return &cur_entity;
+        }
+    }
+    return nullptr;
 }
 
 void env::process()
@@ -97,22 +112,22 @@ std::size_t env::set_post_swap_hook(std::function<void()> func)
     return next_hook_id++;
 }
 
-void env::remove_pre_process_hook(std::size_t id)
+void env::remove_pre_process_hook(const std::size_t id)
 {
     pre_process_hooks.erase(id);
 }
 
-void env::remove_post_process_hook(std::size_t id)
+void env::remove_post_process_hook(const std::size_t id)
 {
     post_process_hooks.erase(id);
 }
 
-void env::remove_pre_swap_hook(std::size_t id)
+void env::remove_pre_swap_hook(const std::size_t id)
 {
     pre_swap_hooks.erase(id);
 }
 
-void env::remove_post_swap_hook(std::size_t id)
+void env::remove_post_swap_hook(const std::size_t id)
 {
     post_swap_hooks.erase(id);
 }

@@ -3,6 +3,16 @@ project(coast)
 
 find_package(raylib 3.0 REQUIRED)
 find_package(TBB REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS C)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.12.0
+)
+FetchContent_MakeAvailable(json)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
@@ -35,8 +45,8 @@ add_executable(coast src/main.cpp
         include/gui_vis/fbgd.h
         src/gui_vis/ngm_vis.cpp
         include/gui_vis/ngm_vis.h
-        include/tools/mnist_db.h
-        src/tools/mnist_db.cpp
+        include/io/mnist_db.h
+        src/io/mnist_db.cpp
         include/hd_ngm2/hd_ngm2_dendrite.h
         src/hd_ngm2/hd_ngm2_dendrite.cpp
         include/hd_ngm2/hd_ngm2_neuron.h
@@ -51,8 +61,12 @@ add_executable(coast src/main.cpp
         include/sim_core/sim_env.h
         src/sim_core/io_buffer.cpp
         include/sim_core/io_buffer.h
-        src/tools/mnist_io.cpp
-        include/tools/mnist_io.h
+        src/io/mnist_io.cpp
+        include/io/mnist_io.h
+        include/json_cfg/json_loader.h
+        src/json_cfg/json_loader.cpp
+        include/io/dsprites_io.h
+        src/io/dsprites_io.cpp
         src/gui_vis/vec_ring_buffer.cpp
         include/gui_vis/vec_ring_buffer.h
         src/gui_vis/vec_vis.cpp
@@ -62,6 +76,16 @@ add_executable(coast src/main.cpp
         include/gui_vis/vec_group_vis.h
         src/gui_vis/ngm_flat_vis.cpp
         include/gui_vis/ngm_flat_vis.h
+        include/json_cfg/ngm2_json.h
+        include/tools/sim_builder_cfg.h
+        include/json_cfg/sim_json.h
+        include/tools/sim_builder.h
+        src/tools/sim_builder.cpp
+        include/io/mnist_cfg.h
+        include/io/dataset_cfg.h
+        include/json_cfg/dataset_json.h
+        include/io/dsprites_cfg.h
+        include/tools/sim_builder_interface.h
 )
 
 target_include_directories(coast PRIVATE
@@ -72,12 +96,16 @@ target_include_directories(coast PRIVATE
         include/hd_ngm2
         include/sim_core
         include/tools
+        include/io
+        include/json_cfg
 if(APPLE)
         /opt/homebrew/include/c++/15
 endif()
 )
 
-target_link_libraries(coast PRIVATE TBB::tbb raylib)
+
+target_include_directories(coast PRIVATE ${HDF5_INCLUDE_DIRS})
+target_link_libraries(coast PRIVATE TBB::tbb raylib nlohmann_json::nlohmann_json ${HDF5_C_LIBRARIES})
 
 if (APPLE)
     target_link_libraries(coast PRIVATE "-framework IOKit")

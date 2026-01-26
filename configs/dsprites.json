@@ -1,0 +1,69 @@
+{
+  "datasets": {
+    "dsprites": {
+      "default": {
+        "hdf5_file": "/home/jk/data/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5",
+        "change_interval": 1,
+        "noise_range": [ 0.0, 0.05 ],
+        "random_seed": 0,
+        "randomize_readout" : true
+      }
+    },
+    "mnist": {}
+  },
+  "ngm2": {
+    "dendrites": {
+      "default": {
+        "type": "proximal",
+        "input_channels": ["da"],
+        "permanence_threshold": 0.3,
+        "max_branch_level": 3,
+        "rnd_seed": 0,
+        "default_primary_learning_rate": 0.05,
+        "default_secondary_learning_rate": 0.0005,
+        "default_mismatch_act_thres": 0.8,
+        "default_mismatch_smoothing": 0.001,
+        "default_accumulated_theta_thres": 2.0,
+        "default_min_mismatch_deviation": 1.0,
+        "default_min_mismatch_percentage": 0.002
+      }
+    },
+    "neurons": {
+      "default": {
+        "input_channels": ["na"],
+        "dendrites": [
+          { "name" : "prox1", "dendrite_cfg" : "default", "dendrite_count" : 5 }
+        ],
+        "channel_mappings": [
+          { "from_channel" : "na", "to_name" : "prox1", "to_channel" : "da" }
+        ],
+        "default_branch_interval": 5000,
+        "default_activity_learning_window": [ {"steepness": 0.66, "transition_point": 0.33}, {"steepness": 0.66, "transition_point": 0.66} ],
+        "random_seed": 0
+      }
+    },
+    "neuron_groups": {
+      "default": {
+        "input_channels": ["ga"],
+        "neurons": [
+          { "name" : "pyramidal", "neuron_cfg" : "default", "neuron_count" : 50 }
+        ],
+        "channel_mappings": [
+          { "from_channel" : "ga", "to_name" : "pyramidal", "to_channel" : "na" }
+        ],
+        "default_local_inhibition_strength": 5.0,
+        "default_common_learning_rate": 0.0001,
+        "default_weight_filter": {"steepness": 0.5, "transition_point": 0.33},
+        "default_stochastic_win_thres": 0.8,
+        "random_seed": 0
+      }
+    }
+  },
+  "sim": {
+    "nodes": [
+      { "id" : 0, "label" : "dsprites", "entity_type" : "dsprites_input", "entity_cfg" : "default", "inputs" : [] },
+      { "id" : 1, "label" : "group 1",  "entity_type" : "ngm2_neuron_group", "entity_cfg" : "default", "inputs" : [ [0,"ga"] ] }
+    ],
+    "node_sets": []
+  }
+}

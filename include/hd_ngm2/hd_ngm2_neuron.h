@@ -11,8 +11,9 @@
 #include <random>
 
 #include "hd_ngm2_dendrite.h"
-#include "hd_ngm2_tools.h"
 #include "io_buffer.h"
+#include "hd_ngm2_cfg.h"
+
 
 namespace ngm2 {
 
@@ -22,21 +23,9 @@ namespace ngm2 {
  */
 class neuron_t {
 
-public:
-    using learning_window_t = std::pair<sigmoid_shape_t,sigmoid_shape_t>;
+    using dendrite_type_array = std::array<float,static_cast<int>(dendrite_type_t::TYPE_COUNT)>;
 
-    // see helper function "basic_cng" in hd_ngm2_cfg.h for usable default values
-    struct params_t {
-        std::vector<dendrite_t::params_t> dendrite_params;
-        std::size_t                       default_branch_interval;
-        learning_window_t                 default_activity_learning_window;
-        int                               random_seed;
-    };
-
-private:
-    using dendrite_type_array = std::array<float,static_cast<int>(dendrite_t::type_t::TYPE_COUNT)>;
-
-    const params_t params;
+    const neuron_params_t params;
 
     // state
     std::vector<dendrite_t> dendrites;
@@ -49,16 +38,20 @@ private:
     std::mt19937            rgen;
 
 public:
-    explicit neuron_t(params_t _params);
+    explicit neuron_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
+
+    // input initialization
+    void init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map);
 
     // id of the neuron within the neuron group
     std::size_t id;
 
     // param read access
-    [[nodiscard]] const params_t& get_params() const { return params; }
+    [[nodiscard]] const neuron_params_t& get_params() const { return params; }
+    [[nodiscard]] const std::vector<dendrite_t>& get_dendrites() const { return dendrites; }
 
     // core processing functions
-    void set_inp_func(partial_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func);
+    void set_inp_func(sim::output_id_t id, const std::function<sim::io_buffer::inp_buf_t()> &inp_func);
     float get_response();
     void  adapt(float weight);
 
@@ -67,7 +60,7 @@ public:
     void set_activity_learning_window(const learning_window_t &window) { activity_learning_window = window;   }
 
     [[nodiscard]] std::size_t       get_branch_interval()          const { return branch_interval;          }
-    [[nodiscard]] learning_window_t get_activity_learning_window() const { return activity_learning_window; }
+    [[nodiscard]] const learning_window_t& get_activity_learning_window() const { return activity_learning_window; }
 
     // introspection support
     [[nodiscard]] dendrite_t::seg_id_t get_representation_count() const;

@@ -67,8 +67,14 @@ constexpr dendrite_t::seg_id_t dendrite_t::calc_max_segment_idx(const seg_id_t m
 /*
  * main initialization of our dendritic branch model
  */
-dendrite_t::dendrite_t(params_t _params) :
-    params                  ( std::move(_params)                            ),
+dendrite_t::dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta) :
+    params                  ( [&cs,&type]() -> dendrite_params_t
+                              {
+                                  if (const auto it = cs.dendrites.find(type); it != cs.dendrites.cend())
+                                      return it->second;
+                                  return dendrite_params_t {};
+                              }()                                           ),
+    input_size              (0                                              ),
     max_segment_idx         ( calc_max_segment_idx(params.max_branch_level) ),
     primary_learning_rate   ( params.default_primary_learning_rate          ),
     secondary_learning_rate ( params.default_secondary_learning_rate        ),
@@ -78,18 +84,38 @@ dendrite_t::dendrite_t(params_t _params) :
     min_mismatch_percentage ( params.default_min_mismatch_percentage        ),
     mismatch_act_thres      ( params.default_mismatch_act_thres             ),
     last_max_inp            ( 0.0f                                          ),
-    rgen                    ( params.rnd_seed                               )
+    rgen                    ( params.rnd_seed + seed_delta                  )
 {
-    // initializing random synapses
-    synapses.reserve(params.input_size * 2);
-    synapses.resize(params.input_size);
+    // initializing random synapses moved to init_input function
+
+    // Internally we represent the binary tree structure of the dendritic branch as linear arrays of appropriate size
+    segment_activity.resize(max_segment_idx + 1, 0.0f);
+    segment_weights.resize(max_segment_idx + 1,  0.0f);
+}
+
+void dendrite_t::init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map)
+{
+    // currently channel names are not used...
+
+    // collect all input ids and determine input size
+    input_size = 0;
+    input_ids.clear();
+    for (auto &oc : input_map | std::views::values) {
+        input_ids.insert(oc.first);
+        input_size += oc.second;
+    }
+
+    // initializing random synapses (was in constructor)
+
+    synapses.reserve(input_size * 2);
+    synapses.resize(input_size);
 
     // We use a poisson distribution around the permanence threshold.
     // As the available poisson distribution operates on integers rather than floats we need to
     // transform the permanence threshold ([0..1]) to a suitable integer range ([0..100]) and
     // transform the value back when using the distribution...
     std::poisson_distribution<> poisson_dis(static_cast<int>(100.0f * params.permanence_threshold));
-    for (std::size_t i = 0; i < params.input_size; ++i) {
+    for (std::size_t i = 0; i < input_size; ++i) {
         synapses.permanence[i]    = std::clamp(static_cast<float>(poisson_dis(rgen)) / 100.0f, 0.0f, 1.0f);
         synapses.mismatch[i]      = 0.0f;
         synapses.adapt_history[i] = 0.0f;
@@ -97,9 +123,6 @@ dendrite_t::dendrite_t(params_t _params) :
         synapses.input_inc[i]     = 1;
     }
 
-    // Internally we represent the binary tree structure of the dendritic branch as linear arrays of appropriate size
-    segment_activity.resize(max_segment_idx + 1, 0.0f);
-    segment_weights.resize(max_segment_idx + 1,  0.0f);
 }
 
 /*
@@ -107,9 +130,9 @@ dendrite_t::dendrite_t(params_t _params) :
  * functions that this dendritic branch might not need, we check if we are interested in the ID and only then store
  * the input function in the hashmap input_mem
  */
-void dendrite_t::set_inp_func(partial_id_t id, std::function<sim::io_buffer::inp_buf_t()> inp_func)
+void dendrite_t::set_inp_func(sim::output_id_t id, std::function<sim::io_buffer::inp_buf_t()> inp_func)
 {
-    if (params.input_ids.contains(id))
+    if (input_ids.contains(id))
         input_mem[id] = std::move(inp_func);
 }
 
@@ -416,7 +439,7 @@ void dendrite_t::adapt_branches()
                             [mm_avg](const float mm_val) {
                                 return std::pow(mm_avg - mm_val, 2.0f);
                             }) / syn_cnt_f;
-    const float mm_thres = mm_avg + mm_std * min_mismatch_deviation + 1.0f / static_cast<float>(params.input_size);
+    const float mm_thres = mm_avg + mm_std * min_mismatch_deviation + 1.0f / static_cast<float>(input_size);
 
     // synapses count as ambiguous if they have accumulated enough "adaptation effort" (see 1.1), if their mismatch
     // value is significantly higher than the mean mismatch value plus a minimum absolute (1/N) to avoid weird edge case
@@ -433,7 +456,7 @@ void dendrite_t::adapt_branches()
         }
 
     // early exit if not enough synapses are ambiguous
-    if (static_cast<float>(mm_cnt) < static_cast<float>(params.input_size) * min_mismatch_percentage)
+    if (static_cast<float>(mm_cnt) < static_cast<float>(input_size) * min_mismatch_percentage)
         return;
 
     /*
@@ -541,7 +564,7 @@ dendrite_t::seg_id_t dendrite_t::get_representation_count() const
 std::vector<float> dendrite_t::get_representation(seg_id_t idx) const
 {
     std::vector<float> result;
-    result.reserve(params.input_size);
+    result.reserve(input_size);
 
     auto leaf_mask = get_leaf_mask();
 
@@ -575,7 +598,7 @@ std::vector<float> dendrite_t::get_representation(seg_id_t idx) const
 
 std::size_t dendrite_t::get_representation_size() const
 {
-    return params.input_size;
+    return input_size;
 }
 
 std::size_t dendrite_t::get_synapse_count() const
@@ -595,6 +618,6 @@ dendrite_t::seg_id_t dendrite_t::get_max_segment_idx() const
 
 std::size_t dendrite_t::get_input_size() const
 {
-    return params.input_size;
+    return input_size;
 }
 }

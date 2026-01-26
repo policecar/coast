@@ -2,38 +2,48 @@
 #include <functional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <iostream>
+#include <map>
 
 #include <raylib.h>
 
-#include "ray_app.h"
-#include "fbgd.h"
-#include "hd_ngm2.h"
-#include "imgui.h"
-#include "mnist_io.h"
+#include "json_loader.h"
 #include "sim_env.h"
+#include "sim_builder.h"
+#include "sim_builder_interface.h"
+
+#include "ray_app.h"
+
+// visualization
 #include "vec_ring_buffer.h"
 #include "ngm_flat_vis.h"
-#include "hd_ngm2_tools.h"
+
 
 using namespace coast;
-using namespace ngm2;
-
 
 int main(int argc, char **argv)
 {
     // check if program arguments were provided
-    if (argc < 3) {
-        std::cout << "Please provide MNIST training images and labes as 1st and 2nd parameter to the program.\n";
+    if (argc < 2) {
+        std::cout << "Usage: " << argv[0] << " <config.json>\n";
         return -1;
     }
 
-    // store program arguments
-    const std::string mnist_image_file { argv[1] };
-    const std::string mnist_label_file { argv[2] };
+    // load configuration
+    loader::json_loader jl { argv[1] };
 
     // set up simulation environment
     sim::env simulation_environment;
+
+    // we use the simulation builder to setup the simulation from the cfg file
+    // we need to provide the capabilities to create and initialize entities
+    // via corresponding functions before calling "build_local"
+    sim::sim_builder sb { simulation_environment };
+
+    sim::register_entity_handlers(sb,jl);
+
+    sb.build_local( jl.get_sim_cfg() );
 
     /*
      * Set up the different entities that should run in the simulation. Each entity must be derived from
@@ -41,18 +51,13 @@ int main(int argc, char **argv)
      * The emplace_back function is templatized with the type of the respective entity (e.g., neuron_group_t) and
      * receives the parameters that the respective entity constructor expects.
      * In case of the neuron group it is an extensive parameter structure that describes the neuron group parameterization.
-     * To aid in that parameterization the service function basic_cng (see hd_ngm2/hd_ngm2_cfg.h) is used.
+     * To aid in that parameterization the service function build_group_params (see tools/config_loader.h) is used.
+     *
+     * The setup is driven by the JSON config file: dataset type and parameters are read from cfg.dataset,
+     * while neuron group specifications come from cfg.network.groups. Input sizes are resolved dynamically
+     * by building a map of each group's output size.
      */
-    simulation_environment.emplace_back<sim::mnist_io>(0, 15, mnist_image_file, mnist_label_file);
-    simulation_environment.emplace_back<neuron_group_t>( basic_cng(1, 50, 28*28,  {0}, 1025) );
-    simulation_environment.emplace_back<neuron_group_t>( basic_cng(2, 50, 100,{1,3}, 2025) );
-    simulation_environment.emplace_back<neuron_group_t>( basic_cng(3, 50, 100,{1,2}, 3025) );
 
-    /*
-     * After setting up all entities, we ask the simulation environment to create and set up the io-buffers that
-     * facilitate the exchange between the different simulation entities
-     */
-    simulation_environment.init_io_buffers();
 
     /*
      * If we want to access the simulation entities directly, e.g., to couple them to UI-elements for visualization,
@@ -60,10 +65,12 @@ int main(int argc, char **argv)
      * with the respective type of entity we want to get. It returns an optional-value that - if entities of the requested
      * types exist - delivers a vector-like object that can be used to access all entities of the respective type.
      */
-    sim::mnist_io  &mio         = simulation_environment.get_entities<sim::mnist_io>().value()->at(0);
-    neuron_group_t &mnist_group = simulation_environment.get_entities<neuron_group_t>().value()->at(0);
-    neuron_group_t &post_group  = simulation_environment.get_entities<neuron_group_t>().value()->at(1);
-    neuron_group_t &post_group2 = simulation_environment.get_entities<neuron_group_t>().value()->at(2);
+    auto groups_opt = simulation_environment.get_entities<ngm2::neuron_group_t>();
+    if (!groups_opt || groups_opt.value()->empty()) {
+        std::cerr << "No neuron groups found in simulation environment.\n";
+        return -1;
+    }
+    auto& groups = *groups_opt.value();
 
     /*
      * This object represents the main GUI-application that we use for visualization. It provides a number of hooks
@@ -72,40 +79,51 @@ int main(int argc, char **argv)
     ray_app main_app;
 
     /*
-     * setting up visualization of the three io-buffers of this simulation that represent the outputs of the
-     * neuron groups.
+     * Set up ring buffer visualizations that represent the outputs of the neuron groups.
+     * We use the group's output ID to get the corresponding IO buffer size.
      */
-    vec_ring_buffer vrb1 { static_cast<uint16_t>(simulation_environment.get_io_buffer(1).value()->size()), 750 };
-    vec_ring_buffer vrb2 { static_cast<uint16_t>(simulation_environment.get_io_buffer(2).value()->size()), 750 };
-    vec_ring_buffer vrb3 { static_cast<uint16_t>(simulation_environment.get_io_buffer(3).value()->size()), 750 };
+    std::vector<vec_ring_buffer> vrbs;
+    for (std::size_t i = 0; i < groups.size(); ++i) {
+        auto buf_opt = simulation_environment.get_io_buffer(groups[i].get_outp_id());
+        if (!buf_opt) {
+            std::cerr << "IO buffer not found for group " << groups[i].get_outp_id() << "\n";
+            return -1;
+        }
+        vrbs.emplace_back(static_cast<uint16_t>(buf_opt.value()->size()), 750);
+    }
 
     /*
-     * hooking the update functions of the three io-buffer visualizations to the post-process hook of the simulation
-     * process step. We use a lambda that captures vrb1, vrb2, ... by reference ([&])
+     * hooking the update functions of the io-buffer visualizations to the post-process hook of the simulation
+     * process step. We use a lambda that captures vrbs and groups by reference ([&])
      */
     simulation_environment.set_post_process_hook(
         [&]() {
-            vrb1.update(simulation_environment.get_io_buffer(1).value()->cur_write_buffer(), false, 0.0f, 1.0f);
-            vrb2.update(simulation_environment.get_io_buffer(2).value()->cur_write_buffer(), false, 0.0f, 1.0f);
-            vrb3.update(simulation_environment.get_io_buffer(3).value()->cur_write_buffer(), false, 0.0f, 1.0f);
+            // IO buffers validated at setup before this hook is registered - safe to dereference
+            for (std::size_t i = 0; i < groups.size(); ++i) {
+                auto* buf = simulation_environment.get_io_buffer(groups[i].get_outp_id()).value();
+                vrbs[i].update(buf->cur_write_buffer(), false, 0.0f, 1.0f);
+            }
         }
     );
 
     /*
-     * setting up visualization of the representations learned by the neuron groups. The get_default function
-     * provides a reasonable set of initial parameters and allows to set the semantic dimensions of the representations,
-     * e.g., 28 by 28 for representations of mnist inputs
+     * Setting up visualization of the representations learned by the neuron groups. The get_default function
+     * provides a reasonable set of initial parameters and allows to set the semantic dimensions of the representations.
+     * First group uses dataset image dimensions; subsequent groups use neuron_count x 2.
      */
-    ngm_flat_vis::params_t vis_params1 = ngm_flat_vis::get_default(28,28);
-    ngm_flat_vis vis1 { mnist_group, vis_params1 };
+    std::vector<ngm_flat_vis> visualizations;
+    visualizations.reserve(groups.size());
 
-    ngm_flat_vis::params_t vis_params2 = ngm_flat_vis::get_default(50,2);
-    vis_params2.vis_params.vec_params.elem_height = 5;
-    ngm_flat_vis vis2 { post_group, vis_params2 };
-
-    ngm_flat_vis::params_t vis_params3 = ngm_flat_vis::get_default(50,2);
-    vis_params3.vis_params.vec_params.elem_height = 5;
-    ngm_flat_vis vis3 { post_group2, vis_params3 };
+    for (std::size_t i = 0; i < groups.size(); ++i) {
+        ngm_flat_vis::params_t params{};
+        if (i == 0) {
+            params = ngm_flat_vis::get_default(64, 64); // temporary
+        } else {
+            params = ngm_flat_vis::get_default(50, 2); // temporary
+            params.vis_params.vec_params.elem_height = 5;
+        }
+        visualizations.emplace_back(groups[i], params);
+    }
 
 
     // variable to control the number of simulation steps per GUI-frame
@@ -123,9 +141,9 @@ int main(int argc, char **argv)
                 simulation_environment.process();
                 simulation_environment.swap_io();
             }
-            vis1.update();
-            vis2.update();
-            vis3.update();
+            for (auto& vis : visualizations) {
+                vis.update();
+            }
         }
     );
 
@@ -155,13 +173,18 @@ int main(int argc, char **argv)
      */
     main_app.register_draw_func(
         [&]() {
-            vrb1.paint({5.0f,300.0f},0.0f,2.0f);
-            vrb2.paint({5.0f,410.0f},0.0f,2.0f);
-            vrb3.paint({5.0f,520.0f},0.0f,2.0f);
-            constexpr float vis1_scale = 0.75f;
-            vis1.paint({5.0f,630.0f},vis1_scale);
-            vis2.paint({5.0f,630.0f + (float)vis1.get_height()*vis1_scale + 10.0f},1.0f);
-            vis3.paint({5.0f,630.0f + (float)vis1.get_height()*vis1_scale + 10.0f + (float)vis2.get_height() + 10.0f},1.0f);
+            float y_offset = 300.0f;
+            for (auto& vrb : vrbs) {
+                vrb.paint({5.0f, y_offset}, 0.0f, 2.0f);
+                y_offset += 110.0f;
+            }
+
+            constexpr float first_scale = 0.75f;
+            for (std::size_t i = 0; i < visualizations.size(); ++i) {
+                float scale = (i == 0) ? first_scale : 1.0f;
+                visualizations[i].paint({5.0f, y_offset}, scale);
+                y_offset += static_cast<float>(visualizations[i].get_height()) * scale + 10.0f;
+            }
         }
     );
 
@@ -171,28 +194,31 @@ int main(int argc, char **argv)
      * during the simulation. The values of the respective variables are directly manipulated through their references.
      * As we do not explicitly create an imgui dialog, the elements will be placed within a default dialog.
      */
+    /*
     main_app.register_gui_func(
         [&]()
         {
-            ImGui::SliderInt("mnist_io_change_interval", &mio.get_change_interval(), 0, 500);
+            ImGui::SliderInt("dataset_change_interval", &dataset_ptr->get_change_interval(), 0, 500);
             ImGui::SliderInt("process samples per frame", &process_steps_per_frame, 0, 1000);
-            ImGui::SliderFloat("1st local inhibition strength", &mnist_group.get_local_inhibition_strength(), 0.1, 20.0);
-            ImGui::SliderFloat("2st local inhibition strength", &post_group.get_local_inhibition_strength(), 0.1, 20.0);
-            ImGui::SliderFloat("3st local inhibition strength", &post_group2.get_local_inhibition_strength(), 0.1, 20.0);
+            for (std::size_t i = 0; i < groups.size(); ++i) {
+                std::string label = "group " + std::to_string(i+1) + " inhibition";
+                ImGui::SliderFloat(label.c_str(), &groups[i].get_local_inhibition_strength(), 0.1, 20.0);
+            }
         }
     );
+    */
 
     /*
      * Registering a function that performs some clean-up operations after the application window is closed.
      */
     main_app.register_shutdown_func(
         [&]() {
-            vrb1.free_resources();
-            vrb2.free_resources();
-            vrb3.free_resources();
-            vis1.free_resources();
-            vis2.free_resources();
-            vis3.free_resources();
+            for (auto& vrb : vrbs) {
+                vrb.free_resources();
+            }
+            for (auto& vis : visualizations) {
+                vis.free_resources();
+            }
         }
     );
 
