@@ -1,5 +1,6 @@
 #include "gui_manager.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -128,6 +129,24 @@ void gui_manager::render_control_dialog()
 
         ImGui::Separator();
         ImGui::SliderInt("Steps/frame", &steps_per_frame, 0, 2000);
+        ImGui::SameLine();
+        ImGui::Checkbox("Auto", &auto_steps);
+
+        // Auto-adjust steps/frame based on FPS using P controller
+        if (auto_steps && simulation_running) {
+            if (auto_steps_cooldown > 0) {
+                --auto_steps_cooldown;
+            } else {
+                float fps = ImGui::GetIO().Framerate;
+                float error = fps - AUTO_STEPS_TARGET_FPS;
+                int adjustment = static_cast<int>(error * AUTO_STEPS_P_COEFFICIENT);
+
+                if (adjustment != 0) {
+                    steps_per_frame = std::clamp(steps_per_frame + adjustment, 1, 2000);
+                    auto_steps_cooldown = AUTO_STEPS_COOLDOWN_FRAMES;
+                }
+            }
+        }
 
         ImGui::Separator();
         ImGui::Text("Group Parameters:");
