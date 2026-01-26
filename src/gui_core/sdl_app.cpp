@@ -6,6 +6,8 @@
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
+#include "implot.h"
+#include "imnodes.h"
 
 #include <stdexcept>
 #include <ranges>
@@ -78,6 +80,8 @@ void sdl_app::init_imgui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
+    ImNodes::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -98,6 +102,8 @@ void sdl_app::cleanup_imgui()
 {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
+    ImNodes::DestroyContext();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 }
 

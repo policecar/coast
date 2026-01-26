@@ -136,6 +136,7 @@ int main(int argc, char **argv)
                 for (int i = 0; i < gui.get_steps_per_frame(); ++i) {
                     simulation_environment.process();
                     simulation_environment.swap_io();
+                    gui.update_activity_history();
                 }
                 for (auto& vis : visualizations) {
                     vis.update();
