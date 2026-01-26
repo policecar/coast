@@ -123,7 +123,7 @@ int main(int argc, char **argv)
     /*
      * Set up GUI manager for menu bar and dialogs.
      */
-    gui_manager gui(main_app, simulation_environment, groups, vrbs, visualizations);
+    gui_manager gui(main_app, simulation_environment, groups, vrbs, visualizations, jl.get_config());
 
     /*
      * Registering a state update function to be called during the state-update-phase of the GUI-loop.
@@ -139,7 +139,9 @@ int main(int argc, char **argv)
                     gui.update_activity_history();
                 }
                 for (auto& vis : visualizations) {
-                    vis.update();
+                    if (vis.is_visible()) {
+                        vis.update();
+                    }
                 }
             }
         }

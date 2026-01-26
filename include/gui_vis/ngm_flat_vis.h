@@ -40,6 +40,9 @@ private:
     // Zoom state
     float zoom_level = 1.0f;
 
+    // Visibility state (for conditional updates)
+    bool visible = false;
+
 public:
     explicit ngm_flat_vis(const ngm2::neuron_group_t& neuron_group, params_t _params);
 
@@ -47,6 +50,10 @@ public:
 
     // Render in ImGui window with scroll and zoom support. Returns false if window was closed.
     bool render_imgui(const char* label, float scale = 1.0f);
+
+    // Visibility state for conditional updates
+    void set_visible(bool v) { visible = v; }
+    [[nodiscard]] bool is_visible() const { return visible; }
 
     // Get texture for custom rendering
     [[nodiscard]] const gl_texture& get_texture() const { return texture; }

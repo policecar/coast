@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <string>
-#include <numeric>
 
 #include "imgui.h"
 #include "implot.h"
@@ -15,13 +14,16 @@ gui_manager::gui_manager(
     sim::env& sim_env,
     std::vector<ngm2::neuron_group_t>& groups,
     std::vector<vec_ring_buffer>& ring_buffers,
-    std::vector<ngm_flat_vis>& visualizations
+    std::vector<ngm_flat_vis>& visualizations,
+    loader::global_cfg_t& config
 )
     : app(app)
     , sim_env(sim_env)
     , groups(groups)
     , ring_buffers(ring_buffers)
     , visualizations(visualizations)
+    , config(config)
+    , cfg_editor(config)
 {
     show_ring_buffer.resize(groups.size(), false);
     show_neurons.resize(groups.size(), false);
@@ -96,7 +98,9 @@ void gui_manager::render_dialogs()
     render_status_dialog();
     render_activity_plot();
     render_network_editor();
-    render_config_editor();
+    if (show_config_editor) {
+        cfg_editor.render(&show_config_editor);
+    }
     render_ring_buffer_windows();
     render_neuron_windows();
 }
@@ -171,6 +175,9 @@ void gui_manager::render_ring_buffer_windows()
 void gui_manager::render_neuron_windows()
 {
     for (std::size_t i = 0; i < visualizations.size(); ++i) {
+        // Update visibility state for conditional updates in main loop
+        visualizations[i].set_visible(show_neurons[i]);
+
         if (show_neurons[i]) {
             char label[64];
             snprintf(label, sizeof(label), "Neurons Group %zu", i + 1);
@@ -276,44 +283,6 @@ void gui_manager::render_network_editor()
         }
 
         ImNodes::EndNodeEditor();
-    }
-    ImGui::End();
-}
-
-void gui_manager::render_config_editor()
-{
-    if (!show_config_editor) return;
-
-    ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(50, 100), ImGuiCond_FirstUseEver);
-
-    if (ImGui::Begin("Configuration Editor", &show_config_editor)) {
-        ImGui::Text("Simulation Parameters");
-        ImGui::Separator();
-
-        // Display and edit group parameters
-        for (std::size_t i = 0; i < groups.size(); ++i) {
-            if (ImGui::CollapsingHeader(("Group " + std::to_string(i + 1)).c_str())) {
-                ImGui::PushID(static_cast<int>(i));
-
-                float inhibition = groups[i].get_local_inhibition_strength();
-                if (ImGui::SliderFloat("Local Inhibition", &inhibition, 0.1f, 20.0f)) {
-                    groups[i].get_local_inhibition_strength() = inhibition;
-                }
-
-                ImGui::Text("Neuron Count: %zu", groups[i].get_neuron_count());
-                ImGui::Text("Output ID: %lu", groups[i].get_outp_id());
-
-                ImGui::PopID();
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Visualization Settings");
-
-        ImGui::SliderFloat("Ring Buffer Scale", &vis_config.ring_buffer_scale, 0.5f, 4.0f);
-        ImGui::SliderFloat("Neurons Scale (First)", &vis_config.neurons_scale_first, 0.25f, 2.0f);
-        ImGui::SliderFloat("Neurons Scale (Other)", &vis_config.neurons_scale_other, 0.25f, 2.0f);
     }
     ImGui::End();
 }
