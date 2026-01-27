@@ -7,14 +7,7 @@ find_package(OpenGL REQUIRED)
 find_package(TBB REQUIRED)
 find_package(HDF5 REQUIRED COMPONENTS C)
 
-include(FetchContent)
-
-FetchContent_Declare(
-    json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.12.0
-)
-FetchContent_MakeAvailable(json)
+# nlohmann/json - header-only, use submodule directly
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
@@ -146,6 +139,7 @@ target_include_directories(coast PRIVATE
         include/json_cfg
         ${SDL2_INCLUDE_DIRS}
         ${HDF5_INCLUDE_DIRS}
+        3rd_party/json/include
 )
 
 if(APPLE)
@@ -156,7 +150,6 @@ target_link_libraries(coast PRIVATE
     TBB::tbb
     SDL2::SDL2
     OpenGL::GL
-    nlohmann_json::nlohmann_json
     ${HDF5_C_LIBRARIES}
     implot
     imnodes

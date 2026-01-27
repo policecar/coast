@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     for (std::size_t i = 0; i < groups.size(); ++i) {
         ngm_flat_vis::params_t params{};
         if (i == 0) {
-            params = ngm_flat_vis::get_default(64, 64); // temporary
+            params = ngm_flat_vis::get_default(28, 28); // temporary
         } else {
             params = ngm_flat_vis::get_default(50, 2); // temporary
             params.vis_params.vec_params.elem_height = 5;
