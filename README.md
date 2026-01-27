@@ -20,10 +20,9 @@ brew install gcc@15 sdl2 tbb hdf5
 cmake -B build -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=$(brew --prefix gcc)/bin/gcc-15 \
   -DCMAKE_CXX_COMPILER=$(brew --prefix gcc)/bin/g++-15 \
-  -DCMAKE_CXX_FLAGS=-march=native
 
 # Linux
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS=-march=native
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 
 # Build
 cmake --build build -j
