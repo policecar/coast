@@ -47,6 +47,9 @@ add_executable(coast
         # Configuration editor
         src/gui_core/config_editor.cpp
         include/gui_core/config_editor.h
+        # Simulation instance (RAII wrapper)
+        src/gui_core/sim_instance.cpp
+        include/gui_core/sim_instance.h
 
         # Dear ImGui core
         3rd_party/imgui/imconfig.h
@@ -138,6 +141,7 @@ target_include_directories(coast PRIVATE
         3rd_party/imgui/backends
         3rd_party/implot
         3rd_party/imnodes
+        3rd_party/imgui-filebrowser
         include/gui_core
         include/gui_vis
         include/hd_ngm2

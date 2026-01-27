@@ -1,190 +1,90 @@
-#include <vector>
 #include <iostream>
-
-#include "json_loader.h"
-#include "sim_env.h"
-#include "sim_builder.h"
-#include "sim_builder_interface.h"
+#include <memory>
 
 #include "sdl_app.h"
 #include "gui_manager.h"
-
-// visualization
-#include "vec_ring_buffer.h"
-#include "ngm_flat_vis.h"
-
+#include "sim_instance.h"
 
 using namespace coast;
 
 int main(int argc, char **argv)
 {
-    // check if program arguments were provided
-    if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " <config.json>\n";
-        return -1;
-    }
-
-    // load configuration
-    loader::json_loader jl { argv[1] };
-
-    // set up simulation environment
-    sim::env simulation_environment;
-
-    // we use the simulation builder to setup the simulation from the cfg file
-    // we need to provide the capabilities to create and initialize entities
-    // via corresponding functions before calling "build_local"
-    sim::sim_builder sb { simulation_environment };
-
-    sim::register_entity_handlers(sb,jl);
-
-    sb.build_local( jl.get_sim_cfg() );
-
     /*
-     * Set up the different entities that should run in the simulation. Each entity must be derived from
-     * io_entity (see sim_core/io_entity.h)
-     * The emplace_back function is templatized with the type of the respective entity (e.g., neuron_group_t) and
-     * receives the parameters that the respective entity constructor expects.
-     * In case of the neuron group it is an extensive parameter structure that describes the neuron group parameterization.
-     * To aid in that parameterization the service function build_group_params (see tools/config_loader.h) is used.
-     *
-     * The setup is driven by the JSON config file: dataset type and parameters are read from cfg.dataset,
-     * while neuron group specifications come from cfg.network.groups. Input sizes are resolved dynamically
-     * by building a map of each group's output size.
-     */
-
-
-    /*
-     * If we want to access the simulation entities directly, e.g., to couple them to UI-elements for visualization,
-     * we can create named references to the different simulation entities. The function "get_entities" is templatized
-     * with the respective type of entity we want to get. It returns an optional-value that - if entities of the requested
-     * types exist - delivers a vector-like object that can be used to access all entities of the respective type.
-     */
-    auto groups_opt = simulation_environment.get_entities<ngm2::neuron_group_t>();
-    if (!groups_opt || groups_opt.value()->empty()) {
-        std::cerr << "No neuron groups found in simulation environment.\n";
-        return -1;
-    }
-    auto& groups = *groups_opt.value();
-
-    /*
-     * This object represents the main GUI-application that we use for visualization. It provides a number of hooks
-     * to which we can register functions that are called at the respective parts of the GUI-loop.
+     * This object represents the main GUI-application that we use for visualization.
+     * It provides a number of hooks to which we can register functions that are
+     * called at the respective parts of the GUI-loop.
      */
     sdl_app main_app("COAST - Neural Simulation");
 
     /*
-     * Set up ring buffer visualizations that represent the outputs of the neuron groups.
-     * We use the group's output ID to get the corresponding IO buffer size.
-     */
-    std::vector<vec_ring_buffer> vrbs;
-    for (std::size_t i = 0; i < groups.size(); ++i) {
-        auto buf_opt = simulation_environment.get_io_buffer(groups[i].get_outp_id());
-        if (!buf_opt) {
-            std::cerr << "IO buffer not found for group " << groups[i].get_outp_id() << "\n";
-            return -1;
-        }
-        vrbs.emplace_back(static_cast<uint16_t>(buf_opt.value()->size()), 750);
-    }
-
-    /*
-     * hooking the update functions of the io-buffer visualizations to the post-process hook of the simulation
-     * process step. We use a lambda that captures vrbs and groups by reference ([&])
-     */
-    simulation_environment.set_post_process_hook(
-        [&]() {
-            // IO buffers validated at setup before this hook is registered - safe to dereference
-            for (std::size_t i = 0; i < groups.size(); ++i) {
-                auto* buf = simulation_environment.get_io_buffer(groups[i].get_outp_id()).value();
-                vrbs[i].update(buf->cur_write_buffer(), false, 0.0f, 1.0f);
-            }
-        }
-    );
-
-    /*
-     * Setting up visualization of the representations learned by the neuron groups.
-     * Visualization dimensions are determined by vis_hints config, keyed by input entity_cfg.
-     * Falls back to "default" hints if no exact match is found.
-     */
-    std::vector<ngm_flat_vis> visualizations;
-    visualizations.reserve(groups.size());
-
-    const auto& vis_hints = jl.get_vis_hints_cfg();
-
-    for (std::size_t i = 0; i < groups.size(); ++i) {
-        // Determine visualization dimensions based on input types and vis_hints
-        int width = 50;
-        int height = 1;
-
-        auto inp_ids = groups[i].get_inp_ids();
-        if (!inp_ids.empty()) {
-            // Check the first input to determine dimensions
-            auto* node = sb.get_node(inp_ids[0]);
-            if (node) {
-                const std::string& cfg_key = node->entity_cfg;
-                switch (node->entity_type) {
-                    case sim::io_entity_type_t::mnist_input: {
-                        auto it = vis_hints.datasets.mnist.find(cfg_key);
-                        if (it == vis_hints.datasets.mnist.end()) {
-                            it = vis_hints.datasets.mnist.find("default");
-                        }
-                        if (it != vis_hints.datasets.mnist.end()) {
-                            width = it->second.ngm_flat_vis.width;
-                            height = it->second.ngm_flat_vis.height;
-                        }
-                    } break;
-                    case sim::io_entity_type_t::dsprites_input: {
-                        auto it = vis_hints.datasets.dsprites.find(cfg_key);
-                        if (it == vis_hints.datasets.dsprites.end()) {
-                            it = vis_hints.datasets.dsprites.find("default");
-                        }
-                        if (it != vis_hints.datasets.dsprites.end()) {
-                            width = it->second.ngm_flat_vis.width;
-                            height = it->second.ngm_flat_vis.height;
-                        }
-                    } break;
-                    case sim::io_entity_type_t::ngm2_neuron_group: {
-                        auto it = vis_hints.ngm2.neuron_groups.find(cfg_key);
-                        if (it == vis_hints.ngm2.neuron_groups.end()) {
-                            it = vis_hints.ngm2.neuron_groups.find("default");
-                        }
-                        if (it != vis_hints.ngm2.neuron_groups.end()) {
-                            width = it->second.ngm_flat_vis.width;
-                            height = it->second.ngm_flat_vis.height;
-                        }
-                    } break;
-                    default:
-                        break;
-                }
-            }
-        }
-
-        ngm_flat_vis::params_t params = ngm_flat_vis::get_default(width, height);
-        if (height == 1) {
-            // For flat representations, increase element height for visibility
-            params.vis_params.vec_params.elem_height = 5;
-        }
-        visualizations.emplace_back(groups[i], params);
-    }
-
-
-    /*
      * Set up GUI manager for menu bar and dialogs.
+     * Initially starts without a simulation loaded.
      */
-    gui_manager gui(main_app, simulation_environment, groups, vrbs, visualizations, jl.get_config());
+    gui_manager gui(main_app);
 
     /*
-     * Registering a state update function to be called during the state-update-phase of the GUI-loop.
-     * In each GUI-loop iteration we perform "steps_per_frame" iterations of the simulation
-     * and then update the visualizations of the representations learned by the neuron groups.
+     * Simulation instance managed via unique_ptr for proper RAII lifecycle.
+     * Can be nullptr when no configuration is loaded.
+     */
+    std::unique_ptr<sim_instance> sim;
+
+    /*
+     * Optional: load configuration from command line argument.
+     */
+    if (argc >= 2) {
+        try {
+            sim = std::make_unique<sim_instance>(argv[1]);
+            gui.set_sim_instance(sim.get());
+            std::cout << "Loaded configuration: " << argv[1] << "\n";
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to load configuration: " << e.what() << "\n";
+            std::cerr << "Starting without simulation. Use System > Open Configuration to load.\n";
+        }
+    } else {
+        std::cout << "No configuration file specified.\n";
+        std::cout << "Use System > Open Configuration to load a configuration.\n";
+    }
+
+    /*
+     * Registering a state update function to be called during the state-update-phase
+     * of the GUI-loop. Handles both simulation stepping and loading new configurations.
      */
     main_app.register_state_func(
         [&] {
-            if (gui.is_simulation_running()) {
+            // Handle pending configuration load (after loading dialog has been shown)
+            if (gui.should_start_loading()) {
+                std::string path = gui.get_pending_load_path();
+                try {
+                    // Clear old simulation first
+                    gui.set_sim_instance(nullptr);
+                    if (sim) {
+                        sim->free_resources();
+                        sim.reset();
+                    }
+
+                    // Load new simulation
+                    sim = std::make_unique<sim_instance>(path);
+                    gui.set_sim_instance(sim.get());
+                    gui.clear_pending_load();
+                    std::cout << "Loaded configuration: " << path << "\n";
+                } catch (const std::exception& e) {
+                    gui.clear_pending_load();
+                    gui.set_load_error(e.what());
+                    std::cerr << "Failed to load configuration: " << e.what() << "\n";
+                }
+            }
+
+            // Run simulation if loaded and running
+            if (sim && gui.is_simulation_running()) {
+                auto& sim_env = sim->get_sim_env();
+                auto& visualizations = sim->get_visualizations();
+
                 for (int i = 0; i < gui.get_steps_per_frame(); ++i) {
-                    simulation_environment.process();
-                    simulation_environment.swap_io();
+                    sim_env.process();
+                    sim_env.swap_io();
                     gui.update_activity_history();
                 }
+
                 for (auto& vis : visualizations) {
                     if (vis.is_visible()) {
                         vis.update();
@@ -206,21 +106,20 @@ int main(int argc, char **argv)
     );
 
     /*
-     * Registering a function that performs some clean-up operations after the application window is closed.
+     * Registering a function that performs some clean-up operations after the
+     * application window is closed.
      */
     main_app.register_shutdown_func(
         [&]() {
-            for (auto& vrb : vrbs) {
-                vrb.free_resources();
-            }
-            for (auto& vis : visualizations) {
-                vis.free_resources();
+            if (sim) {
+                sim->free_resources();
             }
         }
     );
 
     /*
-     * finally it is time to run the GUI application. This call will block until the window is closed.
+     * Finally it is time to run the GUI application.
+     * This call will block until the window is closed.
      */
     main_app.run();
 
