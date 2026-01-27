@@ -636,6 +636,7 @@ void config_editor::render(bool* p_open)
         render_dataset_configs();
         render_ngm2_configs();
         render_simulation_graph();
+        render_visualization_hints();
     }
     ImGui::End();
 
@@ -1108,6 +1109,201 @@ sim::sim_node_id_t config_editor::request_add_node(sim::io_entity_type_t type, c
     config.sim.nodes.push_back(new_node);
     mark_dirty();
     return new_id;
+}
+
+// ============================================================================
+// Visualization Hints
+// ============================================================================
+
+// Helper: Render ngm_flat_vis_hint_t (returns true if modified)
+static bool render_ngm_flat_vis_hint(ngm_flat_vis_hint_t& hint)
+{
+    bool modified = false;
+
+    ImGui::SetNextItemWidth(80);
+    if (ImGui::InputInt("Width", &hint.width)) {
+        hint.width = std::max(1, hint.width);
+        modified = true;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(80);
+    if (ImGui::InputInt("Height", &hint.height)) {
+        hint.height = std::max(1, hint.height);
+        modified = true;
+    }
+
+    return modified;
+}
+
+// Helper: Render MNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_mnist_hint(const std::string& name, mnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render dSprites hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_dsprites_hint(const std::string& name, dsprites_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render neuron group hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_neuron_group_hint(const std::string& name, neuron_group_hints_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+void config_editor::render_visualization_hints()
+{
+    if (ImGui::CollapsingHeader("Visualization Hints")) {
+
+        // Dataset hints
+        if (ImGui::TreeNode("Dataset Hints")) {
+            // MNIST hints
+            if (ImGui::TreeNode("MNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.mnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_mnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.mnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_mnist_hint_name;
+                if (InputTextString("##newmnisthint", new_mnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add MNIST Hint") && !new_mnist_hint_name.empty()) {
+                    config.vis_hints.datasets.mnist[new_mnist_hint_name] = {{28, 28}};
+                    new_mnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // dSprites hints
+            if (ImGui::TreeNode("dSprites")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.dsprites) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_dsprites_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.dsprites.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_dsprites_hint_name;
+                if (InputTextString("##newdspriteshint", new_dsprites_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add dSprites Hint") && !new_dsprites_hint_name.empty()) {
+                    config.vis_hints.datasets.dsprites[new_dsprites_hint_name] = {{64, 64}};
+                    new_dsprites_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            ImGui::TreePop();
+        }
+
+        // NGM2 hints
+        if (ImGui::TreeNode("Neural Model Hints")) {
+            // Neuron group hints
+            if (ImGui::TreeNode("Neuron Groups")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.ngm2.neuron_groups) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_neuron_group_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.ngm2.neuron_groups.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_ngm2_hint_name;
+                if (InputTextString("##newngm2hint", new_ngm2_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add Neuron Group Hint") && !new_ngm2_hint_name.empty()) {
+                    config.vis_hints.ngm2.neuron_groups[new_ngm2_hint_name] = {{50, 1}};
+                    new_ngm2_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+            ImGui::TreePop();
+        }
+    }
 }
 
 } // namespace coast

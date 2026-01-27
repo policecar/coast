@@ -102,6 +102,7 @@ private:
     void render_dataset_configs();
     void render_ngm2_configs();
     void render_simulation_graph();
+    void render_visualization_hints();
 
     // Network editor (ImNodeFlow-based)
     std::unique_ptr<network_editor> net_editor;
