@@ -13,6 +13,22 @@
 
 using json = nlohmann::json;
 
+// Custom serializer for std::pair<float, float> (used by noise_range)
+namespace nlohmann {
+template <>
+struct adl_serializer<std::pair<float, float>> {
+    static void to_json(json& j, const std::pair<float, float>& p) {
+        j = json::array({p.first, p.second});
+    }
+    static void from_json(const json& j, std::pair<float, float>& p) {
+        if (j.is_array() && j.size() == 2) {
+            p.first = j[0].get<float>();
+            p.second = j[1].get<float>();
+        }
+    }
+};
+}
+
 namespace mnist {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(mnist_param_t,

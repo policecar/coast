@@ -10,6 +10,7 @@
 # Build
 build*/
 cmake-build-*
+compile_commands.json
 
 # Data files
 data/

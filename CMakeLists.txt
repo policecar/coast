@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 project(coast)
 
+# Export compile_commands.json so clangd knows include paths and compiler flags
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Dependencies
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
