@@ -101,19 +101,66 @@ int main(int argc, char **argv)
     );
 
     /*
-     * Setting up visualization of the representations learned by the neuron groups. The get_default function
-     * provides a reasonable set of initial parameters and allows to set the semantic dimensions of the representations.
-     * First group uses dataset image dimensions; subsequent groups use neuron_count x 2.
+     * Setting up visualization of the representations learned by the neuron groups.
+     * Visualization dimensions are determined by vis_hints config, keyed by input entity_cfg.
+     * Falls back to "default" hints if no exact match is found.
      */
     std::vector<ngm_flat_vis> visualizations;
     visualizations.reserve(groups.size());
 
+    const auto& vis_hints = jl.get_vis_hints_cfg();
+
     for (std::size_t i = 0; i < groups.size(); ++i) {
-        ngm_flat_vis::params_t params{};
-        if (i == 0) {
-            params = ngm_flat_vis::get_default(28, 28); // temporary
-        } else {
-            params = ngm_flat_vis::get_default(50, 2); // temporary
+        // Determine visualization dimensions based on input types and vis_hints
+        int width = 50;
+        int height = 1;
+
+        auto inp_ids = groups[i].get_inp_ids();
+        if (!inp_ids.empty()) {
+            // Check the first input to determine dimensions
+            auto* node = sb.get_node(inp_ids[0]);
+            if (node) {
+                const std::string& cfg_key = node->entity_cfg;
+                switch (node->entity_type) {
+                    case sim::io_entity_type_t::mnist_input: {
+                        auto it = vis_hints.datasets.mnist.find(cfg_key);
+                        if (it == vis_hints.datasets.mnist.end()) {
+                            it = vis_hints.datasets.mnist.find("default");
+                        }
+                        if (it != vis_hints.datasets.mnist.end()) {
+                            width = it->second.ngm_flat_vis.width;
+                            height = it->second.ngm_flat_vis.height;
+                        }
+                    } break;
+                    case sim::io_entity_type_t::dsprites_input: {
+                        auto it = vis_hints.datasets.dsprites.find(cfg_key);
+                        if (it == vis_hints.datasets.dsprites.end()) {
+                            it = vis_hints.datasets.dsprites.find("default");
+                        }
+                        if (it != vis_hints.datasets.dsprites.end()) {
+                            width = it->second.ngm_flat_vis.width;
+                            height = it->second.ngm_flat_vis.height;
+                        }
+                    } break;
+                    case sim::io_entity_type_t::ngm2_neuron_group: {
+                        auto it = vis_hints.ngm2.neuron_groups.find(cfg_key);
+                        if (it == vis_hints.ngm2.neuron_groups.end()) {
+                            it = vis_hints.ngm2.neuron_groups.find("default");
+                        }
+                        if (it != vis_hints.ngm2.neuron_groups.end()) {
+                            width = it->second.ngm_flat_vis.width;
+                            height = it->second.ngm_flat_vis.height;
+                        }
+                    } break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        ngm_flat_vis::params_t params = ngm_flat_vis::get_default(width, height);
+        if (height == 1) {
+            // For flat representations, increase element height for visibility
             params.vis_params.vec_params.elem_height = 5;
         }
         visualizations.emplace_back(groups[i], params);

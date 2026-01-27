@@ -55,6 +55,13 @@ public:
     );
 
     void build_local(const sim_cfg_t &cfg);
+
+    /**
+     * Get node information by ID.
+     * @param id The node/output ID to look up
+     * @return Pointer to node_t if found, nullptr otherwise
+     */
+    [[nodiscard]] const node_t* get_node(sim_node_id_t id) const;
 };
 
 }

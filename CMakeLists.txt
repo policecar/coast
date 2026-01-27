@@ -126,6 +126,8 @@ add_executable(coast
         include/tools/sim_builder.h
         src/tools/sim_builder.cpp
         include/tools/sim_builder_interface.h
+        include/gui_vis/gui_vis_cfg.h
+        include/json_cfg/gui_vis_json.h
 )
 
 target_include_directories(coast PRIVATE
