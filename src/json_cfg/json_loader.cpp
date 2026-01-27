@@ -12,7 +12,7 @@
 
 #include "json_loader.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 namespace loader {
 

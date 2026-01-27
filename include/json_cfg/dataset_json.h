@@ -11,7 +11,7 @@
 #include "mnist_cfg.h"
 #include "dsprites_cfg.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 namespace mnist {
 

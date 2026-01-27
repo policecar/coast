@@ -8,7 +8,7 @@
 #include <nlohmann/json.hpp>
 #include "sim_builder_cfg.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 namespace sim {
 

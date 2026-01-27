@@ -788,7 +788,7 @@ void config_editor::render_save_as_confirm_dialog()
 bool config_editor::save_config(const std::string& path)
 {
     try {
-        nlohmann::json j = config;
+        nlohmann::ordered_json j = config;
         std::ofstream file(path);
         if (!file.is_open()) {
             return false;
