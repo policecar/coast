@@ -95,7 +95,7 @@ void sdl_app::init_imgui()
     ImGui::StyleColorsDark();
 
     // Load custom font
-    io.Fonts->AddFontFromFileTTF("../3rd_party/DejaVuSans.ttf", 16.0f);
+    io.Fonts->AddFontFromFileTTF("./3rd_party/DejaVuSans.ttf", 16.0f);
 
     // Setup platform/renderer backends
 #ifdef __APPLE__
