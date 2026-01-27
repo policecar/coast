@@ -598,10 +598,12 @@ void config_editor::render(bool* p_open)
     ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
 
     // Window title shows dirty indicator
+    // Use ###id to keep stable window ID when title changes
     std::string title = "Configuration Editor";
     if (is_dirty) {
         title += " *";
     }
+    title += "###ConfigEditor";
 
     if (ImGui::Begin(title.c_str(), p_open, ImGuiWindowFlags_MenuBar)) {
         render_menu_bar();
