@@ -1,9 +1,9 @@
 #include "config_editor.h"
 
-#include <cstdio>
-#include <cstring>
-#include <string>
+#include <algorithm>
+#include <format>
 #include <fstream>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -20,6 +20,35 @@
 
 namespace coast {
 
+namespace {
+
+// Buffer size for ImGui text input fields
+constexpr std::size_t INPUT_BUFFER_SIZE = 512;
+
+// Helper: InputText wrapper for std::string
+// Returns true if the value was modified
+bool InputTextString(const char* label, std::string& str, std::size_t max_size = INPUT_BUFFER_SIZE)
+{
+    // Ensure string has enough capacity for editing
+    str.resize(max_size);
+
+    bool modified = ImGui::InputText(label, str.data(), str.size());
+
+    // Resize to actual content length
+    str.resize(std::strlen(str.c_str()));
+
+    return modified;
+}
+
+// Helper: InputText wrapper with item width
+bool InputTextStringWidth(const char* label, std::string& str, float width, std::size_t max_size = INPUT_BUFFER_SIZE)
+{
+    ImGui::SetNextItemWidth(width);
+    return InputTextString(label, str, max_size);
+}
+
+} // anonymous namespace
+
 // Helper: Render string list editor (returns true if modified)
 static bool render_string_list(const char* label, std::vector<std::string>& list)
 {
@@ -27,12 +56,7 @@ static bool render_string_list(const char* label, std::vector<std::string>& list
     if (ImGui::TreeNode(label)) {
         for (std::size_t i = 0; i < list.size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
-            char buf[256];
-            strncpy(buf, list[i].c_str(), sizeof(buf) - 1);
-            buf[sizeof(buf) - 1] = '\0';
-            ImGui::SetNextItemWidth(200);
-            if (ImGui::InputText("##item", buf, sizeof(buf))) {
-                list[i] = buf;
+            if (InputTextStringWidth("##item", list[i], 200)) {
                 modified = true;
             }
             ImGui::SameLine();
@@ -59,18 +83,10 @@ static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& c
     bool modified = false;
     remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
-        char image_buf[512], label_buf[512];
-        strncpy(image_buf, cfg.image_file.c_str(), sizeof(image_buf) - 1);
-        strncpy(label_buf, cfg.label_file.c_str(), sizeof(label_buf) - 1);
-        image_buf[sizeof(image_buf) - 1] = '\0';
-        label_buf[sizeof(label_buf) - 1] = '\0';
-
-        if (ImGui::InputText("Image File", image_buf, sizeof(image_buf))) {
-            cfg.image_file = image_buf;
+        if (InputTextString("Image File", cfg.image_file)) {
             modified = true;
         }
-        if (ImGui::InputText("Label File", label_buf, sizeof(label_buf))) {
-            cfg.label_file = label_buf;
+        if (InputTextString("Label File", cfg.label_file)) {
             modified = true;
         }
 
@@ -104,12 +120,7 @@ static bool render_dsprites_config(const std::string& name, dsprites::dsprites_p
     bool modified = false;
     remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
-        char file_buf[512];
-        strncpy(file_buf, cfg.hdf5_file.c_str(), sizeof(file_buf) - 1);
-        file_buf[sizeof(file_buf) - 1] = '\0';
-
-        if (ImGui::InputText("HDF5 File", file_buf, sizeof(file_buf))) {
-            cfg.hdf5_file = file_buf;
+        if (InputTextString("HDF5 File", cfg.hdf5_file)) {
             modified = true;
         }
 
@@ -211,11 +222,8 @@ static bool render_dendrite_config(const std::string& name, ngm2::dendrite_param
 static bool render_dendrite_set(ngm2::dendrite_set_t& ds, const ngm2::cfg_store& store)
 {
     bool modified = false;
-    char name_buf[128];
-    strncpy(name_buf, ds.name.c_str(), sizeof(name_buf) - 1);
-    name_buf[sizeof(name_buf) - 1] = '\0';
-    if (ImGui::InputText("Name", name_buf, sizeof(name_buf))) {
-        ds.name = name_buf;
+
+    if (InputTextString("Name", ds.name)) {
         modified = true;
     }
 
@@ -243,29 +251,16 @@ static bool render_dendrite_set(ngm2::dendrite_set_t& ds, const ngm2::cfg_store&
 static bool render_channel_mapping(ngm2::channel_mapping_t& cm)
 {
     bool modified = false;
-    char from_buf[128], to_name_buf[128], to_chan_buf[128];
-    strncpy(from_buf, cm.from_channel.c_str(), sizeof(from_buf) - 1);
-    strncpy(to_name_buf, cm.to_name.c_str(), sizeof(to_name_buf) - 1);
-    strncpy(to_chan_buf, cm.to_channel.c_str(), sizeof(to_chan_buf) - 1);
-    from_buf[sizeof(from_buf) - 1] = '\0';
-    to_name_buf[sizeof(to_name_buf) - 1] = '\0';
-    to_chan_buf[sizeof(to_chan_buf) - 1] = '\0';
 
-    ImGui::SetNextItemWidth(100);
-    if (ImGui::InputText("From", from_buf, sizeof(from_buf))) {
-        cm.from_channel = from_buf;
+    if (InputTextStringWidth("From", cm.from_channel, 100)) {
         modified = true;
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(100);
-    if (ImGui::InputText("To Name", to_name_buf, sizeof(to_name_buf))) {
-        cm.to_name = to_name_buf;
+    if (InputTextStringWidth("To Name", cm.to_name, 100)) {
         modified = true;
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(100);
-    if (ImGui::InputText("To Channel", to_chan_buf, sizeof(to_chan_buf))) {
-        cm.to_channel = to_chan_buf;
+    if (InputTextStringWidth("To Channel", cm.to_channel, 100)) {
         modified = true;
     }
     return modified;
@@ -286,7 +281,8 @@ static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t&
         if (ImGui::TreeNode("Dendrite Sets")) {
             for (std::size_t i = 0; i < cfg.dendrites.size(); ++i) {
                 ImGui::PushID(static_cast<int>(i));
-                if (ImGui::TreeNode("##ds", "Set %zu", i + 1)) {
+                std::string set_label = std::format("Set {}", i + 1);
+                if (ImGui::TreeNode("##ds", "%s", set_label.c_str())) {
                     if (render_dendrite_set(cfg.dendrites[i], store)) {
                         modified = true;
                     }
@@ -371,11 +367,8 @@ static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t&
 static bool render_neuron_set(ngm2::neuron_set_t& ns, const ngm2::cfg_store& store)
 {
     bool modified = false;
-    char name_buf[128];
-    strncpy(name_buf, ns.name.c_str(), sizeof(name_buf) - 1);
-    name_buf[sizeof(name_buf) - 1] = '\0';
-    if (ImGui::InputText("Name", name_buf, sizeof(name_buf))) {
-        ns.name = name_buf;
+
+    if (InputTextString("Name", ns.name)) {
         modified = true;
     }
 
@@ -414,7 +407,8 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
         if (ImGui::TreeNode("Neuron Sets")) {
             for (std::size_t i = 0; i < cfg.neurons.size(); ++i) {
                 ImGui::PushID(static_cast<int>(i));
-                if (ImGui::TreeNode("##ns", "Set %zu", i + 1)) {
+                std::string set_label = std::format("Set {}", i + 1);
+                if (ImGui::TreeNode("##ns", "%s", set_label.c_str())) {
                     if (render_neuron_set(cfg.neurons[i], store)) {
                         modified = true;
                     }
@@ -494,7 +488,7 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
 }
 
 // Helper: Get entity type name
-static const char* get_entity_type_name(sim::io_entity_type_t type)
+static std::string_view get_entity_type_name(sim::io_entity_type_t type)
 {
     switch (type) {
         case sim::io_entity_type_t::ngm2_neuron_group: return "Neuron Group";
@@ -517,11 +511,7 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
     }
 
     // Label
-    char label_buf[128];
-    strncpy(label_buf, node.label.c_str(), sizeof(label_buf) - 1);
-    label_buf[sizeof(label_buf) - 1] = '\0';
-    if (ImGui::InputText("Label", label_buf, sizeof(label_buf))) {
-        node.label = label_buf;
+    if (InputTextString("Label", node.label)) {
         modified = true;
     }
 
@@ -534,8 +524,7 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
     }
 
     // Entity config dropdown - show configs from appropriate store
-    const char* current_cfg = node.entity_cfg.c_str();
-    if (ImGui::BeginCombo("Entity Config", current_cfg)) {
+    if (ImGui::BeginCombo("Entity Config", node.entity_cfg.c_str())) {
         switch (node.entity_type) {
             case sim::io_entity_type_t::ngm2_neuron_group:
                 for (const auto& [key, val] : cfg.ngm2.neuron_groups) {
@@ -572,9 +561,6 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
         for (std::size_t i = 0; i < node.inputs.size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
             int src_id = static_cast<int>(node.inputs[i].first);
-            char chan_buf[128];
-            strncpy(chan_buf, node.inputs[i].second.c_str(), sizeof(chan_buf) - 1);
-            chan_buf[sizeof(chan_buf) - 1] = '\0';
 
             ImGui::SetNextItemWidth(80);
             if (ImGui::InputInt("##src", &src_id)) {
@@ -582,9 +568,7 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
                 modified = true;
             }
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(120);
-            if (ImGui::InputText("##chan", chan_buf, sizeof(chan_buf))) {
-                node.inputs[i].second = chan_buf;
+            if (InputTextStringWidth("##chan", node.inputs[i].second, 120)) {
                 modified = true;
             }
             ImGui::SameLine();
@@ -648,8 +632,7 @@ void config_editor::render(bool* p_open)
     if (save_file_browser.HasSelected()) {
         pending_save_path = save_file_browser.GetSelected().string();
         // Ensure .json extension
-        if (pending_save_path.size() < 5 ||
-            pending_save_path.substr(pending_save_path.size() - 5) != ".json") {
+        if (!pending_save_path.ends_with(".json")) {
             pending_save_path += ".json";
         }
         save_file_browser.ClearSelected();
@@ -779,12 +762,14 @@ void config_editor::render_dataset_configs()
                 is_dirty = true;
             }
             // Add new config
-            static char new_mnist_name[64] = "";
-            ImGui::InputText("##newmnist", new_mnist_name, sizeof(new_mnist_name));
+            static std::string new_mnist_name;
+            if (InputTextString("##newmnist", new_mnist_name, 64)) {
+                // Text changed
+            }
             ImGui::SameLine();
-            if (ImGui::SmallButton("+ Add MNIST Config") && new_mnist_name[0] != '\0') {
+            if (ImGui::SmallButton("+ Add MNIST Config") && !new_mnist_name.empty()) {
                 config.datasets.mnist[new_mnist_name] = {};
-                new_mnist_name[0] = '\0';
+                new_mnist_name.clear();
                 is_dirty = true;
             }
             ImGui::TreePop();
@@ -809,12 +794,14 @@ void config_editor::render_dataset_configs()
                 is_dirty = true;
             }
             // Add new config
-            static char new_dsprites_name[64] = "";
-            ImGui::InputText("##newdsprites", new_dsprites_name, sizeof(new_dsprites_name));
+            static std::string new_dsprites_name;
+            if (InputTextString("##newdsprites", new_dsprites_name, 64)) {
+                // Text changed
+            }
             ImGui::SameLine();
-            if (ImGui::SmallButton("+ Add dSprites Config") && new_dsprites_name[0] != '\0') {
+            if (ImGui::SmallButton("+ Add dSprites Config") && !new_dsprites_name.empty()) {
                 config.datasets.dsprites[new_dsprites_name] = {};
-                new_dsprites_name[0] = '\0';
+                new_dsprites_name.clear();
                 is_dirty = true;
             }
             ImGui::TreePop();
@@ -844,12 +831,14 @@ void config_editor::render_ngm2_configs()
                 config.ngm2.dendrites.erase(dendrite_to_remove);
                 is_dirty = true;
             }
-            static char new_dendrite_name[64] = "";
-            ImGui::InputText("##newdendrite", new_dendrite_name, sizeof(new_dendrite_name));
+            static std::string new_dendrite_name;
+            if (InputTextString("##newdendrite", new_dendrite_name, 64)) {
+                // Text changed
+            }
             ImGui::SameLine();
-            if (ImGui::SmallButton("+ Add Dendrite Config") && new_dendrite_name[0] != '\0') {
+            if (ImGui::SmallButton("+ Add Dendrite Config") && !new_dendrite_name.empty()) {
                 config.ngm2.dendrites[new_dendrite_name] = {};
-                new_dendrite_name[0] = '\0';
+                new_dendrite_name.clear();
                 is_dirty = true;
             }
             ImGui::TreePop();
@@ -873,12 +862,14 @@ void config_editor::render_ngm2_configs()
                 config.ngm2.neurons.erase(neuron_to_remove);
                 is_dirty = true;
             }
-            static char new_neuron_name[64] = "";
-            ImGui::InputText("##newneuron", new_neuron_name, sizeof(new_neuron_name));
+            static std::string new_neuron_name;
+            if (InputTextString("##newneuron", new_neuron_name, 64)) {
+                // Text changed
+            }
             ImGui::SameLine();
-            if (ImGui::SmallButton("+ Add Neuron Config") && new_neuron_name[0] != '\0') {
+            if (ImGui::SmallButton("+ Add Neuron Config") && !new_neuron_name.empty()) {
                 config.ngm2.neurons[new_neuron_name] = {};
-                new_neuron_name[0] = '\0';
+                new_neuron_name.clear();
                 is_dirty = true;
             }
             ImGui::TreePop();
@@ -902,12 +893,14 @@ void config_editor::render_ngm2_configs()
                 config.ngm2.neuron_groups.erase(group_to_remove);
                 is_dirty = true;
             }
-            static char new_group_name[64] = "";
-            ImGui::InputText("##newgroup", new_group_name, sizeof(new_group_name));
+            static std::string new_group_name;
+            if (InputTextString("##newgroup", new_group_name, 64)) {
+                // Text changed
+            }
             ImGui::SameLine();
-            if (ImGui::SmallButton("+ Add Group Config") && new_group_name[0] != '\0') {
+            if (ImGui::SmallButton("+ Add Group Config") && !new_group_name.empty()) {
                 config.ngm2.neuron_groups[new_group_name] = {};
-                new_group_name[0] = '\0';
+                new_group_name.clear();
                 is_dirty = true;
             }
             ImGui::TreePop();
@@ -922,10 +915,9 @@ void config_editor::render_simulation_graph()
             for (std::size_t i = 0; i < config.sim.nodes.size(); ++i) {
                 ImGui::PushID(static_cast<int>(i));
                 auto& node = config.sim.nodes[i];
-                char header[128];
-                snprintf(header, sizeof(header), "Node %zu: %s (%s)",
-                         i, node.label.c_str(), get_entity_type_name(node.entity_type));
-                if (ImGui::TreeNode("##node", "%s", header)) {
+                std::string header = std::format("Node {}: {} ({})",
+                         i, node.label, get_entity_type_name(node.entity_type));
+                if (ImGui::TreeNode("##node", "%s", header.c_str())) {
                     if (render_sim_node(node, config)) {
                         is_dirty = true;
                     }
