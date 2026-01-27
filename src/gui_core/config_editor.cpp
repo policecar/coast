@@ -1,6 +1,7 @@
 #include "config_editor.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <fstream>
 #include <string>
@@ -158,9 +159,9 @@ static bool render_dendrite_config(const std::string& name, ngm2::dendrite_param
     remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
         // Dendrite type dropdown
-        const char* type_names[] = { "Apical", "Proximal" };
+        static constexpr std::array type_names = { "Apical", "Proximal" };
         int type_idx = static_cast<int>(cfg.type);
-        if (ImGui::Combo("Type", &type_idx, type_names, 2)) {
+        if (ImGui::Combo("Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
             cfg.type = static_cast<ngm2::dendrite_type_t>(type_idx);
             modified = true;
         }
@@ -516,9 +517,9 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
     }
 
     // Entity type dropdown
-    const char* type_names[] = { "Neuron Group", "MNIST Input", "dSprites Input" };
+    static constexpr std::array type_names = { "Neuron Group", "MNIST Input", "dSprites Input" };
     int type_idx = static_cast<int>(node.entity_type);
-    if (ImGui::Combo("Entity Type", &type_idx, type_names, 3)) {
+    if (ImGui::Combo("Entity Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
         node.entity_type = static_cast<sim::io_entity_type_t>(type_idx);
         modified = true;
     }
