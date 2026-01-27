@@ -605,6 +605,10 @@ config_editor::config_editor(loader::global_cfg_t& config, const std::string& co
 {
     save_file_browser.SetTitle("Save Configuration As");
     save_file_browser.SetTypeFilters({ ".json" });
+
+    // Create network editor
+    net_editor = std::make_unique<network_editor>(config);
+    net_editor->set_dirty_callback([this]() { mark_dirty(); });
 }
 
 void config_editor::render(bool* p_open)
@@ -649,6 +653,11 @@ void config_editor::render(bool* p_open)
 
     // Render confirmation dialog
     render_save_confirm_dialog();
+
+    // Render network editor
+    if (net_editor) {
+        net_editor->render(&show_network_editor);
+    }
 }
 
 void config_editor::render_menu_bar()
@@ -913,6 +922,10 @@ void config_editor::render_simulation_graph()
 {
     if (ImGui::CollapsingHeader("Simulation Graph")) {
         if (ImGui::TreeNode("Nodes")) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Graph View...")) {
+                show_network_editor = true;
+            }
             for (std::size_t i = 0; i < config.sim.nodes.size(); ++i) {
                 ImGui::PushID(static_cast<int>(i));
                 auto& node = config.sim.nodes[i];

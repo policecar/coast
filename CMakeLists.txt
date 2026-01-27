@@ -44,6 +44,9 @@ add_executable(coast
         # Configuration editor
         src/gui_core/config_editor.cpp
         include/gui_core/config_editor.h
+        # Network editor
+        src/gui_core/network_editor.cpp
+        include/gui_core/network_editor.h
         # Simulation instance (RAII wrapper)
         src/gui_core/sim_instance.cpp
         include/gui_core/sim_instance.h

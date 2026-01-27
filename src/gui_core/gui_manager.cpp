@@ -133,9 +133,6 @@ void gui_manager::render_menu_bar()
                 if (ImGui::MenuItem("Activity Plot...", nullptr, show_activity_plot)) {
                     show_activity_plot = !show_activity_plot;
                 }
-                if (ImGui::MenuItem("Network Editor...", nullptr, show_network_editor)) {
-                    show_network_editor = !show_network_editor;
-                }
 
                 auto& groups = sim->get_groups();
                 if (!groups.empty()) {
@@ -231,7 +228,6 @@ void gui_manager::render_dialogs()
         render_control_dialog();
         render_status_dialog();
         render_activity_plot();
-        render_network_editor();
         if (show_config_editor && cfg_editor) {
             cfg_editor->render(&show_config_editor);
         }
@@ -439,48 +435,6 @@ void gui_manager::render_activity_plot()
             }
             ImPlot::EndPlot();
         }
-    }
-    ImGui::End();
-}
-
-void gui_manager::render_network_editor()
-{
-    if (!show_network_editor || !sim) return;
-
-    auto& sim_env = sim->get_sim_env();
-
-    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
-
-    if (ImGui::Begin("Network Editor", &show_network_editor)) {
-        ImNodes::BeginNodeEditor();
-
-        // Create nodes for each entity in the simulation
-        int node_id = 0;
-        int attr_id = 0;
-
-        for (auto& entity : sim_env.iterate_entities()) {
-            ImNodes::BeginNode(node_id);
-
-            ImNodes::BeginNodeTitleBar();
-            ImGui::TextUnformatted(entity.status_str().substr(0, 30).c_str());
-            ImNodes::EndNodeTitleBar();
-
-            // Input attribute
-            ImNodes::BeginInputAttribute(attr_id++);
-            ImGui::Text("input");
-            ImNodes::EndInputAttribute();
-
-            // Output attribute
-            ImNodes::BeginOutputAttribute(attr_id++);
-            ImGui::Text("output");
-            ImNodes::EndOutputAttribute();
-
-            ImNodes::EndNode();
-            ++node_id;
-        }
-
-        ImNodes::EndNodeEditor();
     }
     ImGui::End();
 }
