@@ -53,10 +53,11 @@ static bool render_string_list(const char* label, std::vector<std::string>& list
     return modified;
 }
 
-// Helper: Render MNIST config (returns true if modified)
-static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& cfg)
+// Helper: Render MNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& cfg, bool& remove_requested)
 {
     bool modified = false;
+    remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
         char image_buf[512], label_buf[512];
         strncpy(image_buf, cfg.image_file.c_str(), sizeof(image_buf) - 1);
@@ -87,15 +88,21 @@ static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& c
             modified = true;
         }
 
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
         ImGui::TreePop();
     }
     return modified;
 }
 
-// Helper: Render dSprites config (returns true if modified)
-static bool render_dsprites_config(const std::string& name, dsprites::dsprites_param_t& cfg)
+// Helper: Render dSprites config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_dsprites_config(const std::string& name, dsprites::dsprites_param_t& cfg, bool& remove_requested)
 {
     bool modified = false;
+    remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
         char file_buf[512];
         strncpy(file_buf, cfg.hdf5_file.c_str(), sizeof(file_buf) - 1);
@@ -123,15 +130,21 @@ static bool render_dsprites_config(const std::string& name, dsprites::dsprites_p
             modified = true;
         }
 
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
         ImGui::TreePop();
     }
     return modified;
 }
 
-// Helper: Render dendrite config (returns true if modified)
-static bool render_dendrite_config(const std::string& name, ngm2::dendrite_params_t& cfg)
+// Helper: Render dendrite config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_dendrite_config(const std::string& name, ngm2::dendrite_params_t& cfg, bool& remove_requested)
 {
     bool modified = false;
+    remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
         // Dendrite type dropdown
         const char* type_names[] = { "Apical", "Proximal" };
@@ -182,6 +195,11 @@ static bool render_dendrite_config(const std::string& name, ngm2::dendrite_param
                 modified = true;
             }
             ImGui::TreePop();
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
         }
 
         ImGui::TreePop();
@@ -253,11 +271,12 @@ static bool render_channel_mapping(ngm2::channel_mapping_t& cm)
     return modified;
 }
 
-// Helper: Render neuron config (returns true if modified)
+// Helper: Render neuron config (returns true if modified, sets remove_requested if remove clicked)
 static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t& cfg,
-                                  const ngm2::cfg_store& store)
+                                  const ngm2::cfg_store& store, bool& remove_requested)
 {
     bool modified = false;
+    remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
         if (render_string_list("Input Channels", cfg.input_channels)) {
             modified = true;
@@ -338,6 +357,11 @@ static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t&
             modified = true;
         }
 
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
         ImGui::TreePop();
     }
     return modified;
@@ -375,11 +399,12 @@ static bool render_neuron_set(ngm2::neuron_set_t& ns, const ngm2::cfg_store& sto
     return modified;
 }
 
-// Helper: Render neuron group config (returns true if modified)
+// Helper: Render neuron group config (returns true if modified, sets remove_requested if remove clicked)
 static bool render_neuron_group_config(const std::string& name, ngm2::neuron_group_params_t& cfg,
-                                        const ngm2::cfg_store& store)
+                                        const ngm2::cfg_store& store, bool& remove_requested)
 {
     bool modified = false;
+    remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
         if (render_string_list("Input Channels", cfg.input_channels)) {
             modified = true;
@@ -456,6 +481,11 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
         }
         if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
             modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
         }
 
         ImGui::TreePop();
@@ -732,12 +762,21 @@ void config_editor::render_dataset_configs()
 
         // MNIST configs
         if (ImGui::TreeNode("MNIST Configs")) {
+            std::string mnist_to_remove;
             for (auto& [name, cfg] : config.datasets.mnist) {
                 ImGui::PushID(name.c_str());
-                if (render_mnist_config(name, cfg)) {
+                bool remove_requested = false;
+                if (render_mnist_config(name, cfg, remove_requested)) {
                     is_dirty = true;
                 }
+                if (remove_requested) {
+                    mnist_to_remove = name;
+                }
                 ImGui::PopID();
+            }
+            if (!mnist_to_remove.empty()) {
+                config.datasets.mnist.erase(mnist_to_remove);
+                is_dirty = true;
             }
             // Add new config
             static char new_mnist_name[64] = "";
@@ -753,12 +792,21 @@ void config_editor::render_dataset_configs()
 
         // dSprites configs
         if (ImGui::TreeNode("dSprites Configs")) {
+            std::string dsprites_to_remove;
             for (auto& [name, cfg] : config.datasets.dsprites) {
                 ImGui::PushID(name.c_str());
-                if (render_dsprites_config(name, cfg)) {
+                bool remove_requested = false;
+                if (render_dsprites_config(name, cfg, remove_requested)) {
                     is_dirty = true;
                 }
+                if (remove_requested) {
+                    dsprites_to_remove = name;
+                }
                 ImGui::PopID();
+            }
+            if (!dsprites_to_remove.empty()) {
+                config.datasets.dsprites.erase(dsprites_to_remove);
+                is_dirty = true;
             }
             // Add new config
             static char new_dsprites_name[64] = "";
@@ -780,12 +828,21 @@ void config_editor::render_ngm2_configs()
 
         // Dendrite configs
         if (ImGui::TreeNode("Dendrite Configs")) {
+            std::string dendrite_to_remove;
             for (auto& [name, cfg] : config.ngm2.dendrites) {
                 ImGui::PushID(name.c_str());
-                if (render_dendrite_config(name, cfg)) {
+                bool remove_requested = false;
+                if (render_dendrite_config(name, cfg, remove_requested)) {
                     is_dirty = true;
                 }
+                if (remove_requested) {
+                    dendrite_to_remove = name;
+                }
                 ImGui::PopID();
+            }
+            if (!dendrite_to_remove.empty()) {
+                config.ngm2.dendrites.erase(dendrite_to_remove);
+                is_dirty = true;
             }
             static char new_dendrite_name[64] = "";
             ImGui::InputText("##newdendrite", new_dendrite_name, sizeof(new_dendrite_name));
@@ -800,12 +857,21 @@ void config_editor::render_ngm2_configs()
 
         // Neuron configs
         if (ImGui::TreeNode("Neuron Configs")) {
+            std::string neuron_to_remove;
             for (auto& [name, cfg] : config.ngm2.neurons) {
                 ImGui::PushID(name.c_str());
-                if (render_neuron_config(name, cfg, config.ngm2)) {
+                bool remove_requested = false;
+                if (render_neuron_config(name, cfg, config.ngm2, remove_requested)) {
                     is_dirty = true;
                 }
+                if (remove_requested) {
+                    neuron_to_remove = name;
+                }
                 ImGui::PopID();
+            }
+            if (!neuron_to_remove.empty()) {
+                config.ngm2.neurons.erase(neuron_to_remove);
+                is_dirty = true;
             }
             static char new_neuron_name[64] = "";
             ImGui::InputText("##newneuron", new_neuron_name, sizeof(new_neuron_name));
@@ -820,12 +886,21 @@ void config_editor::render_ngm2_configs()
 
         // Neuron group configs
         if (ImGui::TreeNode("Neuron Group Configs")) {
+            std::string group_to_remove;
             for (auto& [name, cfg] : config.ngm2.neuron_groups) {
                 ImGui::PushID(name.c_str());
-                if (render_neuron_group_config(name, cfg, config.ngm2)) {
+                bool remove_requested = false;
+                if (render_neuron_group_config(name, cfg, config.ngm2, remove_requested)) {
                     is_dirty = true;
                 }
+                if (remove_requested) {
+                    group_to_remove = name;
+                }
                 ImGui::PopID();
+            }
+            if (!group_to_remove.empty()) {
+                config.ngm2.neuron_groups.erase(group_to_remove);
+                is_dirty = true;
             }
             static char new_group_name[64] = "";
             ImGui::InputText("##newgroup", new_group_name, sizeof(new_group_name));
