@@ -78,7 +78,7 @@ private:
     std::vector<ngm2::neuron_group_t>& groups;
     std::vector<vec_ring_buffer>& ring_buffers;
     std::vector<ngm_flat_vis>& visualizations;
-    loader::global_cfg_t& config;
+    [[maybe_unused]] loader::global_cfg_t& config;
 
     // Configuration editor
     config_editor cfg_editor;
