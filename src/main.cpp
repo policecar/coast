@@ -201,6 +201,7 @@ int main(int argc, char **argv)
         [&] {
             gui.render_menu_bar();
             gui.render_dialogs();
+            gui.render_status_bar();
         }
     );
 

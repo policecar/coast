@@ -165,11 +165,30 @@ void gui_manager::render_status_dialog()
     ImGui::SetNextWindowPos(ImVec2(20, 250), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("Status", &show_status)) {
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Separator();
         for (auto& io_ent : sim_env.iterate_entities()) {
             ImGui::TextWrapped("%s", io_ent.status_str().c_str());
         }
+    }
+    ImGui::End();
+}
+
+void gui_manager::render_status_bar()
+{
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float status_bar_height = ImGui::GetFrameHeight();
+
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y - status_bar_height));
+    ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, status_bar_height));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration
+                           | ImGuiWindowFlags_NoMove
+                           | ImGuiWindowFlags_NoResize
+                           | ImGuiWindowFlags_NoSavedSettings
+                           | ImGuiWindowFlags_NoBringToFrontOnFocus
+                           | ImGuiWindowFlags_NoFocusOnAppearing;
+
+    if (ImGui::Begin("##StatusBar", nullptr, flags)) {
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     }
     ImGui::End();
 }

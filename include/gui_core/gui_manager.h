@@ -51,6 +51,11 @@ public:
     void render_dialogs();
 
     /**
+     * Render the status bar at the bottom of the main window.
+     */
+    void render_status_bar();
+
+    /**
      * Check if simulation should be running.
      */
     [[nodiscard]] bool is_simulation_running() const { return simulation_running; }
