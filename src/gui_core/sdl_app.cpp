@@ -23,11 +23,16 @@ sdl_app::sdl_app(const char* title)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-    // GL 3.0 + GLSL 130 (good balance of compatibility and features)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#ifdef __APPLE__
+    // macOS requires OpenGL 3.2+ for core profile
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 
     SDL_WindowFlags window_flags = static_cast<SDL_WindowFlags>(
         SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
@@ -93,7 +98,11 @@ void sdl_app::init_imgui()
     io.Fonts->AddFontFromFileTTF("../3rd_party/DejaVuSans.ttf", 16.0f);
 
     // Setup platform/renderer backends
+#ifdef __APPLE__
+    const char* glsl_version = "#version 150";  // macOS requires OpenGL 3.2 core profile
+#else
     const char* glsl_version = "#version 130";
+#endif
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 }
