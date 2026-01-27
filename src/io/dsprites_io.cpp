@@ -13,6 +13,10 @@
 
 #include <print>
 
+// temporary
+#include <iostream>
+#include <chrono>
+
 namespace dsprites {
 
 namespace {
@@ -96,17 +100,24 @@ dsprites_io::dsprites_io(const dsprites_param_t& params, sim::output_id_t output
 
     idx_dis = std::uniform_int_distribution<std::size_t>(0,image_count-1);
 
+    auto t1 = std::chrono::system_clock::now();
     std::vector<std::uint8_t> tmp;
     tmp.resize(image_count * image_pixels);
     if (H5Dread(dataset.id, H5T_NATIVE_UINT8, H5S_ALL, H5S_ALL, H5P_DEFAULT, tmp.data()) < 0) {
         throw std::runtime_error("Failed to read dataset from HDF5 file");
     }
+    auto t2 = std::chrono::system_clock::now();
 
     // convert to float
     images.resize(tmp.size());
     for (auto [fval,ival] : std::views::zip(images,tmp)) {
         fval = static_cast<float>(ival) / 1.0f; // normalizing by 1.0f instead of 255.0f as images are binary
     }
+    auto t3 = std::chrono::system_clock::now();
+
+    using namespace std::literals;
+
+    std::cout << "Times to load: \n\tdecode: " << (t2 - t1) / 1ms << "ms\n\tconvert: " << (t3-t2) / 1ms << "ms\n";
 
 }
 
