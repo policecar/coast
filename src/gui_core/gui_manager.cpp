@@ -4,88 +4,155 @@
 #include <cstdio>
 #include <string>
 
-#include "imgui.h"
 #include "implot.h"
 #include "imnodes.h"
 
 namespace coast {
 
-gui_manager::gui_manager(
-    sdl_app& app,
-    sim::env& sim_env,
-    std::vector<ngm2::neuron_group_t>& groups,
-    std::vector<vec_ring_buffer>& ring_buffers,
-    std::vector<ngm_flat_vis>& visualizations,
-    loader::global_cfg_t& config
-)
+gui_manager::gui_manager(sdl_app& app)
     : app(app)
-    , sim_env(sim_env)
-    , groups(groups)
-    , ring_buffers(ring_buffers)
-    , visualizations(visualizations)
-    , cfg_editor(config)
+    , file_browser(ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_ConfirmOnEnter)
 {
-    show_ring_buffer.resize(groups.size(), false);
-    show_neurons.resize(groups.size(), false);
+    file_browser.SetTitle("Open Configuration");
+    file_browser.SetTypeFilters({ ".json" });
 
-    // Initialize activity history for each group
-    activity_history.resize(groups.size());
+    // Initialize time axis for activity plot
     for (std::size_t i = 0; i < ACTIVITY_HISTORY_SIZE; ++i) {
         time_axis.push_back(static_cast<float>(i));
     }
+}
+
+void gui_manager::set_sim_instance(sim_instance* instance)
+{
+    sim = instance;
+    reset_per_group_state();
+
+    // Recreate config editor if we have a simulation
+    if (sim) {
+        cfg_editor = std::make_unique<config_editor>(sim->get_config());
+    } else {
+        cfg_editor.reset();
+        show_config_editor = false;
+    }
+}
+
+void gui_manager::reset_per_group_state()
+{
+    // Stop simulation when changing instances
+    simulation_running = false;
+
+    // Clear activity history
+    activity_history.clear();
+    activity_sample_counter = 0;
+
+    // Reset visibility flags
+    show_ring_buffer.clear();
+    show_neurons.clear();
+
+    if (sim) {
+        std::size_t num_groups = sim->get_groups().size();
+        show_ring_buffer.resize(num_groups, false);
+        show_neurons.resize(num_groups, false);
+        activity_history.resize(num_groups);
+    }
+}
+
+void gui_manager::open_file_browser()
+{
+    file_browser.Open();
+}
+
+bool gui_manager::has_selected_file() const
+{
+    return !selected_file_path.empty();
+}
+
+std::string gui_manager::get_selected_file()
+{
+    std::string result = std::move(selected_file_path);
+    selected_file_path.clear();
+    return result;
+}
+
+bool gui_manager::should_start_loading() const
+{
+    // Only return true if we have a pending load and the loading dialog
+    // has been shown for at least 2 frames (to ensure it's visible)
+    return !pending_load_path.empty() && loading_frames_shown >= 2;
+}
+
+void gui_manager::clear_pending_load()
+{
+    pending_load_path.clear();
+    loading_frames_shown = 0;
+}
+
+void gui_manager::set_load_error(const std::string& error)
+{
+    load_error_message = error;
 }
 
 void gui_manager::render_menu_bar()
 {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("System")) {
+            if (ImGui::MenuItem("Open Configuration...", "Ctrl+O")) {
+                open_file_browser();
+            }
+            if (sim && ImGui::MenuItem("Configuration Editor...", nullptr, show_config_editor)) {
+                show_config_editor = !show_config_editor;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Exit", "Alt+F4")) {
                 app.quit();
             }
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Simulation")) {
-            if (ImGui::MenuItem("Control...", nullptr, show_control)) {
-                show_control = !show_control;
+        // Simulation menu only visible when simulation is loaded
+        if (sim) {
+            if (ImGui::BeginMenu("Simulation")) {
+                if (ImGui::MenuItem("Control...", nullptr, show_control)) {
+                    show_control = !show_control;
+                }
+                if (ImGui::MenuItem("Status...", nullptr, show_status)) {
+                    show_status = !show_status;
+                }
+                ImGui::EndMenu();
             }
-            if (ImGui::MenuItem("Status...", nullptr, show_status)) {
-                show_status = !show_status;
-            }
-            ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Visualization")) {
-            if (ImGui::MenuItem("Activity Plot...", nullptr, show_activity_plot)) {
-                show_activity_plot = !show_activity_plot;
-            }
-            if (ImGui::MenuItem("Network Editor...", nullptr, show_network_editor)) {
-                show_network_editor = !show_network_editor;
-            }
-            ImGui::Separator();
-            for (std::size_t i = 0; i < groups.size(); ++i) {
-                char label[64];
-                snprintf(label, sizeof(label), "Group %zu Ring Buffer", i + 1);
-                if (ImGui::MenuItem(label, nullptr, show_ring_buffer[i])) {
-                    show_ring_buffer[i] = !show_ring_buffer[i];
+        // Visualization menu only visible when simulation is loaded
+        if (sim) {
+            if (ImGui::BeginMenu("Visualization")) {
+                if (ImGui::MenuItem("Activity Plot...", nullptr, show_activity_plot)) {
+                    show_activity_plot = !show_activity_plot;
                 }
-            }
-            ImGui::Separator();
-            for (std::size_t i = 0; i < groups.size(); ++i) {
-                char label[64];
-                snprintf(label, sizeof(label), "Group %zu Neurons", i + 1);
-                if (ImGui::MenuItem(label, nullptr, show_neurons[i])) {
-                    show_neurons[i] = !show_neurons[i];
+                if (ImGui::MenuItem("Network Editor...", nullptr, show_network_editor)) {
+                    show_network_editor = !show_network_editor;
                 }
-            }
-            ImGui::EndMenu();
-        }
 
-        if (ImGui::BeginMenu("Configuration")) {
-            if (ImGui::MenuItem("Editor...", nullptr, show_config_editor)) {
-                show_config_editor = !show_config_editor;
+                auto& groups = sim->get_groups();
+                if (!groups.empty()) {
+                    ImGui::Separator();
+                    for (std::size_t i = 0; i < groups.size(); ++i) {
+                        char label[64];
+                        snprintf(label, sizeof(label), "Group %zu Ring Buffer", i + 1);
+                        if (ImGui::MenuItem(label, nullptr, show_ring_buffer[i])) {
+                            show_ring_buffer[i] = !show_ring_buffer[i];
+                        }
+                    }
+                    ImGui::Separator();
+                    for (std::size_t i = 0; i < groups.size(); ++i) {
+                        char label[64];
+                        snprintf(label, sizeof(label), "Group %zu Neurons", i + 1);
+                        if (ImGui::MenuItem(label, nullptr, show_neurons[i])) {
+                            show_neurons[i] = !show_neurons[i];
+                        }
+                    }
+                }
+                ImGui::EndMenu();
             }
-            ImGui::EndMenu();
         }
 
         ImGui::EndMainMenuBar();
@@ -94,20 +161,85 @@ void gui_manager::render_menu_bar()
 
 void gui_manager::render_dialogs()
 {
-    render_control_dialog();
-    render_status_dialog();
-    render_activity_plot();
-    render_network_editor();
-    if (show_config_editor) {
-        cfg_editor.render(&show_config_editor);
+    // File browser is always active
+    file_browser.Display();
+    if (file_browser.HasSelected()) {
+        // Start the loading process - set pending path and reset frame counter
+        pending_load_path = file_browser.GetSelected().string();
+        loading_frames_shown = 0;
+        load_error_message.clear();
+        file_browser.ClearSelected();
     }
-    render_ring_buffer_windows();
-    render_neuron_windows();
+
+    // Show loading dialog when we have a pending load
+    if (!pending_load_path.empty()) {
+        // Center the loading dialog
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Always);
+
+        ImGuiWindowFlags loading_flags = ImGuiWindowFlags_NoResize
+                                       | ImGuiWindowFlags_NoMove
+                                       | ImGuiWindowFlags_NoCollapse
+                                       | ImGuiWindowFlags_AlwaysAutoResize;
+
+        if (ImGui::Begin("Loading Configuration", nullptr, loading_flags)) {
+            ImGui::Text("Loading configuration file...");
+            ImGui::Spacing();
+            ImGui::TextWrapped("%s", pending_load_path.c_str());
+            ImGui::Spacing();
+
+            // Show a simple progress indicator
+            float progress = static_cast<float>(loading_frames_shown % 30) / 30.0f;
+            ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
+        }
+        ImGui::End();
+
+        // Increment frame counter after rendering
+        ++loading_frames_shown;
+    }
+
+    // Show error dialog if there was a loading error
+    if (!load_error_message.empty()) {
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        bool show_error = true;
+        if (ImGui::Begin("Load Error", &show_error, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Failed to load configuration:");
+            ImGui::Spacing();
+            ImGui::TextWrapped("%s", load_error_message.c_str());
+            ImGui::Spacing();
+            if (ImGui::Button("OK", ImVec2(120, 0))) {
+                load_error_message.clear();
+            }
+        }
+        ImGui::End();
+
+        if (!show_error) {
+            load_error_message.clear();
+        }
+    }
+
+    // Only render simulation dialogs if we have a simulation
+    if (sim) {
+        render_control_dialog();
+        render_status_dialog();
+        render_activity_plot();
+        render_network_editor();
+        if (show_config_editor && cfg_editor) {
+            cfg_editor->render(&show_config_editor);
+        }
+        render_ring_buffer_windows();
+        render_neuron_windows();
+    }
 }
 
 void gui_manager::render_control_dialog()
 {
-    if (!show_control) return;
+    if (!show_control || !sim) return;
+
+    auto& groups = sim->get_groups();
 
     ImGui::SetNextWindowSize(ImVec2(350, 200), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(20, 40), ImGuiCond_FirstUseEver);
@@ -159,7 +291,9 @@ void gui_manager::render_control_dialog()
 
 void gui_manager::render_status_dialog()
 {
-    if (!show_status) return;
+    if (!show_status || !sim) return;
+
+    auto& sim_env = sim->get_sim_env();
 
     ImGui::SetNextWindowSize(ImVec2(300, 250), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(20, 250), ImGuiCond_FirstUseEver);
@@ -189,12 +323,21 @@ void gui_manager::render_status_bar()
 
     if (ImGui::Begin("##StatusBar", nullptr, flags)) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+
+        if (sim) {
+            ImGui::SameLine();
+            ImGui::Text(" | Config: %s", sim->get_config_path().c_str());
+        }
     }
     ImGui::End();
 }
 
 void gui_manager::render_ring_buffer_windows()
 {
+    if (!sim) return;
+
+    auto& ring_buffers = sim->get_ring_buffers();
+
     for (std::size_t i = 0; i < ring_buffers.size(); ++i) {
         if (show_ring_buffer[i]) {
             char label[64];
@@ -211,6 +354,10 @@ void gui_manager::render_ring_buffer_windows()
 
 void gui_manager::render_neuron_windows()
 {
+    if (!sim) return;
+
+    auto& visualizations = sim->get_visualizations();
+
     for (std::size_t i = 0; i < visualizations.size(); ++i) {
         // Update visibility state for conditional updates in main loop
         visualizations[i].set_visible(show_neurons[i]);
@@ -231,6 +378,11 @@ void gui_manager::render_neuron_windows()
 
 void gui_manager::update_activity_history()
 {
+    if (!sim) return;
+
+    auto& groups = sim->get_groups();
+    auto& sim_env = sim->get_sim_env();
+
     // Sample activity every N steps to avoid overwhelming the plot
     ++activity_sample_counter;
     if (activity_sample_counter < 10) return;
@@ -258,7 +410,9 @@ void gui_manager::update_activity_history()
 
 void gui_manager::render_activity_plot()
 {
-    if (!show_activity_plot) return;
+    if (!show_activity_plot || !sim) return;
+
+    auto& groups = sim->get_groups();
 
     ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(400, 40), ImGuiCond_FirstUseEver);
@@ -286,7 +440,9 @@ void gui_manager::render_activity_plot()
 
 void gui_manager::render_network_editor()
 {
-    if (!show_network_editor) return;
+    if (!show_network_editor || !sim) return;
+
+    auto& sim_env = sim->get_sim_env();
 
     ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(100, 100), ImGuiCond_FirstUseEver);
