@@ -115,6 +115,13 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
 
 }
 
+const sim_builder::node_t* sim_builder::get_node(sim_node_id_t id) const
+{
+    auto it = nodes.find(id);
+    if (it == nodes.end())
+        return nullptr;
+    return &it->second;
+}
 
 }
 

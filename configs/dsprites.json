@@ -80,5 +80,18 @@
       }
     ],
     "node_sets": []
+  },
+  "vis_hints": {
+    "datasets": {
+      "mnist": {},
+      "dsprites": {
+        "default": { "ngm_flat_vis": { "width": 64, "height": 64 } }
+      }
+    },
+    "ngm2": {
+      "neuron_groups": {
+        "default": { "ngm_flat_vis": { "width": 50, "height": 1 } }
+      }
+    }
   }
 }
