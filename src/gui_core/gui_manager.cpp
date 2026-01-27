@@ -29,7 +29,12 @@ void gui_manager::set_sim_instance(sim_instance* instance)
 
     // Recreate config editor if we have a simulation
     if (sim) {
-        cfg_editor = std::make_unique<config_editor>(sim->get_config());
+        cfg_editor = std::make_unique<config_editor>(sim->get_config(), sim->get_config_path());
+        // Set reload callback to trigger loading of saved config
+        cfg_editor->set_reload_callback([this](const std::string& path) {
+            pending_load_path = path;
+            loading_frames_shown = 0;
+        });
     } else {
         cfg_editor.reset();
         show_config_editor = false;
