@@ -28,12 +28,6 @@ add_library(implot STATIC
 )
 target_include_directories(implot PUBLIC 3rd_party/implot 3rd_party/imgui)
 
-# ImNodes library
-add_library(imnodes STATIC
-    3rd_party/imnodes/imnodes.cpp
-)
-target_include_directories(imnodes PUBLIC 3rd_party/imnodes 3rd_party/imgui)
-
 # ImNodeFlow library
 add_library(ImNodeFlow STATIC
     3rd_party/ImNodeFlow/src/ImNodeFlow.cpp
@@ -58,12 +52,9 @@ add_executable(coast
         # Configuration editor
         src/gui_core/config_editor.cpp
         include/gui_core/config_editor.h
-        # Network editor
+        # Network editor (ImNodeFlow-based)
         src/gui_core/network_editor.cpp
         include/gui_core/network_editor.h
-        # Network editor 2 (ImNodeFlow-based)
-        src/gui_core/network_editor2.cpp
-        include/gui_core/network_editor2.h
         # Simulation instance (RAII wrapper)
         src/gui_core/sim_instance.cpp
         include/gui_core/sim_instance.h
@@ -157,7 +148,6 @@ target_include_directories(coast PRIVATE
         3rd_party/imgui
         3rd_party/imgui/backends
         3rd_party/implot
-        3rd_party/imnodes
         3rd_party/ImNodeFlow/include
         3rd_party/ImNodeFlow/src
         3rd_party/imgui-filebrowser
@@ -183,7 +173,6 @@ target_link_libraries(coast PRIVATE
     OpenGL::GL
     ${HDF5_C_LIBRARIES}
     implot
-    imnodes
     ImNodeFlow
 )
 target_compile_definitions(coast PRIVATE IMGUI_DEFINE_MATH_OPERATORS)

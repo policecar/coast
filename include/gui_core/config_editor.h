@@ -9,7 +9,6 @@
 #include "imfilebrowser.h"
 #include "json_loader.h"
 #include "network_editor.h"
-#include "network_editor2.h"
 
 namespace coast {
 
@@ -54,8 +53,14 @@ public:
     /**
      * Mark configuration as dirty (has unsaved changes).
      * Called internally when edits are detected.
+     * Also notifies network_editor to refresh.
      */
-    void mark_dirty() { is_dirty = true; }
+    void mark_dirty() {
+        is_dirty = true;
+        if (net_editor) {
+            net_editor->invalidate();
+        }
+    }
 
 private:
     loader::global_cfg_t& config;
@@ -98,13 +103,15 @@ private:
     void render_ngm2_configs();
     void render_simulation_graph();
 
-    // Network editor (imnodes-based)
+    // Network editor (ImNodeFlow-based)
     std::unique_ptr<network_editor> net_editor;
     bool show_network_editor = false;
 
-    // Network editor 2 (ImNodeFlow-based, read-only)
-    std::unique_ptr<network_editor2> net_editor2;
-    bool show_network_editor2 = false;
+    // Delegation methods for network_editor edit requests
+    bool request_add_link(sim::sim_node_id_t src, sim::sim_node_id_t dst, const std::string& channel);
+    bool request_remove_link(sim::sim_node_id_t src, sim::sim_node_id_t dst, const std::string& channel);
+    bool request_remove_node(sim::sim_node_id_t id);
+    sim::sim_node_id_t request_add_node(sim::io_entity_type_t type, const std::string& label);
 };
 
 } // namespace coast

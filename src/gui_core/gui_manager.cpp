@@ -5,7 +5,6 @@
 #include <string>
 
 #include "implot.h"
-#include "imnodes.h"
 
 namespace coast {
 
