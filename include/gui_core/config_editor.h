@@ -3,10 +3,12 @@
 
 #include <string>
 #include <functional>
+#include <memory>
 
 #include "imgui.h"
 #include "imfilebrowser.h"
 #include "json_loader.h"
+#include "network_editor.h"
 
 namespace coast {
 
@@ -89,6 +91,10 @@ private:
     void render_dataset_configs();
     void render_ngm2_configs();
     void render_simulation_graph();
+
+    // Network editor
+    std::unique_ptr<network_editor> net_editor;
+    bool show_network_editor = false;
 };
 
 } // namespace coast

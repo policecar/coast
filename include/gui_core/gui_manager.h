@@ -155,7 +155,6 @@ private:
     bool show_control = false;
     bool show_status = true;
     bool show_activity_plot = false;
-    bool show_network_editor = false;
     bool show_config_editor = false;
     std::vector<bool> show_ring_buffer;
     std::vector<bool> show_neurons;
@@ -184,7 +183,6 @@ private:
     void render_ring_buffer_windows();
     void render_neuron_windows();
     void render_activity_plot();
-    void render_network_editor();
 
     // Reset per-group state when simulation changes
     void reset_per_group_state();
