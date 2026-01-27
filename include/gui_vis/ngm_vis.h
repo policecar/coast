@@ -38,7 +38,7 @@ class ngm_vis {
     std::vector<std::size_t> branch_start_lu;
     std::vector<std::size_t> branch_lu;
 
-    fbgd::node_id_t group_node = 0;
+    [[maybe_unused]] fbgd::node_id_t group_node = 0;
 
     std::vector<uint8_t> tmp_tree;
 

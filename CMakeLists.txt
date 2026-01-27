@@ -13,9 +13,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
 
 if (APPLE)
-    add_compile_options(-march=native -ffast-math -Wall -Wpedantic -Wextra -stdlib=libstdc++)
+    add_compile_options(-march=native -Wall -Wpedantic -Wextra -stdlib=libstdc++)
 else()
-    add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl -ffast-math -Wall -Wpedantic -Wextra)
+    add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl -Wall -Wpedantic -Wextra)
 endif()
 
 # ImPlot library
