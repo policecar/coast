@@ -34,7 +34,7 @@ class neuron_t {
     std::size_t             input_count;
     std::size_t             branch_interval;
     learning_window_t       activity_learning_window;
-    float                   energy;
+    [[maybe_unused]] float  energy;
     std::mt19937            rgen;
 
 public:
