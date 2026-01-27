@@ -15,20 +15,28 @@ find_package(HDF5 REQUIRED COMPONENTS C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
 
+# Architecture-specific optimizations (applied globally)
 if (APPLE)
+<<<<<<< HEAD
     add_compile_options(-march=native -Wall -Wpedantic -Wextra -Wno-psabi -stdlib=libstdc++)
 else()
     add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl -Wall -Wpedantic -Wextra -Wno-psabi)
+=======
+    add_compile_options(-march=native -stdlib=libstdc++)
+else()
+    add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl)
+>>>>>>> 9bdb24b (build: suppress warnings for 3rd-party libraries)
 endif()
 
-# ImPlot library
+# ImPlot library (3rd-party, warnings disabled)
 add_library(implot STATIC
     3rd_party/implot/implot.cpp
     3rd_party/implot/implot_items.cpp
 )
 target_include_directories(implot PUBLIC 3rd_party/implot 3rd_party/imgui)
+target_compile_options(implot PRIVATE -w)
 
-# ImNodeFlow library
+# ImNodeFlow library (3rd-party, warnings disabled)
 add_library(ImNodeFlow STATIC
     3rd_party/ImNodeFlow/src/ImNodeFlow.cpp
 )
@@ -38,6 +46,7 @@ target_include_directories(ImNodeFlow PUBLIC
     3rd_party/imgui
 )
 target_compile_definitions(ImNodeFlow PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+target_compile_options(ImNodeFlow PRIVATE -w)
 
 add_executable(coast
         # Main
@@ -144,13 +153,21 @@ add_executable(coast
         include/json_cfg/gui_vis_json.h
 )
 
-target_include_directories(coast PRIVATE
+# 3rd-party includes (marked as SYSTEM to suppress warnings)
+target_include_directories(coast SYSTEM PRIVATE
         3rd_party/imgui
         3rd_party/imgui/backends
         3rd_party/implot
         3rd_party/ImNodeFlow/include
         3rd_party/ImNodeFlow/src
         3rd_party/imgui-filebrowser
+        3rd_party/json/include
+        ${SDL2_INCLUDE_DIRS}
+        ${HDF5_INCLUDE_DIRS}
+)
+
+# Project includes (warnings enabled)
+target_include_directories(coast PRIVATE
         include/gui_core
         include/gui_vis
         include/hd_ngm2
@@ -158,10 +175,10 @@ target_include_directories(coast PRIVATE
         include/tools
         include/io
         include/json_cfg
-        ${SDL2_INCLUDE_DIRS}
-        ${HDF5_INCLUDE_DIRS}
-        3rd_party/json/include
 )
+
+# Enable warnings for our own code
+target_compile_options(coast PRIVATE -Wall -Wpedantic -Wextra)
 
 if(APPLE)
     target_include_directories(coast PRIVATE /opt/homebrew/include/c++/15)
