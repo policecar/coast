@@ -607,13 +607,15 @@ config_editor::config_editor(loader::global_cfg_t& config, const std::string& co
     save_file_browser.SetTitle("Save Configuration As");
     save_file_browser.SetTypeFilters({ ".json" });
 
-    // Create network editor (imnodes-based)
+    // Create network editor (ImNodeFlow-based)
     net_editor = std::make_unique<network_editor>(config);
     net_editor->set_dirty_callback([this]() { mark_dirty(); });
-
-    // Create network editor 2 (ImNodeFlow-based, read-only)
-    net_editor2 = std::make_unique<network_editor2>(config);
-    net_editor2->set_dirty_callback([this]() { mark_dirty(); });
+    net_editor->set_edit_callbacks({
+        .add_link = [this](auto src, auto dst, const auto& ch) { return request_add_link(src, dst, ch); },
+        .remove_link = [this](auto src, auto dst, const auto& ch) { return request_remove_link(src, dst, ch); },
+        .remove_node = [this](auto id) { return request_remove_node(id); },
+        .add_node = [this](auto type, const auto& label) { return request_add_node(type, label); }
+    });
 }
 
 void config_editor::render(bool* p_open)
@@ -665,14 +667,9 @@ void config_editor::render(bool* p_open)
     render_save_confirm_dialog();
     render_save_as_confirm_dialog();
 
-    // Render network editor (imnodes-based)
+    // Render network editor
     if (net_editor) {
         net_editor->render(&show_network_editor);
-    }
-
-    // Render network editor 2 (ImNodeFlow-based)
-    if (net_editor2) {
-        net_editor2->render(&show_network_editor2);
     }
 }
 
@@ -819,7 +816,7 @@ void config_editor::render_dataset_configs()
                 ImGui::PushID(name.c_str());
                 bool remove_requested = false;
                 if (render_mnist_config(name, cfg, remove_requested)) {
-                    is_dirty = true;
+                    mark_dirty();
                 }
                 if (remove_requested) {
                     mnist_to_remove = name;
@@ -828,7 +825,7 @@ void config_editor::render_dataset_configs()
             }
             if (!mnist_to_remove.empty()) {
                 config.datasets.mnist.erase(mnist_to_remove);
-                is_dirty = true;
+                mark_dirty();
             }
             // Add new config
             static std::string new_mnist_name;
@@ -839,7 +836,7 @@ void config_editor::render_dataset_configs()
             if (ImGui::SmallButton("+ Add MNIST Config") && !new_mnist_name.empty()) {
                 config.datasets.mnist[new_mnist_name] = {};
                 new_mnist_name.clear();
-                is_dirty = true;
+                mark_dirty();
             }
             ImGui::TreePop();
         }
@@ -851,7 +848,7 @@ void config_editor::render_dataset_configs()
                 ImGui::PushID(name.c_str());
                 bool remove_requested = false;
                 if (render_dsprites_config(name, cfg, remove_requested)) {
-                    is_dirty = true;
+                    mark_dirty();
                 }
                 if (remove_requested) {
                     dsprites_to_remove = name;
@@ -860,7 +857,7 @@ void config_editor::render_dataset_configs()
             }
             if (!dsprites_to_remove.empty()) {
                 config.datasets.dsprites.erase(dsprites_to_remove);
-                is_dirty = true;
+                mark_dirty();
             }
             // Add new config
             static std::string new_dsprites_name;
@@ -871,7 +868,7 @@ void config_editor::render_dataset_configs()
             if (ImGui::SmallButton("+ Add dSprites Config") && !new_dsprites_name.empty()) {
                 config.datasets.dsprites[new_dsprites_name] = {};
                 new_dsprites_name.clear();
-                is_dirty = true;
+                mark_dirty();
             }
             ImGui::TreePop();
         }
@@ -889,7 +886,7 @@ void config_editor::render_ngm2_configs()
                 ImGui::PushID(name.c_str());
                 bool remove_requested = false;
                 if (render_dendrite_config(name, cfg, remove_requested)) {
-                    is_dirty = true;
+                    mark_dirty();
                 }
                 if (remove_requested) {
                     dendrite_to_remove = name;
@@ -898,7 +895,7 @@ void config_editor::render_ngm2_configs()
             }
             if (!dendrite_to_remove.empty()) {
                 config.ngm2.dendrites.erase(dendrite_to_remove);
-                is_dirty = true;
+                mark_dirty();
             }
             static std::string new_dendrite_name;
             if (InputTextString("##newdendrite", new_dendrite_name, 64)) {
@@ -908,7 +905,7 @@ void config_editor::render_ngm2_configs()
             if (ImGui::SmallButton("+ Add Dendrite Config") && !new_dendrite_name.empty()) {
                 config.ngm2.dendrites[new_dendrite_name] = {};
                 new_dendrite_name.clear();
-                is_dirty = true;
+                mark_dirty();
             }
             ImGui::TreePop();
         }
@@ -920,7 +917,7 @@ void config_editor::render_ngm2_configs()
                 ImGui::PushID(name.c_str());
                 bool remove_requested = false;
                 if (render_neuron_config(name, cfg, config.ngm2, remove_requested)) {
-                    is_dirty = true;
+                    mark_dirty();
                 }
                 if (remove_requested) {
                     neuron_to_remove = name;
@@ -929,7 +926,7 @@ void config_editor::render_ngm2_configs()
             }
             if (!neuron_to_remove.empty()) {
                 config.ngm2.neurons.erase(neuron_to_remove);
-                is_dirty = true;
+                mark_dirty();
             }
             static std::string new_neuron_name;
             if (InputTextString("##newneuron", new_neuron_name, 64)) {
@@ -939,7 +936,7 @@ void config_editor::render_ngm2_configs()
             if (ImGui::SmallButton("+ Add Neuron Config") && !new_neuron_name.empty()) {
                 config.ngm2.neurons[new_neuron_name] = {};
                 new_neuron_name.clear();
-                is_dirty = true;
+                mark_dirty();
             }
             ImGui::TreePop();
         }
@@ -951,7 +948,7 @@ void config_editor::render_ngm2_configs()
                 ImGui::PushID(name.c_str());
                 bool remove_requested = false;
                 if (render_neuron_group_config(name, cfg, config.ngm2, remove_requested)) {
-                    is_dirty = true;
+                    mark_dirty();
                 }
                 if (remove_requested) {
                     group_to_remove = name;
@@ -960,7 +957,7 @@ void config_editor::render_ngm2_configs()
             }
             if (!group_to_remove.empty()) {
                 config.ngm2.neuron_groups.erase(group_to_remove);
-                is_dirty = true;
+                mark_dirty();
             }
             static std::string new_group_name;
             if (InputTextString("##newgroup", new_group_name, 64)) {
@@ -970,7 +967,7 @@ void config_editor::render_ngm2_configs()
             if (ImGui::SmallButton("+ Add Group Config") && !new_group_name.empty()) {
                 config.ngm2.neuron_groups[new_group_name] = {};
                 new_group_name.clear();
-                is_dirty = true;
+                mark_dirty();
             }
             ImGui::TreePop();
         }
@@ -985,22 +982,18 @@ void config_editor::render_simulation_graph()
             if (ImGui::SmallButton("Graph View...")) {
                 show_network_editor = true;
             }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Graph View 2...")) {
-                show_network_editor2 = true;
-            }
             for (std::size_t i = 0; i < config.sim.nodes.size(); ++i) {
                 ImGui::PushID(static_cast<int>(i));
                 auto& node = config.sim.nodes[i];
-                std::string header = std::format("Node {}: {} ({})",
-                         i, node.label, get_entity_type_name(node.entity_type));
+                std::string header = std::format("Node ID {}: {} ({})",
+                         node.id, node.label, get_entity_type_name(node.entity_type));
                 if (ImGui::TreeNode("##node", "%s", header.c_str())) {
                     if (render_sim_node(node, config)) {
-                        is_dirty = true;
+                        mark_dirty();
                     }
                     if (ImGui::SmallButton("Remove Node")) {
                         config.sim.nodes.erase(config.sim.nodes.begin() + static_cast<std::ptrdiff_t>(i));
-                        is_dirty = true;
+                        mark_dirty();
                         ImGui::TreePop();
                         ImGui::PopID();
                         break;
@@ -1011,11 +1004,110 @@ void config_editor::render_simulation_graph()
             }
             if (ImGui::SmallButton("+ Add Node")) {
                 config.sim.nodes.push_back({});
-                is_dirty = true;
+                mark_dirty();
             }
             ImGui::TreePop();
         }
     }
+}
+
+// ============================================================================
+// Delegation methods for network_editor edit requests
+// ============================================================================
+
+bool config_editor::request_add_link(sim::sim_node_id_t src, sim::sim_node_id_t dst, const std::string& channel) {
+    // Find destination node
+    sim::sim_node_t* dst_node = nullptr;
+    for (auto& node : config.sim.nodes) {
+        if (node.id == dst) {
+            dst_node = &node;
+            break;
+        }
+    }
+    if (!dst_node) return false;
+
+    // Check if source node exists
+    bool src_exists = false;
+    for (const auto& node : config.sim.nodes) {
+        if (node.id == src) {
+            src_exists = true;
+            break;
+        }
+    }
+    if (!src_exists) return false;
+
+    // Check if link already exists
+    for (const auto& [existing_src, existing_ch] : dst_node->inputs) {
+        if (existing_src == src && existing_ch == channel) {
+            return false;  // Already exists
+        }
+    }
+
+    // Add the link
+    dst_node->inputs.emplace_back(src, channel);
+    mark_dirty();
+    return true;
+}
+
+bool config_editor::request_remove_link(sim::sim_node_id_t src, sim::sim_node_id_t dst, const std::string& channel) {
+    // Find destination node
+    for (auto& node : config.sim.nodes) {
+        if (node.id == dst) {
+            // Find and remove the link
+            for (auto it = node.inputs.begin(); it != node.inputs.end(); ++it) {
+                if (it->first == src && it->second == channel) {
+                    node.inputs.erase(it);
+                    mark_dirty();
+                    return true;
+                }
+            }
+            break;
+        }
+    }
+    return false;
+}
+
+bool config_editor::request_remove_node(sim::sim_node_id_t id) {
+    // Find and remove the node
+    for (auto it = config.sim.nodes.begin(); it != config.sim.nodes.end(); ++it) {
+        if (it->id == id) {
+            config.sim.nodes.erase(it);
+            mark_dirty();
+
+            // Also remove any links pointing to this node
+            for (auto& node : config.sim.nodes) {
+                auto& inputs = node.inputs;
+                inputs.erase(
+                    std::remove_if(inputs.begin(), inputs.end(),
+                        [id](const auto& link) { return link.first == id; }),
+                    inputs.end()
+                );
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+sim::sim_node_id_t config_editor::request_add_node(sim::io_entity_type_t type, const std::string& label) {
+    // Generate a new unique ID
+    sim::sim_node_id_t new_id = 1;
+    for (const auto& node : config.sim.nodes) {
+        if (node.id >= new_id) {
+            new_id = node.id + 1;
+        }
+    }
+
+    // Create the new node
+    sim::sim_node_t new_node;
+    new_node.id = new_id;
+    new_node.label = label;
+    new_node.entity_type = type;
+    new_node.entity_cfg = "";  // Empty config initially
+
+    config.sim.nodes.push_back(new_node);
+    mark_dirty();
+    return new_id;
 }
 
 } // namespace coast
