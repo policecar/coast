@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <string>
@@ -642,17 +643,23 @@ void config_editor::render(bool* p_open)
         }
         save_file_browser.ClearSelected();
 
-        // For Save As, save directly without confirmation
-        if (save_config(pending_save_path)) {
-            config_path = pending_save_path;
-            original_config = config;
-            is_dirty = false;
+        // Check if file exists - if so, show overwrite confirmation
+        if (std::filesystem::exists(pending_save_path)) {
+            show_save_as_confirm_dialog = true;
+        } else {
+            // File doesn't exist, save directly
+            if (save_config(pending_save_path)) {
+                config_path = pending_save_path;
+                original_config = config;
+                is_dirty = false;
+            }
+            pending_save_path.clear();
         }
-        pending_save_path.clear();
     }
 
-    // Render confirmation dialog
+    // Render confirmation dialogs
     render_save_confirm_dialog();
+    render_save_as_confirm_dialog();
 
     // Render network editor
     if (net_editor) {
@@ -722,6 +729,49 @@ void config_editor::render_save_confirm_dialog()
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(100, 0))) {
             show_save_confirm_dialog = false;
+            pending_save_path.clear();
+        }
+    }
+    ImGui::End();
+}
+
+void config_editor::render_save_as_confirm_dialog()
+{
+    if (!show_save_as_confirm_dialog) return;
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::Begin("Confirm Overwrite", &show_save_as_confirm_dialog,
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "File already exists:");
+        ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", pending_save_path.c_str());
+        ImGui::Spacing();
+        ImGui::Text("Do you want to overwrite it?");
+        ImGui::Spacing();
+
+        ImGui::Checkbox("Reload simulation with saved configuration", &reload_after_save_as);
+        ImGui::Spacing();
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Overwrite", ImVec2(100, 0))) {
+            if (save_config(pending_save_path)) {
+                config_path = pending_save_path;
+                original_config = config;
+                is_dirty = false;
+
+                if (reload_after_save_as && reload_callback) {
+                    reload_callback(pending_save_path);
+                }
+            }
+            show_save_as_confirm_dialog = false;
+            pending_save_path.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+            show_save_as_confirm_dialog = false;
             pending_save_path.clear();
         }
     }

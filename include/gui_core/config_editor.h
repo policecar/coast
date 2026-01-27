@@ -67,10 +67,14 @@ private:
     // Dirty flag - true if config differs from original
     bool is_dirty = false;
 
-    // Dialog states
+    // Dialog states for Save
     bool show_save_confirm_dialog = false;
-    bool reload_after_save = true;  // Checkbox state for reload option
-    std::string pending_save_path;  // Path to save to (for Save As)
+    bool reload_after_save = true;  // Checkbox state for reload option (Save)
+    std::string pending_save_path;  // Path to save to
+
+    // Dialog states for Save As
+    bool show_save_as_confirm_dialog = false;
+    bool reload_after_save_as = false;  // Checkbox state for reload option (Save As, default off)
 
     // Reload callback
     reload_callback_t reload_callback;
@@ -80,6 +84,7 @@ private:
 
     // Render dialogs
     void render_save_confirm_dialog();
+    void render_save_as_confirm_dialog();
 
     // Save configuration to file
     bool save_config(const std::string& path);
