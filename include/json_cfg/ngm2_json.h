@@ -11,7 +11,7 @@
 #include <nlohmann/json.hpp>
 #include "hd_ngm2_cfg.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 namespace ngm2 {
 

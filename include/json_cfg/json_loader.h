@@ -11,7 +11,7 @@
 #include "dataset_cfg.h"
 #include "gui_vis_cfg.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 namespace loader
 {
