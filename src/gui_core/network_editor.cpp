@@ -184,7 +184,7 @@ void network_editor::render(bool* p_open) {
 
     ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Network Editor 2###NetworkEditor2", p_open)) {
+    if (ImGui::Begin("Network Editor###NetworkEditor2", p_open)) {
 
         // Status bar
         ImGui::TextDisabled("Nodes: %zu | Links: %zu",
