@@ -9,6 +9,7 @@
 #include "imfilebrowser.h"
 #include "json_loader.h"
 #include "network_editor.h"
+#include "network_editor2.h"
 
 namespace coast {
 
@@ -97,9 +98,13 @@ private:
     void render_ngm2_configs();
     void render_simulation_graph();
 
-    // Network editor
+    // Network editor (imnodes-based)
     std::unique_ptr<network_editor> net_editor;
     bool show_network_editor = false;
+
+    // Network editor 2 (ImNodeFlow-based, read-only)
+    std::unique_ptr<network_editor2> net_editor2;
+    bool show_network_editor2 = false;
 };
 
 } // namespace coast

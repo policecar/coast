@@ -31,6 +31,17 @@ add_library(imnodes STATIC
 )
 target_include_directories(imnodes PUBLIC 3rd_party/imnodes 3rd_party/imgui)
 
+# ImNodeFlow library
+add_library(ImNodeFlow STATIC
+    3rd_party/ImNodeFlow/src/ImNodeFlow.cpp
+)
+target_include_directories(ImNodeFlow PUBLIC
+    3rd_party/ImNodeFlow/include
+    3rd_party/ImNodeFlow/src
+    3rd_party/imgui
+)
+target_compile_definitions(ImNodeFlow PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+
 add_executable(coast
         # Main
         src/main.cpp
@@ -47,6 +58,9 @@ add_executable(coast
         # Network editor
         src/gui_core/network_editor.cpp
         include/gui_core/network_editor.h
+        # Network editor 2 (ImNodeFlow-based)
+        src/gui_core/network_editor2.cpp
+        include/gui_core/network_editor2.h
         # Simulation instance (RAII wrapper)
         src/gui_core/sim_instance.cpp
         include/gui_core/sim_instance.h
@@ -141,6 +155,8 @@ target_include_directories(coast PRIVATE
         3rd_party/imgui/backends
         3rd_party/implot
         3rd_party/imnodes
+        3rd_party/ImNodeFlow/include
+        3rd_party/ImNodeFlow/src
         3rd_party/imgui-filebrowser
         include/gui_core
         include/gui_vis
@@ -165,7 +181,9 @@ target_link_libraries(coast PRIVATE
     ${HDF5_C_LIBRARIES}
     implot
     imnodes
+    ImNodeFlow
 )
+target_compile_definitions(coast PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
 
 if (APPLE)
     target_link_libraries(coast PRIVATE "-framework IOKit")
