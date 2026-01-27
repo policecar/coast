@@ -23,7 +23,6 @@ gui_manager::gui_manager(
     , groups(groups)
     , ring_buffers(ring_buffers)
     , visualizations(visualizations)
-    , config(config)
     , cfg_editor(config)
 {
     show_ring_buffer.resize(groups.size(), false);
