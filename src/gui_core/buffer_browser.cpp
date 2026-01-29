@@ -119,7 +119,12 @@ void buffer_browser::render_browser_window()
         // For performance, could add a refresh button instead
         rebuild_cache();
 
+        // Filter bar
+        ImGui::SetNextItemWidth(200);
+        ImGui::InputTextWithHint("##filter", "Filter...", filter_text, sizeof(filter_text));
+        ImGui::SameLine();
         ImGui::TextDisabled("(%zu buffers)", cached_rows.size());
+
         ImGui::Separator();
 
         // Calculate available height for table
@@ -149,6 +154,14 @@ void buffer_browser::render_browser_window()
             const buffer_row* selected_row = nullptr;
 
             for (const auto& row : cached_rows) {
+                // Apply filter (substring match on output_of or ID)
+                if (filter_text[0] != '\0') {
+                    bool matches = false;
+                    if (row.output_of.find(filter_text) != std::string::npos) matches = true;
+                    if (std::to_string(row.id).find(filter_text) != std::string::npos) matches = true;
+                    if (!matches) continue;
+                }
+
                 ImGui::TableNextRow();
 
                 bool is_selected = (row.id == selected_buffer_id);

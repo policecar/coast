@@ -63,6 +63,9 @@ private:
     std::vector<buffer_row> cached_rows;
     bool cache_dirty = true;
 
+    // Filter state
+    char filter_text[256] = {};
+
     // Selection state
     std::size_t selected_buffer_id = SIZE_MAX;  // SIZE_MAX = no selection
     bool detail_panel_open = true;

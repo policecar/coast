@@ -43,7 +43,8 @@ public:
     void update(const std::span<float> &data, bool auto_norm = true, float min_val = 0.0f, float max_val = 1.0f);
 
     // Render in ImGui window. Returns false if window was closed.
-    bool render_imgui(const char* label, float scale = 1.0f);
+    // update_interval can be modified via slider (range 1-1000)
+    bool render_imgui(const char* label, int& update_interval, float scale = 1.0f);
 
     // Get texture for custom rendering
     [[nodiscard]] const gl_texture& get_texture() const { return texture; }
