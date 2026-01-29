@@ -1419,6 +1419,15 @@ void config_editor::render_visualization_hints()
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Simulation steps between updates (0 = disabled)");
             }
+
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::InputInt("Ring Length", &config.vis_hints.buffer_vis.ring_length)) {
+                config.vis_hints.buffer_vis.ring_length = std::clamp(config.vis_hints.buffer_vis.ring_length, 10, 10000);
+                mark_dirty();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Number of time steps to show in time series visualization");
+            }
             ImGui::TreePop();
         }
     }
