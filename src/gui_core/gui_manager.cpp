@@ -125,6 +125,9 @@ void gui_manager::render_menu_bar()
                 if (ImGui::MenuItem("Logging...", nullptr, logging_window_instance.visible())) {
                     logging_window_instance.visible() = !logging_window_instance.visible();
                 }
+                if (ImGui::MenuItem("Performance...", nullptr, show_performance)) {
+                    show_performance = !show_performance;
+                }
                 ImGui::EndMenu();
             }
         }
@@ -210,6 +213,7 @@ void gui_manager::render_dialogs()
         if (buffer_browser_window) {
             buffer_browser_window->render();
         }
+        render_performance_window();
     }
 
     // Logging window doesn't require a simulation
@@ -349,6 +353,19 @@ void gui_manager::render_status_bar()
             ImGui::SameLine();
             ImGui::Text(" | Config: %s", sim->get_config_path().c_str());
         }
+    }
+    ImGui::End();
+}
+
+void gui_manager::render_performance_window()
+{
+    if (!show_performance || !sim) return;
+
+    ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(400, 40), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Performance", &show_performance)) {
+        // Placeholder
     }
     ImGui::End();
 }

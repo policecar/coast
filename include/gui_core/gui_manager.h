@@ -127,6 +127,7 @@ private:
     bool show_control = false;
     bool show_status = true;
     bool show_config_editor = false;
+    bool show_performance = false;
 
     // Simulation speed slider value (1-250 = steps/sec, 251 = unlimited)
     int sim_speed_value = 100;
@@ -140,6 +141,7 @@ private:
     // Render individual dialogs
     void render_control_dialog();
     void render_status_dialog();
+    void render_performance_window();
 };
 
 } // namespace coast
