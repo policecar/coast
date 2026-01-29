@@ -51,6 +51,7 @@ private:
 
     // Colormap selection
     colormap_t colormap = colormap_t::grayscale;
+    bool colormap_dirty = false;  // Set when colormap changes, cleared after update
 
 public:
     explicit ngm_flat_vis(const ngm2::neuron_group_t& neuron_group, params_t _params);
@@ -63,6 +64,10 @@ public:
     // Visibility state for conditional updates
     void set_visible(bool v) { visible = v; }
     [[nodiscard]] bool is_visible() const { return visible; }
+
+    // Colormap dirty flag - set when colormap changes, triggers re-render
+    [[nodiscard]] bool is_colormap_dirty() const { return colormap_dirty; }
+    void clear_colormap_dirty() { colormap_dirty = false; }
 
     // Get texture for custom rendering
     [[nodiscard]] const gl_texture& get_texture() const { return texture; }

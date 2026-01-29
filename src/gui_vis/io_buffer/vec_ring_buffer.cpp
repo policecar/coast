@@ -77,7 +77,10 @@ bool vec_ring_buffer::render_imgui(const char* label, float scale)
                 auto cm = static_cast<colormap_t>(i);
                 bool is_selected = (colormap == cm);
                 if (ImGui::Selectable(colormap_name(cm), is_selected)) {
-                    colormap = cm;
+                    if (colormap != cm) {
+                        colormap = cm;
+                        colormap_dirty = true;  // Trigger re-render
+                    }
                 }
                 if (is_selected) {
                     ImGui::SetItemDefaultFocus();
@@ -322,7 +325,14 @@ private:
         if (update_interval_ == 0) return;  // 0 means disabled
         if (!visible_) return;  // Don't update if not visible
 
-        if (step_count_ % update_interval_ != 0) return;
+        // Check if colormap changed (needs immediate update)
+        bool colormap_changed = vis_.is_colormap_dirty();
+        if (colormap_changed) {
+            vis_.clear_colormap_dirty();
+        }
+
+        // Update if interval elapsed OR colormap changed
+        if (step_count_ % update_interval_ != 0 && !colormap_changed) return;
 
         // Request an update
         int expected = static_cast<int>(sync_state::idle);
