@@ -42,8 +42,8 @@ struct ngm_tree_vis_hint_t {
     // Root node color (RGBA 0-255)
     int root_r = 255, root_g = 161, root_b = 0, root_a = 255;
 
-    // Branch node color (RGBA 0-255)
-    int branch_r = 0, branch_g = 0, branch_b = 0, branch_a = 255;
+    // Branch node color (RGBA 0-255) - light blue
+    int branch_r = 100, branch_g = 180, branch_b = 255, branch_a = 255;
 };
 
 struct mnist_hint_t {
