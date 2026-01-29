@@ -20,6 +20,100 @@
 
 namespace coast {
 
+// Colormap names for UI
+const char* colormap_name(colormap_t cm)
+{
+    switch (cm) {
+        case colormap_t::grayscale: return "Grayscale";
+        case colormap_t::green:     return "Green";
+        case colormap_t::viridis:   return "Viridis";
+        case colormap_t::plasma:    return "Plasma";
+        case colormap_t::inferno:   return "Inferno";
+        case colormap_t::cool:      return "Cool";
+        default:                    return "Unknown";
+    }
+}
+
+// Interpolate between two colors
+static color_t lerp_color(const color_t& a, const color_t& b, float t)
+{
+    return {
+        static_cast<uint8_t>(a.r + (b.r - a.r) * t),
+        static_cast<uint8_t>(a.g + (b.g - a.g) * t),
+        static_cast<uint8_t>(a.b + (b.b - a.b) * t),
+        255
+    };
+}
+
+// Apply colormap to normalized value [0,1]
+color_t apply_colormap(colormap_t cm, float value)
+{
+    value = std::clamp(value, 0.0f, 1.0f);
+
+    switch (cm) {
+        case colormap_t::grayscale: {
+            uint8_t v = static_cast<uint8_t>(value * 255.0f);
+            return {v, v, v, 255};
+        }
+        case colormap_t::green: {
+            uint8_t v = static_cast<uint8_t>(value * 255.0f);
+            return {static_cast<uint8_t>(v / 2), v, static_cast<uint8_t>(v / 4), 255};
+        }
+        case colormap_t::viridis: {
+            // Simplified viridis: dark purple -> teal -> yellow
+            static const color_t stops[] = {
+                {68, 1, 84, 255},     // 0.0 - dark purple
+                {59, 82, 139, 255},   // 0.25 - blue
+                {33, 145, 140, 255},  // 0.5 - teal
+                {94, 201, 98, 255},   // 0.75 - green
+                {253, 231, 37, 255}   // 1.0 - yellow
+            };
+            float idx = value * 4.0f;
+            int i = std::min(static_cast<int>(idx), 3);
+            float t = idx - static_cast<float>(i);
+            return lerp_color(stops[i], stops[i + 1], t);
+        }
+        case colormap_t::plasma: {
+            // Simplified plasma: dark blue -> purple -> orange -> yellow
+            static const color_t stops[] = {
+                {13, 8, 135, 255},    // 0.0 - dark blue
+                {126, 3, 168, 255},   // 0.25 - purple
+                {204, 71, 120, 255},  // 0.5 - pink
+                {248, 149, 64, 255},  // 0.75 - orange
+                {240, 249, 33, 255}   // 1.0 - yellow
+            };
+            float idx = value * 4.0f;
+            int i = std::min(static_cast<int>(idx), 3);
+            float t = idx - static_cast<float>(i);
+            return lerp_color(stops[i], stops[i + 1], t);
+        }
+        case colormap_t::inferno: {
+            // Simplified inferno: black -> purple -> red -> yellow
+            static const color_t stops[] = {
+                {0, 0, 4, 255},       // 0.0 - black
+                {87, 16, 110, 255},   // 0.25 - purple
+                {188, 55, 84, 255},   // 0.5 - red
+                {249, 142, 9, 255},   // 0.75 - orange
+                {252, 255, 164, 255}  // 1.0 - light yellow
+            };
+            float idx = value * 4.0f;
+            int i = std::min(static_cast<int>(idx), 3);
+            float t = idx - static_cast<float>(i);
+            return lerp_color(stops[i], stops[i + 1], t);
+        }
+        case colormap_t::cool: {
+            // Cool: cyan -> magenta
+            static const color_t stops[] = {
+                {0, 255, 255, 255},   // 0.0 - cyan
+                {255, 0, 255, 255}    // 1.0 - magenta
+            };
+            return lerp_color(stops[0], stops[1], value);
+        }
+        default:
+            return {static_cast<uint8_t>(value * 255.0f), static_cast<uint8_t>(value * 255.0f), static_cast<uint8_t>(value * 255.0f), 255};
+    }
+}
+
 vec_ring_buffer::vec_ring_buffer(uint16_t _vec_size, uint16_t _ring_size) :
     texture(),
     pixel_data(_vec_size * _ring_size),
@@ -40,16 +134,15 @@ void vec_ring_buffer::update(const std::span<float> &data, bool auto_norm, float
         if (min_val > 0.0f)
             min_val = 0.0f;
     }
+    const float range = max_val - min_val;
+    const float inv_range = (range > 0.0f) ? 1.0f / range : 1.0f;
+
     for (std::size_t px_idx = ring_pos, d_idx = 0;
          px_idx < pixel_data.size();
          px_idx += ring_size, ++d_idx)
     {
-        color_t &cur_pixel = pixel_data[px_idx];
-        uint8_t scaled_data = std::clamp<uint16_t>(
-            static_cast<uint16_t>((data[d_idx] - min_val) * 255.0 / (max_val - min_val)), 0, 255);
-        cur_pixel.r = scaled_data / 2;
-        cur_pixel.g = scaled_data;
-        cur_pixel.b = scaled_data / 4;
+        float normalized = (data[d_idx] - min_val) * inv_range;
+        pixel_data[px_idx] = apply_colormap(colormap, normalized);
     }
     texture.update(pixel_data);
     ring_pos = (ring_pos + 1) % ring_size;
@@ -63,13 +156,28 @@ bool vec_ring_buffer::render_imgui(const char* label, float scale)
     ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin(label, &open)) {
-        // Toolbar with zoom display and reset button
+        // Toolbar with zoom display, reset button, and colormap selector
         ImGui::Text("Zoom: %.0f%%", zoom_level * 100.0f);
         ImGui::SameLine();
         if (ImGui::Button("Reset View")) {
             target_zoom = 2.0f;
             target_pan_x = 0.0f;
             target_pan_y = 0.0f;
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::BeginCombo("##colormap", colormap_name(colormap))) {
+            for (int i = 0; i < static_cast<int>(colormap_t::COUNT); ++i) {
+                auto cm = static_cast<colormap_t>(i);
+                bool is_selected = (colormap == cm);
+                if (ImGui::Selectable(colormap_name(cm), is_selected)) {
+                    colormap = cm;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
         }
 
         ImGui::Separator();
