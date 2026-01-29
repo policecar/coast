@@ -1140,6 +1140,25 @@ sim::sim_node_id_t config_editor::request_add_node(sim::io_entity_type_t type, c
 // Visualization Hints
 // ============================================================================
 
+// Helper: Edit RGBA color stored as int (0-255) using ImGui ColorEdit4
+static bool ColorEdit4FromInts(const char* label, int& r, int& g, int& b, int& a, ImGuiColorEditFlags flags = 0)
+{
+    float col[4] = {
+        r / 255.0f,
+        g / 255.0f,
+        b / 255.0f,
+        a / 255.0f
+    };
+    if (ImGui::ColorEdit4(label, col, flags)) {
+        r = static_cast<int>(col[0] * 255.0f + 0.5f);
+        g = static_cast<int>(col[1] * 255.0f + 0.5f);
+        b = static_cast<int>(col[2] * 255.0f + 0.5f);
+        a = static_cast<int>(col[3] * 255.0f + 0.5f);
+        return true;
+    }
+    return false;
+}
+
 // Helper: Render ngm_flat_vis_hint_t (returns true if modified)
 static bool render_ngm_flat_vis_hint(ngm_flat_vis_hint_t& hint)
 {
@@ -1231,6 +1250,23 @@ static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
     if (ImGui::InputInt("Update Interval##tree", &hint.update_interval)) {
         hint.update_interval = std::max(0, hint.update_interval);
         modified = true;
+    }
+
+    // Colors
+    if (ImGui::TreeNode("Colors")) {
+        if (ColorEdit4FromInts("Background", hint.bg_r, hint.bg_g, hint.bg_b, hint.bg_a)) {
+            modified = true;
+        }
+        if (ColorEdit4FromInts("Root Node", hint.root_r, hint.root_g, hint.root_b, hint.root_a)) {
+            modified = true;
+        }
+        if (ColorEdit4FromInts("Branch Node", hint.branch_r, hint.branch_g, hint.branch_b, hint.branch_a)) {
+            modified = true;
+        }
+        if (ColorEdit4FromInts("Edge", hint.edge_r, hint.edge_g, hint.edge_b, hint.edge_a)) {
+            modified = true;
+        }
+        ImGui::TreePop();
     }
 
     // Node appearance
