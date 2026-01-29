@@ -1,10 +1,6 @@
 #include "gui_manager.h"
 
 #include <algorithm>
-#include <cstdio>
-#include <string>
-
-#include "implot.h"
 
 namespace coast {
 
@@ -14,20 +10,30 @@ gui_manager::gui_manager(sdl_app& app)
 {
     file_browser.SetTitle("Open Configuration");
     file_browser.SetTypeFilters({ ".json" });
-
-    // Initialize time axis for activity plot
-    for (std::size_t i = 0; i < ACTIVITY_HISTORY_SIZE; ++i) {
-        time_axis.push_back(static_cast<float>(i));
-    }
 }
 
 void gui_manager::set_sim_instance(sim_instance* instance)
 {
-    sim = instance;
-    reset_per_group_state();
+    // Stop simulation when changing instances
+    simulation_running = false;
 
-    // Recreate config editor if we have a simulation
+    // Free resources from old browsers before changing sim
+    if (entity_browser_window) {
+        entity_browser_window->free_resources();
+        entity_browser_window.reset();
+    }
+    if (buffer_browser_window) {
+        buffer_browser_window->free_resources();
+        buffer_browser_window.reset();
+    }
+
+    sim = instance;
+
+    // Recreate browser windows and config editor if we have a simulation
     if (sim) {
+        entity_browser_window = std::make_unique<entity_browser>(*sim);
+        buffer_browser_window = std::make_unique<buffer_browser>(*sim);
+
         cfg_editor = std::make_unique<config_editor>(sim->get_config(), sim->get_config_path());
         // Set reload callback to trigger loading of saved config
         cfg_editor->set_reload_callback([this](const std::string& path) {
@@ -37,27 +43,6 @@ void gui_manager::set_sim_instance(sim_instance* instance)
     } else {
         cfg_editor.reset();
         show_config_editor = false;
-    }
-}
-
-void gui_manager::reset_per_group_state()
-{
-    // Stop simulation when changing instances
-    simulation_running = false;
-
-    // Clear activity history
-    activity_history.clear();
-    activity_sample_counter = 0;
-
-    // Reset visibility flags
-    show_ring_buffer.clear();
-    show_neurons.clear();
-
-    if (sim) {
-        std::size_t num_groups = sim->get_groups().size();
-        show_ring_buffer.resize(num_groups, false);
-        show_neurons.resize(num_groups, false);
-        activity_history.resize(num_groups);
     }
 }
 
@@ -126,31 +111,21 @@ void gui_manager::render_menu_bar()
             }
         }
 
-        // Visualization menu only visible when simulation is loaded
+        // Introspection menu only visible when simulation is loaded
         if (sim) {
-            if (ImGui::BeginMenu("Visualization")) {
-                if (ImGui::MenuItem("Activity Plot...", nullptr, show_activity_plot)) {
-                    show_activity_plot = !show_activity_plot;
+            if (ImGui::BeginMenu("Introspection")) {
+                if (entity_browser_window) {
+                    if (ImGui::MenuItem("Sim Entities...", nullptr, entity_browser_window->visible())) {
+                        entity_browser_window->visible() = !entity_browser_window->visible();
+                    }
                 }
-
-                auto& groups = sim->get_groups();
-                if (!groups.empty()) {
-                    ImGui::Separator();
-                    for (std::size_t i = 0; i < groups.size(); ++i) {
-                        char label[64];
-                        snprintf(label, sizeof(label), "Group %zu Ring Buffer", i + 1);
-                        if (ImGui::MenuItem(label, nullptr, show_ring_buffer[i])) {
-                            show_ring_buffer[i] = !show_ring_buffer[i];
-                        }
+                if (buffer_browser_window) {
+                    if (ImGui::MenuItem("IO Buffers...", nullptr, buffer_browser_window->visible())) {
+                        buffer_browser_window->visible() = !buffer_browser_window->visible();
                     }
-                    ImGui::Separator();
-                    for (std::size_t i = 0; i < groups.size(); ++i) {
-                        char label[64];
-                        snprintf(label, sizeof(label), "Group %zu Neurons", i + 1);
-                        if (ImGui::MenuItem(label, nullptr, show_neurons[i])) {
-                            show_neurons[i] = !show_neurons[i];
-                        }
-                    }
+                }
+                if (ImGui::MenuItem("Logging...", nullptr, logging_window_instance.visible())) {
+                    logging_window_instance.visible() = !logging_window_instance.visible();
                 }
                 ImGui::EndMenu();
             }
@@ -226,13 +201,21 @@ void gui_manager::render_dialogs()
     if (sim) {
         render_control_dialog();
         render_status_dialog();
-        render_activity_plot();
         if (show_config_editor && cfg_editor) {
             cfg_editor->render(&show_config_editor);
         }
-        render_ring_buffer_windows();
-        render_neuron_windows();
+
+        // Render introspection browser windows
+        if (entity_browser_window) {
+            entity_browser_window->render();
+        }
+        if (buffer_browser_window) {
+            buffer_browser_window->render();
+        }
     }
+
+    // Logging window doesn't require a simulation
+    logging_window_instance.render();
 }
 
 void gui_manager::render_control_dialog()
@@ -327,112 +310,6 @@ void gui_manager::render_status_bar()
         if (sim) {
             ImGui::SameLine();
             ImGui::Text(" | Config: %s", sim->get_config_path().c_str());
-        }
-    }
-    ImGui::End();
-}
-
-void gui_manager::render_ring_buffer_windows()
-{
-    if (!sim) return;
-
-    auto& ring_buffers = sim->get_ring_buffers();
-
-    for (std::size_t i = 0; i < ring_buffers.size(); ++i) {
-        if (show_ring_buffer[i]) {
-            char label[64];
-            snprintf(label, sizeof(label), "Ring Buffer %zu", i + 1);
-            ImGui::SetNextWindowSize(ImVec2(400, 200), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowPos(
-                ImVec2(380.0f, 40.0f + static_cast<float>(i) * 220.0f),
-                ImGuiCond_FirstUseEver
-            );
-            show_ring_buffer[i] = ring_buffers[i].render_imgui(label, vis_config.ring_buffer_scale);
-        }
-    }
-}
-
-void gui_manager::render_neuron_windows()
-{
-    if (!sim) return;
-
-    auto& visualizations = sim->get_visualizations();
-
-    for (std::size_t i = 0; i < visualizations.size(); ++i) {
-        // Update visibility state for conditional updates in main loop
-        visualizations[i].set_visible(show_neurons[i]);
-
-        if (show_neurons[i]) {
-            char label[64];
-            snprintf(label, sizeof(label), "Neurons Group %zu", i + 1);
-            float scale = (i == 0) ? vis_config.neurons_scale_first : vis_config.neurons_scale_other;
-            ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
-            ImGui::SetNextWindowPos(
-                ImVec2(800.0f, 40.0f + static_cast<float>(i) * 420.0f),
-                ImGuiCond_FirstUseEver
-            );
-            show_neurons[i] = visualizations[i].render_imgui(label, scale);
-        }
-    }
-}
-
-void gui_manager::update_activity_history()
-{
-    if (!sim) return;
-
-    auto& groups = sim->get_groups();
-    auto& sim_env = sim->get_sim_env();
-
-    // Sample activity every N steps to avoid overwhelming the plot
-    ++activity_sample_counter;
-    if (activity_sample_counter < 10) return;
-    activity_sample_counter = 0;
-
-    for (std::size_t g = 0; g < groups.size(); ++g) {
-        // Get the IO buffer for this group and compute sum of activity
-        auto buf_opt = sim_env.get_io_buffer(groups[g].get_outp_id());
-        if (!buf_opt) continue;
-
-        auto* buf = buf_opt.value();
-        float sum = 0.0f;
-        auto read_buf = buf->cur_read_buffer();
-        for (std::size_t i = 0; i < read_buf.size(); ++i) {
-            sum += read_buf[i];
-        }
-
-        // Add to rolling buffer
-        activity_history[g].push_back(sum);
-        if (activity_history[g].size() > ACTIVITY_HISTORY_SIZE) {
-            activity_history[g].pop_front();
-        }
-    }
-}
-
-void gui_manager::render_activity_plot()
-{
-    if (!show_activity_plot || !sim) return;
-
-    auto& groups = sim->get_groups();
-
-    ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(400, 40), ImGuiCond_FirstUseEver);
-
-    if (ImGui::Begin("Activity Plot", &show_activity_plot)) {
-        if (ImPlot::BeginPlot("Group Activity", ImVec2(-1, -1))) {
-            ImPlot::SetupAxes("Time", "Activity Sum");
-            ImPlot::SetupAxisLimits(ImAxis_X1, 0, ACTIVITY_HISTORY_SIZE, ImGuiCond_Always);
-
-            for (std::size_t g = 0; g < groups.size(); ++g) {
-                if (activity_history[g].empty()) continue;
-
-                // Convert deque to contiguous vector for plotting
-                std::vector<float> data(activity_history[g].begin(), activity_history[g].end());
-
-                char label[32];
-                snprintf(label, sizeof(label), "Group %zu", g + 1);
-                ImPlot::PlotLine(label, data.data(), static_cast<int>(data.size()));
-            }
-            ImPlot::EndPlot();
         }
     }
     ImGui::End();

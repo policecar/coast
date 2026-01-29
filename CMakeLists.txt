@@ -58,6 +58,13 @@ add_executable(coast
         # Simulation instance (RAII wrapper)
         src/gui_core/sim_instance.cpp
         include/gui_core/sim_instance.h
+        # Browser windows for introspection
+        src/gui_core/entity_browser.cpp
+        include/gui_core/entity_browser.h
+        src/gui_core/buffer_browser.cpp
+        include/gui_core/buffer_browser.h
+        src/gui_core/logging_window.cpp
+        include/gui_core/logging_window.h
 
         # Dear ImGui core
         3rd_party/imgui/imconfig.h

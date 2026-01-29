@@ -57,10 +57,7 @@ int main(int argc, char **argv)
                 try {
                     // Clear old simulation first
                     gui.set_sim_instance(nullptr);
-                    if (sim) {
-                        sim->free_resources();
-                        sim.reset();
-                    }
+                    sim.reset();
 
                     // Load new simulation
                     sim = std::make_unique<sim_instance>(path);
@@ -77,18 +74,10 @@ int main(int argc, char **argv)
             // Run simulation if loaded and running
             if (sim && gui.is_simulation_running()) {
                 auto& sim_env = sim->get_sim_env();
-                auto& visualizations = sim->get_visualizations();
 
                 for (int i = 0; i < gui.get_steps_per_frame(); ++i) {
                     sim_env.process();
                     sim_env.swap_io();
-                    gui.update_activity_history();
-                }
-
-                for (auto& vis : visualizations) {
-                    if (vis.is_visible()) {
-                        vis.update();
-                    }
                 }
             }
         }
@@ -111,9 +100,9 @@ int main(int argc, char **argv)
      */
     main_app.register_shutdown_func(
         [&]() {
-            if (sim) {
-                sim->free_resources();
-            }
+            // Reset gui_manager first to free browser resources while GL context is valid
+            gui.set_sim_instance(nullptr);
+            sim.reset();
         }
     );
 
