@@ -64,6 +64,13 @@ private:
     colormap_t colormap_ = colormap_t::grayscale;
     bool colormap_dirty_ = false;
 
+    // Spacing control for root nodes
+    float spacing_multiplier_ = 0.3f;
+    bool spacing_dirty_ = false;
+
+    // Target positions for each neuron's tree (for smooth animation)
+    std::vector<std::array<float, 2>> neuron_target_positions_;
+
     // Selection state - which neuron's representations are visible
     // SIZE_MAX means no neuron selected (all representations hidden)
     std::size_t selected_neuron_idx_ = SIZE_MAX;
@@ -111,6 +118,10 @@ public:
     [[nodiscard]] bool is_colormap_dirty() const { return colormap_dirty_; }
     void clear_colormap_dirty() { colormap_dirty_ = false; }
 
+    // Spacing dirty flag - set when spacing slider changes
+    [[nodiscard]] bool is_spacing_dirty() const { return spacing_dirty_; }
+    void clear_spacing_dirty() { spacing_dirty_ = false; }
+
     void create_model(fbgd &vis, const ngm2::neuron_group_t &ng);
     void update_model(fbgd &vis, const ngm2::neuron_group_t &ng);
     void update_representations(const ngm2::neuron_group_t &ng);
@@ -126,6 +137,12 @@ public:
      * Neurons with larger trees get more space in the layout.
      */
     void update_root_positions(fbgd &vis, const ngm2::neuron_group_t &ng);
+
+    /**
+     * Animate all nodes towards their target positions.
+     * Call this every frame for smooth tree repositioning.
+     */
+    void animate_tree_positions(fbgd &vis, float lerp_factor = 0.05f);
 
     void free_resources();
 

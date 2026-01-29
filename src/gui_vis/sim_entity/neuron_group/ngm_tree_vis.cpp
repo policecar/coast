@@ -321,9 +321,10 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
         neuron_bboxes[node.neuron_idx].expand(pos[0], pos[1]);
     }
 
-    // Convert bounding boxes to space requirements (with padding)
-    const float padding = 0.05f * region_size_;  // 5% padding around each tree
-    const float min_size = 0.1f * region_size_;  // Minimum cell size
+    // Convert bounding boxes to space requirements (with generous padding)
+    // spacing_multiplier_ allows user to adjust spacing via UI slider
+    const float padding = 0.05f * region_size_ * spacing_multiplier_;
+    const float min_size = 0.2f * region_size_ * spacing_multiplier_;
 
     std::vector<float> neuron_widths(neuron_cnt);
     std::vector<float> neuron_heights(neuron_cnt);
@@ -338,7 +339,6 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
     if (grid_cnt == 0) grid_cnt = 1;
 
     const float margin = region_size_ * 0.05f;
-    const float available = region_size_ - 2.0f * margin;
 
     // Calculate column widths and row heights based on max tree size in each column/row
     std::vector<float> col_widths(grid_cnt, min_size);
@@ -353,19 +353,8 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
         }
     }
 
-    // Calculate total width/height and scale to fit in region
-    float total_width = 0.0f, total_height = 0.0f;
-    for (std::size_t i = 0; i < grid_cnt; ++i) {
-        total_width += col_widths[i];
-        total_height += row_heights[i];
-    }
-
-    float scale_x = (total_width > 0) ? available / total_width : 1.0f;
-    float scale_y = (total_height > 0) ? available / total_height : 1.0f;
-
-    // Apply scaling
-    for (auto& w : col_widths) w *= scale_x;
-    for (auto& h : row_heights) h *= scale_y;
+    // No scaling - spacing_multiplier directly controls layout size
+    // User can zoom out to see the full layout if it exceeds the view
 
     // Build cumulative positions
     std::vector<float> col_positions(grid_cnt + 1, margin);
@@ -375,19 +364,50 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
         row_positions[i + 1] = row_positions[i] + row_heights[i];
     }
 
-    // Update target positions for each root node
+    // Store target positions for each neuron (animation happens in animate_tree_positions)
+    neuron_target_positions_.resize(neuron_cnt);
+
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
         if (neuron_idx >= neuron_lu.size()) break;
         std::size_t root_node_idx = neuron_lu[neuron_idx];
-        if (root_node_idx < nodes.size() && nodes[root_node_idx].used > 0) {
-            std::size_t col = neuron_idx % grid_cnt;
-            std::size_t row = neuron_idx / grid_cnt;
+        if (root_node_idx >= nodes.size() || nodes[root_node_idx].used == 0) continue;
 
-            // Position at center of cell
-            float xp = col_positions[col] + col_widths[col] * 0.5f;
-            float yp = (row < grid_cnt) ? row_positions[row] + row_heights[row] * 0.5f : margin;
+        std::size_t col = neuron_idx % grid_cnt;
+        std::size_t row = neuron_idx / grid_cnt;
 
-            vis.set_node_target_pos(nodes[root_node_idx].node_id, {xp, yp});
+        // Calculate ideal position at center of cell
+        float target_x = col_positions[col] + col_widths[col] * 0.5f;
+        float target_y = (row < grid_cnt) ? row_positions[row] + row_heights[row] * 0.5f : margin;
+
+        neuron_target_positions_[neuron_idx] = {target_x, target_y};
+    }
+}
+
+void ngm_tree_vis::animate_tree_positions(fbgd &vis, float lerp_factor)
+{
+    if (neuron_lu.empty() || neuron_target_positions_.empty()) return;
+
+    std::size_t neuron_cnt = std::min(neuron_lu.size(), neuron_target_positions_.size());
+
+    for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
+        std::size_t root_node_idx = neuron_lu[neuron_idx];
+        if (root_node_idx >= nodes.size() || nodes[root_node_idx].used == 0) continue;
+
+        // Get current root position and target
+        const auto& current_pos = vis.get_node_pos(nodes[root_node_idx].node_id);
+        const auto& target = neuron_target_positions_[neuron_idx];
+
+        // Calculate lerped delta
+        float dx = (target[0] - current_pos[0]) * lerp_factor;
+        float dy = (target[1] - current_pos[1]) * lerp_factor;
+
+        // Skip if movement is negligible
+        if (std::abs(dx) < 0.0001f && std::abs(dy) < 0.0001f) continue;
+
+        // Move all nodes belonging to this neuron by the same delta
+        for (const auto& node : nodes) {
+            if (node.used == 0 || node.neuron_idx != neuron_idx) continue;
+            vis.translate_node(node.node_id, {dx, dy});
         }
     }
 }
@@ -444,6 +464,11 @@ bool ngm_tree_vis::render_imgui(const char* label,
     }
     ImGui::SameLine();
     ImGui::Checkbox("Show on hover", &show_on_hover_);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    if (ImGui::SliderFloat("Spacing", &spacing_multiplier_, 0.3f, 3.0f, "%.1fx")) {
+        spacing_dirty_ = true;
+    }
 
     ImGui::Separator();
 
@@ -573,6 +598,10 @@ bool ngm_tree_vis::render_imgui(const char* label,
         display_neuron_idx = hovered_neuron_idx_;
     }
 
+    // Clip drawing to canvas area to prevent nodes from overlapping toolbar
+    draw_list->PushClipRect(canvas_pos,
+        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y), true);
+
     // Precompute colors
     const ImU32 edge_color = IM_COL32(params_.edge_r, params_.edge_g, params_.edge_b, params_.edge_a);
     const ImU32 root_color = IM_COL32(params_.root_r, params_.root_g, params_.root_b, params_.root_a);
@@ -650,6 +679,9 @@ bool ngm_tree_vis::render_imgui(const char* label,
             draw_list->AddCircleFilled(pos, radius, color);
         }
     }
+
+    // Restore clipping
+    draw_list->PopClipRect();
 
     ImGui::End();
     return open;
@@ -731,7 +763,7 @@ public:
         vis_.set_params(params);
 
         // Set a larger region size to accommodate growing dendritic trees
-        fbgd_.set_region_size(3.0f);
+        fbgd_.set_region_size(5.0f);
 
         vis_.create_model(fbgd_, ng_);
 
@@ -785,8 +817,8 @@ public:
     {
         if (!visible_) return true;
 
-        // Animate fixed nodes towards their target positions (smooth repositioning)
-        fbgd_.animate_fixed_nodes(0.05f);
+        // Animate tree positions (moves entire trees towards their targets)
+        vis_.animate_tree_positions(fbgd_, 0.05f);
 
         // Update force-based layout every frame for smooth animation
         fbgd_.update();
@@ -803,6 +835,12 @@ public:
         });
 
         fbgd_.draw();
+
+        // Check if spacing slider changed and update root positions
+        if (vis_.is_spacing_dirty()) {
+            vis_.clear_spacing_dirty();
+            vis_.update_root_positions(fbgd_, ng_);
+        }
 
         return keep_open;
     }
