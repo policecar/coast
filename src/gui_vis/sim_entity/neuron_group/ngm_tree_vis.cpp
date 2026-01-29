@@ -292,19 +292,20 @@ void ngm_tree_vis::free_resources()
     }
 }
 
-void ngm_tree_vis::render_imgui(const char* label,
+bool ngm_tree_vis::render_imgui(const char* label,
                            const std::vector<fbgd::node> &vis_nodes,
                            const std::vector<fbgd::edge> &vis_edges,
                            const std::vector<uint32_t> &vis_node_lu)
 {
+    bool open = true;
     ImGui::SetNextWindowSize(ImVec2(600, 600), ImGuiCond_FirstUseEver);
-    ImGui::Begin(label);
+    ImGui::Begin(label, &open);
 
     // Early exit if data is not ready
     if (vis_nodes.empty() || vis_node_lu.empty() || nodes.empty()) {
         ImGui::TextDisabled("Waiting for data...");
         ImGui::End();
-        return;
+        return open;
     }
 
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -385,6 +386,7 @@ void ngm_tree_vis::render_imgui(const char* label,
     }
 
     ImGui::End();
+    return open;
 }
 
 // ============================================================================
@@ -519,12 +521,12 @@ public:
         // Call fbgd's draw callback to get latest node/edge data
         bool keep_open = true;
 
-        fbgd_.set_draw_func([this](
+        fbgd_.set_draw_func([this, &keep_open](
             const std::vector<coast::fbgd::node>& nodes,
             const std::vector<coast::fbgd::edge>& edges,
             const std::vector<uint32_t>& node_lu)
         {
-            vis_.render_imgui(label_.c_str(), nodes, edges, node_lu);
+            keep_open = vis_.render_imgui(label_.c_str(), nodes, edges, node_lu);
         });
 
         fbgd_.draw();

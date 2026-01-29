@@ -100,8 +100,8 @@ public:
 
     void free_resources();
 
-    // Render in ImGui window using ImDrawList
-    void render_imgui(
+    // Render in ImGui window using ImDrawList. Returns false if window was closed.
+    bool render_imgui(
         const char* label,
         const std::vector<fbgd::node>& vis_nodes,
         const std::vector<fbgd::edge>& vis_edges,
