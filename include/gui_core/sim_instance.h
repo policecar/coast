@@ -8,6 +8,7 @@
 #include "json_loader.h"
 #include "sim_env.h"
 #include "sim_builder.h"
+#include "sim_thread_controller.h"
 #include "hd_ngm2_neuron_group.h"
 
 namespace coast {
@@ -53,6 +54,13 @@ public:
 
     [[nodiscard]] const std::string& get_config_path() const { return config_path; }
 
+    /**
+     * Get the simulation thread controller.
+     * Returns nullptr if simulation is not properly initialized.
+     */
+    [[nodiscard]] sim::sim_thread_controller* get_thread_controller() { return thread_controller.get(); }
+    [[nodiscard]] const sim::sim_thread_controller* get_thread_controller() const { return thread_controller.get(); }
+
 private:
     std::string config_path;
 
@@ -63,6 +71,9 @@ private:
 
     // Points into sim_env - valid as long as sim_env exists
     std::vector<ngm2::neuron_group_t>* groups = nullptr;
+
+    // Simulation thread controller - created after sim_env is ready
+    std::unique_ptr<sim::sim_thread_controller> thread_controller;
 };
 
 } // namespace coast

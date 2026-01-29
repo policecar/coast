@@ -27,6 +27,9 @@ sim_instance::sim_instance(const std::string& config_path)
         throw std::runtime_error("No neuron groups found in simulation environment");
     }
     groups = groups_opt.value();
+
+    // Create simulation thread controller (starts in paused mode)
+    thread_controller = std::make_unique<sim::sim_thread_controller>(*sim_env);
 }
 
 sim_instance::~sim_instance() = default;
@@ -37,6 +40,7 @@ sim_instance::sim_instance(sim_instance&& other) noexcept
     , sim_env(std::move(other.sim_env))
     , sim_builder(std::move(other.sim_builder))
     , groups(other.groups)
+    , thread_controller(std::move(other.thread_controller))
 {
     other.groups = nullptr;
 }
@@ -44,11 +48,15 @@ sim_instance::sim_instance(sim_instance&& other) noexcept
 sim_instance& sim_instance::operator=(sim_instance&& other) noexcept
 {
     if (this != &other) {
+        // Stop thread controller first before moving resources
+        thread_controller.reset();
+
         config_path = std::move(other.config_path);
         json_loader = std::move(other.json_loader);
         sim_env = std::move(other.sim_env);
         sim_builder = std::move(other.sim_builder);
         groups = other.groups;
+        thread_controller = std::move(other.thread_controller);
 
         other.groups = nullptr;
     }
