@@ -137,6 +137,7 @@ fbgd::node_id_t fbgd::add_node(const std::array<float, 2> &pos, bool fixed,
     node new_node {};
     new_node.node_id = next_node_id++;
     new_node.pos     = pos;
+    new_node.target_pos = pos;  // Initialize target to current position
     new_node.cell_id = pos_to_cell(new_node.pos);
     new_node.fixed   = fixed;
     new_node.repulsion_radius = repulsion_radius;
@@ -146,6 +147,29 @@ fbgd::node_id_t fbgd::add_node(const std::array<float, 2> &pos, bool fixed,
     nodes_dirty = true;
 
     return new_node.node_id;
+}
+
+void fbgd::set_node_target_pos(node_id_t node_id, const std::array<float, 2>& target_pos)
+{
+    if (node_id < node_look_up.size()) {
+        auto idx = node_look_up[node_id];
+        if (idx < nodes.size()) {
+            nodes[idx].target_pos = target_pos;
+        }
+    }
+}
+
+void fbgd::animate_fixed_nodes(float lerp_factor)
+{
+    for (auto& node : nodes) {
+        if (node.fixed) {
+            // Smoothly move towards target position
+            node.pos[0] += (node.target_pos[0] - node.pos[0]) * lerp_factor;
+            node.pos[1] += (node.target_pos[1] - node.pos[1]) * lerp_factor;
+            node.cell_id = pos_to_cell(node.pos);
+        }
+    }
+    nodes_dirty = true;
 }
 
 void fbgd::add_edge(node_id_t node_a, node_id_t node_b)
@@ -312,10 +336,7 @@ void fbgd::update()
             cur_node.pos[0] += node_update[0] * upd_factor;
             cur_node.pos[1] += node_update[1] * upd_factor;
 
-            // Hard clamp to region bounds as safety net
-            cur_node.pos[0] = std::clamp(cur_node.pos[0], 0.0f, w);
-            cur_node.pos[1] = std::clamp(cur_node.pos[1], 0.0f, w);
-
+            // No hard boundary - nodes can move freely, view can pan/zoom to follow
             cur_node.cell_id = pos_to_cell(cur_node.pos);
 
             // nodes have moved

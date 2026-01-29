@@ -282,6 +282,87 @@ void ngm_tree_vis::update_repulsion_radii(fbgd &vis)
     }
 }
 
+void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &ng)
+{
+    if (neuron_lu.empty()) return;
+
+    std::size_t neuron_cnt = neuron_lu.size();
+
+    // Calculate tree "weight" for each neuron based on total segment count
+    std::vector<float> neuron_weights(neuron_cnt, 1.0f);
+    float total_weight = 0.0f;
+
+    for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
+        const ngm2::neuron_t &cur_neuron = ng.get_neuron(neuron_idx);
+        std::size_t branch_cnt = cur_neuron.get_dendrite_count();
+        float weight = 1.0f;  // Base weight
+        for (std::size_t branch_idx = 0; branch_idx < branch_cnt; ++branch_idx) {
+            const ngm2::dendrite_t &cur_branch = cur_neuron.get_dendrite(branch_idx);
+            // Weight increases with tree depth (log2 of max_segment_idx)
+            std::size_t max_seg = cur_branch.get_max_segment_idx();
+            if (max_seg > 1) {
+                weight += std::log2(static_cast<float>(max_seg));
+            }
+        }
+        neuron_weights[neuron_idx] = weight;
+        total_weight += weight;
+    }
+
+    // Normalize weights
+    if (total_weight > 0) {
+        for (auto& w : neuron_weights) {
+            w /= total_weight;
+        }
+    }
+
+    // Calculate grid positions with variable spacing based on weights
+    auto grid_cnt = static_cast<std::size_t>(std::ceil(std::sqrt(static_cast<float>(neuron_cnt))));
+    const float base_spacing = region_size_ / static_cast<float>(grid_cnt + 2);
+
+    // Create row/column cumulative spacing
+    std::vector<float> col_positions(grid_cnt + 1, 0.0f);
+    std::vector<float> row_positions(grid_cnt + 1, 0.0f);
+
+    // Calculate column widths based on max weight in each column
+    std::vector<float> col_widths(grid_cnt, base_spacing);
+    std::vector<float> row_heights(grid_cnt, base_spacing);
+
+    for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
+        std::size_t col = neuron_idx % grid_cnt;
+        std::size_t row = neuron_idx / grid_cnt;
+        float weight_factor = 0.5f + neuron_weights[neuron_idx] * neuron_cnt;  // Scale factor
+        col_widths[col] = std::max(col_widths[col], base_spacing * weight_factor);
+        if (row < grid_cnt) {
+            row_heights[row] = std::max(row_heights[row], base_spacing * weight_factor);
+        }
+    }
+
+    // Build cumulative positions
+    col_positions[0] = base_spacing;
+    for (std::size_t i = 0; i < grid_cnt; ++i) {
+        col_positions[i + 1] = col_positions[i] + col_widths[i];
+    }
+    row_positions[0] = base_spacing;
+    for (std::size_t i = 0; i < grid_cnt; ++i) {
+        row_positions[i + 1] = row_positions[i] + row_heights[i];
+    }
+
+    // Update target positions for each root node
+    for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
+        std::size_t root_node_idx = neuron_lu[neuron_idx];
+        if (root_node_idx < nodes.size() && nodes[root_node_idx].used > 0) {
+            std::size_t col = neuron_idx % grid_cnt;
+            std::size_t row = neuron_idx / grid_cnt;
+
+            // Position at center of cell
+            float xp = col_positions[col] + col_widths[col] * 0.5f;
+            float yp = row_positions[row] + row_heights[row] * 0.5f;
+
+            vis.set_node_target_pos(nodes[root_node_idx].node_id, {xp, yp});
+        }
+    }
+}
+
 void ngm_tree_vis::free_resources()
 {
     for (auto &node : nodes){
@@ -376,7 +457,7 @@ bool ngm_tree_vis::render_imgui(const char* label,
         target_pan_y_ = norm_y * canvas_size.y * target_zoom_ - mouse_canvas_y;
     }
 
-    // Handle left-click drag for panning
+    // Handle left-click drag for panning (free panning, no clamping)
     if (is_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
         target_pan_x_ -= io.MouseDelta.x;
         target_pan_y_ -= io.MouseDelta.y;
@@ -384,22 +465,10 @@ bool ngm_tree_vis::render_imgui(const char* label,
         pan_y_ -= io.MouseDelta.y;
     }
 
-    // Clamp target pan
-    float max_pan_x = std::max(0.0f, canvas_size.x * target_zoom_ - canvas_size.x);
-    float max_pan_y = std::max(0.0f, canvas_size.y * target_zoom_ - canvas_size.y);
-    target_pan_x_ = std::clamp(target_pan_x_, 0.0f, max_pan_x);
-    target_pan_y_ = std::clamp(target_pan_y_, 0.0f, max_pan_y);
-
-    // Smoothly interpolate current values
+    // Smoothly interpolate current values (no clamping - free pan)
     zoom_level_ = zoom_level_ + (target_zoom_ - zoom_level_) * lerp_t;
     pan_x_ = pan_x_ + (target_pan_x_ - pan_x_) * lerp_t;
     pan_y_ = pan_y_ + (target_pan_y_ - pan_y_) * lerp_t;
-
-    // Clamp current pan
-    max_pan_x = std::max(0.0f, canvas_size.x * zoom_level_ - canvas_size.x);
-    max_pan_y = std::max(0.0f, canvas_size.y * zoom_level_ - canvas_size.y);
-    pan_x_ = std::clamp(pan_x_, 0.0f, max_pan_x);
-    pan_y_ = std::clamp(pan_y_, 0.0f, max_pan_y);
 
     // Transform function with zoom and pan
     const float region_size = region_size_;
@@ -672,6 +741,7 @@ public:
                                                  std::memory_order_acq_rel)) {
             // Safe to read from neuron_group
             vis_.update_model(fbgd_, ng_);
+            vis_.update_root_positions(fbgd_, ng_);  // Update spacing based on tree sizes
             fbgd_.update();
 
             // Signal completion
@@ -682,6 +752,9 @@ public:
     bool render_imgui() override
     {
         if (!visible_) return true;
+
+        // Animate fixed nodes towards their target positions (smooth repositioning)
+        fbgd_.animate_fixed_nodes(0.05f);
 
         // Update force-based layout every frame for smooth animation
         fbgd_.update();
