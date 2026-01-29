@@ -14,6 +14,22 @@
 
 namespace coast {
 
+enum class colormap_t : uint8_t {
+    grayscale = 0,
+    green,      // Original green-tinted
+    viridis,
+    plasma,
+    inferno,
+    cool,
+    COUNT
+};
+
+// Get display name for colormap
+const char* colormap_name(colormap_t cm);
+
+// Apply colormap to normalized value [0,1]
+color_t apply_colormap(colormap_t cm, float value);
+
 class vec_ring_buffer {
 
     gl_texture texture;
@@ -31,6 +47,9 @@ class vec_ring_buffer {
     float pan_y = 0.0f;
     float target_pan_x = 0.0f;
     float target_pan_y = 0.0f;
+
+    // Colormap selection
+    colormap_t colormap = colormap_t::viridis;
 
 public:
     vec_ring_buffer(uint16_t _vec_size, uint16_t _ring_size);
