@@ -40,10 +40,14 @@ void fbgd::set_node_fixed(node_id_t node_id, bool fixed)
 fbgd::cell_id_t fbgd::pos_to_cell(const std::array<float, 2> &pos) const
 {
     const float cell_cnt = std::ceil(region_size_ / cell_size_);
+    const float max_cell = cell_cnt * cell_cnt - 1.0f;  // Max valid index
+    // Clamp positions to valid range before calculating cell
+    const float clamped_x = std::clamp(pos[0], 0.0f, region_size_ - 0.001f);
+    const float clamped_y = std::clamp(pos[1], 0.0f, region_size_ - 0.001f);
     const float cell_id =
-        std::floor(pos[0] / cell_size_) +
-        std::floor(pos[1] / cell_size_) * cell_cnt;
-    return static_cast<cell_id_t>(std::clamp(cell_id, 0.0f, cell_cnt * cell_cnt));
+        std::floor(clamped_x / cell_size_) +
+        std::floor(clamped_y / cell_size_) * cell_cnt;
+    return static_cast<cell_id_t>(std::clamp(cell_id, 0.0f, max_cell));
 }
 
 void fbgd::rebuild_cell_and_node_look_up()
@@ -159,6 +163,21 @@ void fbgd::set_node_target_pos(node_id_t node_id, const std::array<float, 2>& ta
     }
 }
 
+void fbgd::translate_node(node_id_t node_id, const std::array<float, 2>& delta)
+{
+    if (node_id < node_look_up.size()) {
+        auto idx = node_look_up[node_id];
+        if (idx < nodes.size()) {
+            nodes[idx].pos[0] += delta[0];
+            nodes[idx].pos[1] += delta[1];
+            nodes[idx].target_pos[0] += delta[0];
+            nodes[idx].target_pos[1] += delta[1];
+            nodes[idx].cell_id = pos_to_cell(nodes[idx].pos);
+            nodes_dirty = true;
+        }
+    }
+}
+
 void fbgd::animate_fixed_nodes(float lerp_factor)
 {
     for (auto& node : nodes) {
@@ -166,10 +185,10 @@ void fbgd::animate_fixed_nodes(float lerp_factor)
             // Smoothly move towards target position
             node.pos[0] += (node.target_pos[0] - node.pos[0]) * lerp_factor;
             node.pos[1] += (node.target_pos[1] - node.pos[1]) * lerp_factor;
-            node.cell_id = pos_to_cell(node.pos);
+            // Note: Don't update cell_id or set nodes_dirty for fixed nodes
+            // as they don't participate in repulsion calculations
         }
     }
-    nodes_dirty = true;
 }
 
 void fbgd::add_edge(node_id_t node_a, node_id_t node_b)

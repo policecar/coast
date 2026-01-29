@@ -106,6 +106,7 @@ public:
     void set_node_repulsion_radius(node_id_t node_id, float radius);
     void set_node_fixed(node_id_t node_id, bool fixed);
     void set_node_target_pos(node_id_t node_id, const std::array<float, 2>& target_pos);
+    void translate_node(node_id_t node_id, const std::array<float, 2>& delta);  // Move node by delta
     void animate_fixed_nodes(float lerp_factor);  // Smoothly move fixed nodes towards target
 
     void update();
