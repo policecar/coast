@@ -317,6 +317,11 @@ bool ngm_tree_vis::render_imgui(const char* label,
         ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
         IM_COL32(params_.bg_r, params_.bg_g, params_.bg_b, params_.bg_a));
 
+    // Add invisible button to capture mouse input on canvas
+    ImGui::InvisibleButton("canvas", canvas_size, ImGuiButtonFlags_MouseButtonLeft);
+    bool canvas_clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+    ImVec2 mouse_pos = ImGui::GetIO().MousePos;
+
     // Scale factors
     const float region_size = region_size_;
     auto transform = [&](float x, float y) -> ImVec2 {
@@ -325,6 +330,44 @@ bool ngm_tree_vis::render_imgui(const char* label,
             canvas_pos.y + (y / region_size) * canvas_size.y
         );
     };
+
+    // Handle click detection on root nodes
+    if (canvas_clicked) {
+        bool clicked_on_node = false;
+        float click_radius = params_.root_node_radius * 2.0f;  // Generous click area
+
+        for (const auto &vis_node : vis_nodes) {
+            auto* node_idx_ptr = std::any_cast<std::size_t>(&vis_node.payload);
+            if (!node_idx_ptr || *node_idx_ptr >= nodes.size())
+                continue;
+
+            const auto &node = nodes[*node_idx_ptr];
+            // Only check root nodes (segment_idx == 0)
+            if (node.segment_idx != 0)
+                continue;
+
+            ImVec2 node_pos = transform(vis_node.pos[0], vis_node.pos[1]);
+            float dx = mouse_pos.x - node_pos.x;
+            float dy = mouse_pos.y - node_pos.y;
+            float dist_sq = dx * dx + dy * dy;
+
+            if (dist_sq <= click_radius * click_radius) {
+                // Toggle selection: if already selected, deselect; otherwise select
+                if (selected_neuron_idx_ == node.neuron_idx) {
+                    selected_neuron_idx_ = SIZE_MAX;  // Deselect
+                } else {
+                    selected_neuron_idx_ = node.neuron_idx;  // Select this neuron
+                }
+                clicked_on_node = true;
+                break;
+            }
+        }
+
+        // If clicked on empty space, deselect
+        if (!clicked_on_node) {
+            selected_neuron_idx_ = SIZE_MAX;
+        }
+    }
 
     // Precompute colors
     const ImU32 edge_color = IM_COL32(params_.edge_r, params_.edge_g, params_.edge_b, params_.edge_a);
@@ -371,7 +414,13 @@ bool ngm_tree_vis::render_imgui(const char* label,
         const auto &node = nodes[*node_idx_ptr];
         ImVec2 pos = transform(vis_node.pos[0], vis_node.pos[1]);
 
-        if (!node.pixel_data.empty() && node.texture.is_valid()) {
+        // Only show textures for the selected neuron's leaf nodes
+        bool show_texture = (selected_neuron_idx_ != SIZE_MAX) &&
+                           (node.neuron_idx == selected_neuron_idx_) &&
+                           (!node.pixel_data.empty()) &&
+                           (node.texture.is_valid());
+
+        if (show_texture) {
             float scale = canvas_size.x / params_.texture_scale_divisor;
             float w = static_cast<float>(node.texture.get_width()) * scale;
             float h = static_cast<float>(node.texture.get_height()) * scale;
@@ -381,6 +430,11 @@ bool ngm_tree_vis::render_imgui(const char* label,
         } else {
             float radius = node.segment_idx == 0 ? params_.root_node_radius : params_.branch_node_radius;
             ImU32 color = node.segment_idx == 0 ? root_color : branch_color;
+            // Highlight selected neuron's root node
+            if (node.segment_idx == 0 && node.neuron_idx == selected_neuron_idx_) {
+                // Draw a slightly larger highlight ring around selected root
+                draw_list->AddCircle(pos, radius + 3.0f, IM_COL32(255, 255, 255, 200), 0, 2.0f);
+            }
             draw_list->AddCircleFilled(pos, radius, color);
         }
     }

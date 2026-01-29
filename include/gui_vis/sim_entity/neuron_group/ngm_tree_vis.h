@@ -51,6 +51,10 @@ private:
     params_t params_;
     float region_size_ = 1.0f;  // Stored from fbgd for rendering
 
+    // Selection state - which neuron's representations are visible
+    // SIZE_MAX means no neuron selected (all representations hidden)
+    std::size_t selected_neuron_idx_ = SIZE_MAX;
+
     struct node_info_t {
         std::size_t neuron_idx  = 0;
         std::size_t branch_idx  = 0;
