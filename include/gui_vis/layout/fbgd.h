@@ -16,9 +16,10 @@ namespace coast {
 
 class fbgd {
 
-    static constexpr float region_size = 1.0f;
-    static constexpr float cell_size   = 0.1f;
-    static constexpr float local_size  = 0.04f;
+    // Configurable parameters
+    float region_size_ = 1.0f;
+    float cell_size_   = 0.1f;
+    float local_size_  = 0.04f;
 
     static constexpr float attr_force    = 0.1f;
     static constexpr float rep_force     = 0.01f;
@@ -40,6 +41,7 @@ public:
         cell_id_t cell_id;
         std::array<float,2> pos;
         bool fixed;
+        float repulsion_radius = 1.0f;  // Multiplier for repulsion force (sphere of influence)
         std::any payload;
     };
 
@@ -50,7 +52,7 @@ public:
 
 private:
     std::mt19937 rgen {0};
-    std::uniform_real_distribution<float> rnd_dis {0.0, region_size};
+    std::uniform_real_distribution<float> rnd_dis {0.0f, 1.0f};  // Will be scaled by region_size_
 
     node_id_t next_node_id = 0;
 
@@ -67,7 +69,7 @@ private:
     std::vector<std::pair<node_it,node_it>> cell_look_up;
     std::vector<std::pair<edge_it,edge_it>> edge_look_up;
 
-    static constexpr cell_id_t pos_to_cell(const std::array<float,2> &pos) ;
+    cell_id_t pos_to_cell(const std::array<float,2> &pos) const;
 
     void rebuild_cell_and_node_look_up();
     void rebuild_edge_look_up();
@@ -85,18 +87,29 @@ private:
      draw_func_t draw_func = nullptr;
 
 public:
+    // Configuration
+    void set_region_size(float size);
+    void set_cell_size(float size) { cell_size_ = size; }
+    void set_local_size(float size) { local_size_ = size; }
+
+    [[nodiscard]] float get_region_size() const { return region_size_; }
+    [[nodiscard]] float get_local_size() const { return local_size_; }
+
+    // Node/edge management
     node_id_t add_node(std::any payload = nullptr);
-    node_id_t add_node(const std::array<float,2> &pos, bool fixed = true, std::any payload = nullptr);
+    node_id_t add_node(const std::array<float,2> &pos, bool fixed = true,
+                       float repulsion_radius = 1.0f, std::any payload = nullptr);
     void add_edge(node_id_t node_a, node_id_t node_b);
+
+    // Update node properties
+    void set_node_repulsion_radius(node_id_t node_id, float radius);
+    void set_node_fixed(node_id_t node_id, bool fixed);
 
     void update();
 
     void set_draw_func(draw_func_t df);
 
     void draw() const;
-
-    static float get_region_size() { return region_size; }
-    static float get_local_size() { return local_size; }
 
     const std::array<float,2>& get_node_pos(node_id_t node_id);
 };

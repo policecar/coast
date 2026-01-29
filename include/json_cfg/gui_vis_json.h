@@ -19,6 +19,21 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ngm_flat_vis_hint_t,
     update_interval
 )
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ngm_tree_vis_hint_t,
+    rep_width,
+    rep_height,
+    update_interval,
+    bg_r, bg_g, bg_b, bg_a,
+    edge_thickness_min,
+    edge_thickness_max,
+    edge_r, edge_g, edge_b, edge_a,
+    texture_scale_divisor,
+    root_node_radius,
+    branch_node_radius,
+    root_r, root_g, root_b, root_a,
+    branch_r, branch_g, branch_b, branch_a
+)
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(buffer_vis_hint_t,
     update_interval
 )
@@ -37,7 +52,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(dataset_hints_t,
 )
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(neuron_group_hints_t,
-    ngm_flat_vis
+    ngm_flat_vis,
+    ngm_tree_vis
 )
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ngm2_hints_t,
