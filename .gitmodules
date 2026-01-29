@@ -7,9 +7,6 @@
 [submodule "3rd_party/implot"]
 	path = 3rd_party/implot
 	url = https://github.com/epezent/implot.git
-[submodule "3rd_party/imnodes"]
-	path = 3rd_party/imnodes
-	url = https://github.com/Nelarius/imnodes.git
 [submodule "3rd_party/ImNodeFlow"]
 	path = 3rd_party/ImNodeFlow
 	url = https://github.com/Fattorino/ImNodeFlow.git
