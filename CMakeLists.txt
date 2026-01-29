@@ -86,25 +86,36 @@ add_executable(coast
         3rd_party/imgui/backends/imgui_impl_opengl3.h
         3rd_party/imgui/backends/imgui_impl_opengl3_loader.h
 
-        # OpenGL texture wrapper
-        src/gui_vis/gl_texture.cpp
-        include/gui_vis/gl_texture.h
-        include/gui_vis/color_types.h
+        # Visualization core
+        src/gui_vis/core/gl_texture.cpp
+        include/gui_vis/core/gl_texture.h
+        include/gui_vis/core/color_types.h
+        include/gui_vis/core/gradient.h
+        include/gui_vis/core/vis_hints.h
 
-        # Visualization components
-        src/gui_vis/fbgd.cpp
-        include/gui_vis/fbgd.h
-        src/gui_vis/ngm_vis.cpp
-        include/gui_vis/ngm_vis.h
-        src/gui_vis/vec_ring_buffer.cpp
-        include/gui_vis/vec_ring_buffer.h
-        src/gui_vis/vec_vis.cpp
-        include/gui_vis/vec_vis.h
-        include/gui_vis/gradient.h
-        src/gui_vis/vec_group_vis.cpp
-        include/gui_vis/vec_group_vis.h
-        src/gui_vis/ngm_flat_vis.cpp
-        include/gui_vis/ngm_flat_vis.h
+        # Visualization primitives
+        src/gui_vis/primitives/vec_vis.cpp
+        include/gui_vis/primitives/vec_vis.h
+        src/gui_vis/primitives/vec_group_vis.cpp
+        include/gui_vis/primitives/vec_group_vis.h
+
+        # IO buffer visualizations
+        src/gui_vis/io_buffer/vec_ring_buffer.cpp
+        include/gui_vis/io_buffer/vec_ring_buffer.h
+
+        # Visualization layout
+        src/gui_vis/layout/fbgd.cpp
+        include/gui_vis/layout/fbgd.h
+
+        # Sim entity visualizations
+        src/gui_vis/sim_entity/neuron_group/ngm_flat_vis.cpp
+        include/gui_vis/sim_entity/neuron_group/ngm_flat_vis.h
+        src/gui_vis/sim_entity/neuron_group/ngm_tree_vis.cpp
+        include/gui_vis/sim_entity/neuron_group/ngm_tree_vis.h
+
+        # Visualization registry
+        src/gui_vis/vis_registry.cpp
+        include/gui_vis/vis_registry.h
 
         # Dataset I/O
         include/io/mnist_db.h
@@ -149,7 +160,6 @@ add_executable(coast
         include/tools/sim_builder.h
         src/tools/sim_builder.cpp
         include/tools/sim_builder_interface.h
-        include/gui_vis/gui_vis_cfg.h
         include/json_cfg/gui_vis_json.h
 )
 

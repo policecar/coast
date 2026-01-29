@@ -2,19 +2,19 @@
 // Created by jk on 12.08.25.
 //
 
-#ifndef NGM_VIS_H
-#define NGM_VIS_H
+#ifndef NGM_TREE_VIS_H
+#define NGM_TREE_VIS_H
 
 #include <vector>
 #include <random>
 #include "hd_ngm2.h"
-#include "fbgd.h"
-#include "color_types.h"
-#include "gl_texture.h"
+#include "../../layout/fbgd.h"
+#include "../../core/color_types.h"
+#include "../../core/gl_texture.h"
 
 namespace coast {
 
-class ngm_vis {
+class ngm_tree_vis {
 
     struct node_info_t {
         std::size_t neuron_idx  = 0;
@@ -46,7 +46,7 @@ class ngm_vis {
     static gl_texture get_texture(int width, int height, const color_t *data);
 
 public:
-    ~ngm_vis();
+    ~ngm_tree_vis();
 
     void create_model(fbgd &vis, const ngm2::neuron_group_t &ng);
     void update_model(fbgd &vis, const ngm2::neuron_group_t &ng);
@@ -64,6 +64,6 @@ public:
 
 };
 
-} // ngm
+} // coast
 
-#endif //NGM_VIS_H
+#endif //NGM_TREE_VIS_H

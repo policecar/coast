@@ -1,4 +1,4 @@
-#include "gl_texture.h"
+#include "core/gl_texture.h"
 
 #include <SDL_opengl.h>
 #include <cassert>

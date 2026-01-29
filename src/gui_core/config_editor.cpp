@@ -1157,6 +1157,15 @@ static bool render_ngm_flat_vis_hint(ngm_flat_vis_hint_t& hint)
         modified = true;
     }
 
+    ImGui::SetNextItemWidth(120);
+    if (ImGui::InputInt("Update Interval", &hint.update_interval)) {
+        hint.update_interval = std::max(0, hint.update_interval);
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Simulation steps between updates (0 = disabled)");
+    }
+
     return modified;
 }
 
@@ -1325,6 +1334,19 @@ void config_editor::render_visualization_hints()
                     mark_dirty();
                 }
                 ImGui::TreePop();
+            }
+            ImGui::TreePop();
+        }
+
+        // IO Buffer hints
+        if (ImGui::TreeNode("IO Buffer Hints")) {
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::InputInt("Update Interval", &config.vis_hints.buffer_vis.update_interval)) {
+                config.vis_hints.buffer_vis.update_interval = std::max(0, config.vis_hints.buffer_vis.update_interval);
+                mark_dirty();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Simulation steps between updates (0 = disabled)");
             }
             ImGui::TreePop();
         }

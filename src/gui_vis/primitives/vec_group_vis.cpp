@@ -4,7 +4,7 @@
 
 #include <cstdio>
 
-#include "vec_group_vis.h"
+#include "primitives/vec_group_vis.h"
 
 #include <utility>
 

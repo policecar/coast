@@ -4,13 +4,19 @@
 #include <cstdio>
 #include <cassert>
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <thread>
 
-#include "ngm_vis.h"
+#include "inc_on_exit.h"
+#include "sim_entity/neuron_group/ngm_tree_vis.h"
+#include "vis_registry.h"
+#include "sim_env.h"
 #include "imgui.h"
 
 namespace coast {
 
-void ngm_vis::get_pixel_data(
+void ngm_tree_vis::get_pixel_data(
     int width, int height,
     uint16_t leaf_idx,
     std::size_t max_idx,
@@ -42,16 +48,16 @@ void ngm_vis::get_pixel_data(
         }
 }
 
-gl_texture ngm_vis::get_texture(int width, int height, const color_t *data)
+gl_texture ngm_tree_vis::get_texture(int width, int height, const color_t *data)
 {
     return gl_texture(width, height, data);
 }
 
-ngm_vis::~ngm_vis()
+ngm_tree_vis::~ngm_tree_vis()
 {
 }
 
-void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
+void ngm_tree_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
 {
     nodes.clear();
     neuron_lu.clear();
@@ -144,7 +150,7 @@ void ngm_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
     }
 }
 
-void ngm_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
+void ngm_tree_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
 {
     for (auto &node : nodes)
         node.synapse_count = 0;
@@ -213,7 +219,7 @@ void ngm_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
     }
 }
 
-void ngm_vis::update_representations(const ngm2::neuron_group_t &ng)
+void ngm_tree_vis::update_representations(const ngm2::neuron_group_t &ng)
 {
     std::size_t neuron_cnt = ng.get_neuron_count();
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx ) {
@@ -239,7 +245,7 @@ void ngm_vis::update_representations(const ngm2::neuron_group_t &ng)
     }
 }
 
-void ngm_vis::free_resources()
+void ngm_tree_vis::free_resources()
 {
     for (auto &node : nodes){
         node.texture.release();
@@ -247,7 +253,7 @@ void ngm_vis::free_resources()
     }
 }
 
-void ngm_vis::render_imgui(const char* label,
+void ngm_tree_vis::render_imgui(const char* label,
                            const std::vector<fbgd::node> &vis_nodes,
                            const std::vector<fbgd::edge> &vis_edges,
                            const std::vector<uint32_t> &vis_node_lu)
@@ -311,4 +317,203 @@ void ngm_vis::render_imgui(const char* label,
     ImGui::End();
 }
 
-} // ngm
+// ============================================================================
+// vis_instance adapter for registry integration
+// ============================================================================
+
+namespace {
+
+/**
+ * Synchronization states for thread-safe visualization updates.
+ */
+enum class sync_state : int {
+    idle = 0,       // Normal operation, no update pending
+    requested = 1,  // Sim thread requests update, waiting for GUI
+    updating = 2    // GUI is performing update, sim still waiting
+};
+
+constexpr auto SYNC_TIMEOUT = std::chrono::milliseconds(100);
+
+/**
+ * Adapter that wraps ngm_tree_vis to implement vis_instance interface.
+ * This adapter manages its own fbgd instance for layout.
+ * Provides thread-safe updates synchronized with the simulation thread.
+ */
+class ngm_tree_vis_instance : public coast::vis::vis_instance {
+public:
+    ngm_tree_vis_instance(ngm2::neuron_group_t& ng,
+                          sim::env& sim_env,
+                          const coast::vis_hints_t& hints,
+                          const std::string& hints_key,
+                          std::string label)
+        : ng_(ng)
+        , sim_env_(sim_env)
+        , label_(std::move(label))
+    {
+        // Get update interval from hints using hints_key (entity_cfg)
+        auto it = hints.ngm2.neuron_groups.find(hints_key);
+        if (it != hints.ngm2.neuron_groups.end()) {
+            update_interval_ = static_cast<std::size_t>(it->second.ngm_flat_vis.update_interval);
+        } else {
+            auto def_it = hints.ngm2.neuron_groups.find("default");
+            if (def_it != hints.ngm2.neuron_groups.end()) {
+                update_interval_ = static_cast<std::size_t>(def_it->second.ngm_flat_vis.update_interval);
+            }
+        }
+
+        vis_.create_model(fbgd_, ng_);
+
+        // Register post-swap hook for thread-safe synchronization
+        hook_id_ = sim_env_.set_post_swap_hook([this]() {
+            on_post_swap();
+        });
+    }
+
+    ~ngm_tree_vis_instance() override
+    {
+        // Unregister the hook before destruction
+        sim_env_.remove_post_swap_hook(hook_id_);
+
+        // Ensure we're not in the middle of an update
+        while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
+            std::this_thread::yield();
+        }
+    }
+
+    /**
+     * Called from GUI thread every frame.
+     * Checks if sim thread requested an update and performs it if so.
+     */
+    void update() override
+    {
+        if (!visible_) return;
+
+        // Check if sim thread has requested an update
+        int expected = static_cast<int>(sync_state::requested);
+        if (sync_state_.compare_exchange_strong(expected,
+                                                 static_cast<int>(sync_state::updating),
+                                                 std::memory_order_acq_rel)) {
+            // Safe to read from neuron_group
+            vis_.update_model(fbgd_, ng_);
+            fbgd_.update();
+
+            // Signal completion
+            sync_state_.store(static_cast<int>(sync_state::idle), std::memory_order_release);
+        }
+    }
+
+    bool render_imgui() override
+    {
+        if (!visible_) return true;
+
+        // Call fbgd's draw callback to get latest node/edge data
+        bool keep_open = true;
+
+        fbgd_.set_draw_func([this](
+            const std::vector<coast::fbgd::node>& nodes,
+            const std::vector<coast::fbgd::edge>& edges,
+            const std::vector<uint32_t>& node_lu)
+        {
+            vis_.render_imgui(label_.c_str(), nodes, edges, node_lu);
+        });
+
+        fbgd_.draw();
+
+        return keep_open;
+    }
+
+    void free_resources() override
+    {
+        vis_.free_resources();
+    }
+
+    [[nodiscard]] bool is_visible() const override { return visible_; }
+    void set_visible(bool v) override { visible_ = v; }
+
+private:
+    /**
+     * Called from simulation thread via post_swap_hook.
+     */
+    void on_post_swap()
+    {
+        inc_on_exit inc{step_count_};  // Increment step_count_ on function exit
+
+        if (update_interval_ == 0) return;
+        if (!visible_) return;
+        if (step_count_ % update_interval_ != 0) return;
+
+        int expected = static_cast<int>(sync_state::idle);
+        if (!sync_state_.compare_exchange_strong(expected,
+                                                  static_cast<int>(sync_state::requested),
+                                                  std::memory_order_acq_rel)) {
+            return;
+        }
+
+        auto start = std::chrono::steady_clock::now();
+        while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
+            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT) {
+                expected = static_cast<int>(sync_state::requested);
+                if (sync_state_.compare_exchange_strong(expected,
+                                                         static_cast<int>(sync_state::idle),
+                                                         std::memory_order_acq_rel)) {
+                    break;
+                }
+            }
+            std::this_thread::yield();
+        }
+    }
+
+    ngm2::neuron_group_t& ng_;
+    sim::env& sim_env_;
+    std::string label_;
+    coast::fbgd fbgd_;
+    coast::ngm_tree_vis vis_;
+    bool visible_ = true;
+
+    // Synchronization state
+    std::atomic<int> sync_state_{static_cast<int>(sync_state::idle)};
+    std::size_t update_interval_ = 10000;
+    std::size_t step_count_ = 0;
+    std::size_t hook_id_ = 0;
+};
+
+/**
+ * Factory function for creating ngm_tree_vis instances.
+ */
+std::unique_ptr<coast::vis::vis_instance> create_ngm_tree_vis(
+    sim::io_entity& entity,
+    sim::env& sim_env,
+    const coast::vis_hints_t& hints,
+    const std::string& hints_key,
+    const std::string& label)
+{
+    // The entity must be a neuron_group_t
+    auto* ng = dynamic_cast<ngm2::neuron_group_t*>(&entity);
+    if (!ng) {
+        return nullptr;
+    }
+    return std::make_unique<ngm_tree_vis_instance>(*ng, sim_env, hints, hints_key, label);
+}
+
+/**
+ * Static registrar - registers at program startup.
+ */
+struct ngm_tree_vis_registrar {
+    ngm_tree_vis_registrar()
+    {
+        coast::vis::vis_info info {
+            "ngm_tree_vis",
+            "Neuron Tree",
+            "Hierarchical tree view showing dendrite structure with force-directed layout",
+            coast::vis::vis_target::sim_entity,
+            { sim::io_entity_type_t::ngm2_neuron_group }
+        };
+        coast::vis::get_vis_registry().register_entity_vis(info, create_ngm_tree_vis);
+    }
+};
+
+static ngm_tree_vis_registrar registrar_instance;
+
+} // anonymous namespace
+
+} // coast

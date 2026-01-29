@@ -10,8 +10,8 @@
 #include <span>
 #include <vector>
 
-#include "color_types.h"
-#include "gradient.h"
+#include "../core/color_types.h"
+#include "../core/gradient.h"
 
 namespace coast {
 
