@@ -121,6 +121,12 @@ public:
      */
     void update_repulsion_radii(fbgd &vis);
 
+    /**
+     * Update root node target positions based on tree sizes.
+     * Neurons with larger trees get more space in the layout.
+     */
+    void update_root_positions(fbgd &vis, const ngm2::neuron_group_t &ng);
+
     void free_resources();
 
     // Render in ImGui window using ImDrawList. Returns false if window was closed.

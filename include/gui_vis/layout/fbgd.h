@@ -40,6 +40,7 @@ public:
         node_id_t node_id;
         cell_id_t cell_id;
         std::array<float,2> pos;
+        std::array<float,2> target_pos;  // For smooth animation of fixed nodes
         bool fixed;
         float repulsion_radius = 1.0f;  // Multiplier for repulsion force (sphere of influence)
         std::any payload;
@@ -104,6 +105,8 @@ public:
     // Update node properties
     void set_node_repulsion_radius(node_id_t node_id, float radius);
     void set_node_fixed(node_id_t node_id, bool fixed);
+    void set_node_target_pos(node_id_t node_id, const std::array<float, 2>& target_pos);
+    void animate_fixed_nodes(float lerp_factor);  // Smoothly move fixed nodes towards target
 
     void update();
 
