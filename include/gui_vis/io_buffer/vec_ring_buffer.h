@@ -9,8 +9,8 @@
 #include <span>
 #include <vector>
 
-#include "color_types.h"
-#include "gl_texture.h"
+#include "../core/color_types.h"
+#include "../core/gl_texture.h"
 
 namespace coast {
 

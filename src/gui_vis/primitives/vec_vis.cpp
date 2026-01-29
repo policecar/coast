@@ -2,7 +2,7 @@
 // Created by jk on 08.09.25.
 //
 
-#include "vec_vis.h"
+#include "primitives/vec_vis.h"
 
 namespace coast {
 

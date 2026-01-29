@@ -38,6 +38,14 @@ public:
     }
 };
 
+/**
+ * Simulation environment that manages entities and I/O buffers.
+ *
+ * Future consideration: If the simulation structure (entities) can change
+ * during runtime, add a callback/observer system to notify interested
+ * components (e.g., GUI entity browsers) about structural changes.
+ * This would allow them to invalidate caches and refresh their views.
+ */
 class env {
 
     std::unordered_map<std::type_index,std::unique_ptr<entity_vec>> entities;

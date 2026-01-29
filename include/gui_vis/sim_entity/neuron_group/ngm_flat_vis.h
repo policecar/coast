@@ -6,10 +6,10 @@
 #ifndef NGM_FLAT_VIS_H
 #define NGM_FLAT_VIS_H
 
-#include "vec_group_vis.h"
+#include "../../primitives/vec_group_vis.h"
 #include "hd_ngm2_neuron_group.h"
-#include "color_types.h"
-#include "gl_texture.h"
+#include "../../core/color_types.h"
+#include "../../core/gl_texture.h"
 
 namespace coast {
 

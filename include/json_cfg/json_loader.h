@@ -9,7 +9,7 @@
 #include "hd_ngm2_cfg.h"
 #include "sim_builder_cfg.h"
 #include "dataset_cfg.h"
-#include "gui_vis_cfg.h"
+#include "core/vis_hints.h"
 
 using json = nlohmann::ordered_json;
 

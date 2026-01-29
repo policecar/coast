@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "gui_vis_cfg.h"
+#include "core/vis_hints.h"
 
 using json = nlohmann::ordered_json;
 
@@ -15,7 +15,12 @@ namespace coast {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ngm_flat_vis_hint_t,
     width,
-    height
+    height,
+    update_interval
+)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(buffer_vis_hint_t,
+    update_interval
 )
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(mnist_hint_t,
@@ -41,7 +46,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ngm2_hints_t,
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(vis_hints_t,
     datasets,
-    ngm2
+    ngm2,
+    buffer_vis
 )
 
 
