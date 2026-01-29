@@ -1,10 +1,12 @@
 #include "buffer_browser.h"
 #include "sim_instance.h"
+#include "sim_builder.h"
 #include "vis_registry.h"
 #include "io_buffer.h"
 #include "imgui.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 namespace coast {
 
@@ -45,6 +47,17 @@ void buffer_browser::rebuild_cache()
 
     auto& sim_env = sim.get_sim_env();
     auto& buffers = sim_env.get_io_buffers();
+    const auto& builder = sim.get_builder();
+
+    // Build map from buffer ID to entity name (output_of)
+    std::unordered_map<std::size_t, std::string> output_of_map;
+    for (auto& entity : sim_env.iterate_entities()) {
+        const auto outp_id = entity.get_outp_id();
+        const auto* node = builder.get_node(outp_id);
+        if (node) {
+            output_of_map[outp_id] = node->label;
+        }
+    }
 
     for (auto& [id, buffer] : buffers) {
         auto read_buf = buffer.cur_read_buffer();
@@ -62,8 +75,15 @@ void buffer_browser::rebuild_cache()
         }
         float avg = read_buf.empty() ? 0.0f : sum / static_cast<float>(read_buf.size());
 
+        // Look up entity name
+        std::string output_of;
+        if (auto it = output_of_map.find(id); it != output_of_map.end()) {
+            output_of = it->second;
+        }
+
         cached_rows.push_back({
             id,
+            output_of,
             buffer.size(),
             sum,
             avg,
@@ -114,10 +134,11 @@ void buffer_browser::render_browser_window()
             ImGuiTableFlags_BordersV |
             ImGuiTableFlags_ScrollY;
 
-        if (ImGui::BeginTable("buffers_table", 5, table_flags, ImVec2(0, table_height))) {
+        if (ImGui::BeginTable("buffers_table", 6, table_flags, ImVec2(0, table_height))) {
             // Setup columns
             ImGui::TableSetupScrollFreeze(0, 1);
             ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+            ImGui::TableSetupColumn("Output of", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 70.0f);
             ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthFixed, 80.0f);
             ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed, 80.0f);
@@ -142,6 +163,14 @@ void buffer_browser::render_browser_window()
                 if (ImGui::Selectable(label, is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
                     selected_buffer_id = row.id;
                     detail_panel_open = true;
+                }
+
+                // Output of
+                ImGui::TableNextColumn();
+                if (row.output_of.empty()) {
+                    ImGui::TextDisabled("-");
+                } else {
+                    ImGui::Text("%s", row.output_of.c_str());
                 }
 
                 // Size

@@ -53,6 +53,7 @@ private:
     // Cached buffer data for display
     struct buffer_row {
         std::size_t id;
+        std::string output_of;  // Entity name that outputs to this buffer
         std::size_t size;
         float sum;
         float avg;
