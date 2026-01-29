@@ -2,6 +2,7 @@
 // Created by jk on 05.09.25.
 //
 #include <algorithm>
+#include <cmath>
 
 #include "inc_on_exit.h"
 #include "io_buffer/vec_ring_buffer.h"
@@ -57,11 +58,139 @@ void vec_ring_buffer::update(const std::span<float> &data, bool auto_norm, float
 bool vec_ring_buffer::render_imgui(const char* label, float scale)
 {
     bool open = true;
+
+    // Set initial window size on first appearance
+    ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
+
     if (ImGui::Begin(label, &open)) {
+        // Toolbar with zoom display and reset button
+        ImGui::Text("Zoom: %.0f%%", zoom_level * 100.0f);
+        ImGui::SameLine();
+        if (ImGui::Button("Reset View")) {
+            target_zoom = 2.0f;
+            target_pan_x = 0.0f;
+            target_pan_y = 0.0f;
+        }
+
+        ImGui::Separator();
+
         if (texture.is_valid()) {
-            ImVec2 size(static_cast<float>(texture.get_width()) * scale,
-                        static_cast<float>(texture.get_height()) * scale);
-            ImGui::Image(texture.as_imgui_texture(), size);
+            // Calculate scaled size
+            float effective_scale = scale * zoom_level;
+            ImVec2 tex_size(static_cast<float>(texture.get_width()) * effective_scale,
+                           static_cast<float>(texture.get_height()) * effective_scale);
+
+            // Get available content region
+            ImVec2 canvas_size = ImGui::GetContentRegionAvail();
+            ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+
+            // Create an invisible button to capture input over the canvas area
+            ImGui::InvisibleButton("canvas", canvas_size,
+                                   ImGuiButtonFlags_MouseButtonLeft);
+            bool is_hovered = ImGui::IsItemHovered();
+            bool is_active = ImGui::IsItemActive();
+
+            ImGuiIO& io = ImGui::GetIO();
+
+            // Smooth interpolation factor (higher = faster response)
+            constexpr float lerp_speed = 15.0f;
+            float lerp_t = std::min(1.0f, lerp_speed * io.DeltaTime);
+
+            // Handle scroll wheel zoom (only when hovered)
+            if (is_hovered && io.MouseWheel != 0.0f) {
+                // Get mouse position relative to canvas
+                ImVec2 mouse_pos = io.MousePos;
+                float mouse_canvas_x = mouse_pos.x - canvas_pos.x;
+                float mouse_canvas_y = mouse_pos.y - canvas_pos.y;
+
+                // Calculate position in texture space before zoom (using current values)
+                float tex_x = (mouse_canvas_x + pan_x) / (scale * zoom_level);
+                float tex_y = (mouse_canvas_y + pan_y) / (scale * zoom_level);
+
+                // Apply zoom to target (exponential for smoother feel)
+                float zoom_factor = std::pow(1.15f, io.MouseWheel);
+                target_zoom = std::clamp(target_zoom * zoom_factor, 0.1f, 10.0f);
+
+                // Adjust target pan to keep the point under the mouse fixed
+                float new_scale = scale * target_zoom;
+                target_pan_x = tex_x * new_scale - mouse_canvas_x;
+                target_pan_y = tex_y * new_scale - mouse_canvas_y;
+            }
+
+            // Handle left-click drag for panning (immediate response feels better)
+            if (is_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                target_pan_x -= io.MouseDelta.x;
+                target_pan_y -= io.MouseDelta.y;
+                // Also update current pan immediately for responsive drag
+                pan_x -= io.MouseDelta.x;
+                pan_y -= io.MouseDelta.y;
+            }
+
+            // Clamp target pan to valid range
+            float target_tex_size_x = static_cast<float>(texture.get_width()) * scale * target_zoom;
+            float target_tex_size_y = static_cast<float>(texture.get_height()) * scale * target_zoom;
+            float max_target_pan_x = std::max(0.0f, target_tex_size_x - canvas_size.x);
+            float max_target_pan_y = std::max(0.0f, target_tex_size_y - canvas_size.y);
+            target_pan_x = std::clamp(target_pan_x, 0.0f, max_target_pan_x);
+            target_pan_y = std::clamp(target_pan_y, 0.0f, max_target_pan_y);
+
+            // Smoothly interpolate current values towards targets
+            zoom_level = zoom_level + (target_zoom - zoom_level) * lerp_t;
+            pan_x = pan_x + (target_pan_x - pan_x) * lerp_t;
+            pan_y = pan_y + (target_pan_y - pan_y) * lerp_t;
+
+            // Recalculate tex_size with interpolated zoom
+            tex_size = ImVec2(static_cast<float>(texture.get_width()) * scale * zoom_level,
+                              static_cast<float>(texture.get_height()) * scale * zoom_level);
+
+            // Clamp current pan to valid range
+            float max_pan_x = std::max(0.0f, tex_size.x - canvas_size.x);
+            float max_pan_y = std::max(0.0f, tex_size.y - canvas_size.y);
+            pan_x = std::clamp(pan_x, 0.0f, max_pan_x);
+            pan_y = std::clamp(pan_y, 0.0f, max_pan_y);
+
+            // Draw the texture using DrawList
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+            // Calculate visible UV coordinates based on pan
+            float u0 = pan_x / tex_size.x;
+            float v0 = pan_y / tex_size.y;
+            float u1 = (pan_x + canvas_size.x) / tex_size.x;
+            float v1 = (pan_y + canvas_size.y) / tex_size.y;
+
+            // Clamp UVs and adjust draw rect accordingly
+            float draw_x0 = canvas_pos.x;
+            float draw_y0 = canvas_pos.y;
+            float draw_x1 = canvas_pos.x + canvas_size.x;
+            float draw_y1 = canvas_pos.y + canvas_size.y;
+
+            // If zoomed out so image is smaller than canvas, center it
+            if (tex_size.x < canvas_size.x) {
+                float offset = (canvas_size.x - tex_size.x) * 0.5f;
+                draw_x0 = canvas_pos.x + offset;
+                draw_x1 = draw_x0 + tex_size.x;
+                u0 = 0.0f;
+                u1 = 1.0f;
+            }
+            if (tex_size.y < canvas_size.y) {
+                float offset = (canvas_size.y - tex_size.y) * 0.5f;
+                draw_y0 = canvas_pos.y + offset;
+                draw_y1 = draw_y0 + tex_size.y;
+                v0 = 0.0f;
+                v1 = 1.0f;
+            }
+
+            // Clamp UVs to [0,1]
+            u0 = std::clamp(u0, 0.0f, 1.0f);
+            v0 = std::clamp(v0, 0.0f, 1.0f);
+            u1 = std::clamp(u1, 0.0f, 1.0f);
+            v1 = std::clamp(v1, 0.0f, 1.0f);
+
+            draw_list->AddImage(texture.as_imgui_texture(),
+                               ImVec2(draw_x0, draw_y0),
+                               ImVec2(draw_x1, draw_y1),
+                               ImVec2(u0, v0),
+                               ImVec2(u1, v1));
         }
     }
     ImGui::End();
@@ -80,7 +209,7 @@ void vec_ring_buffer::free_resources()
 
 namespace {
 
-constexpr uint16_t DEFAULT_RING_SIZE = 200;  // Number of time steps to show
+constexpr uint16_t DEFAULT_RING_SIZE = 500;  // Number of time steps to show
 
 /**
  * Synchronization states for thread-safe visualization updates.
@@ -106,7 +235,8 @@ public:
         : buffer_(buffer)
         , sim_env_(sim_env)
         , label_(std::move(label))
-        , vis_(static_cast<uint16_t>(buffer.size()), DEFAULT_RING_SIZE)
+        , vis_(static_cast<uint16_t>(buffer.size()),
+               static_cast<uint16_t>(hints.buffer_vis.ring_length > 0 ? hints.buffer_vis.ring_length : DEFAULT_RING_SIZE))
     {
         update_interval_ = static_cast<std::size_t>(hints.buffer_vis.update_interval);
 

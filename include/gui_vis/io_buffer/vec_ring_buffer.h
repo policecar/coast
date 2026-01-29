@@ -24,6 +24,14 @@ class vec_ring_buffer {
 
     uint16_t ring_pos;
 
+    // View state (zoom and pan) - uses target values for smooth interpolation
+    float zoom_level = 2.0f;
+    float target_zoom = 2.0f;
+    float pan_x = 0.0f;
+    float pan_y = 0.0f;
+    float target_pan_x = 0.0f;
+    float target_pan_y = 0.0f;
+
 public:
     vec_ring_buffer(uint16_t _vec_size, uint16_t _ring_size);
 

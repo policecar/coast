@@ -56,6 +56,7 @@ struct dsprites_hint_t {
 
 struct buffer_vis_hint_t {
     int update_interval = 100;  // Simulation steps between updates (0 = every frame)
+    int ring_length = 500;      // Number of time steps to show in time series
 };
 
 struct dataset_hints_t {
