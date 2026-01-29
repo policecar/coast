@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <thread>
 
 #include "inc_on_exit.h"
@@ -287,68 +288,96 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
     if (neuron_lu.empty()) return;
 
     std::size_t neuron_cnt = neuron_lu.size();
+    std::size_t ng_neuron_cnt = ng.get_neuron_count();
 
-    // Calculate tree "weight" for each neuron based on total segment count
-    std::vector<float> neuron_weights(neuron_cnt, 1.0f);
-    float total_weight = 0.0f;
+    // Safety check
+    if (neuron_cnt > ng_neuron_cnt) {
+        neuron_cnt = ng_neuron_cnt;
+    }
+    if (neuron_cnt == 0) return;
 
-    for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
-        const ngm2::neuron_t &cur_neuron = ng.get_neuron(neuron_idx);
-        std::size_t branch_cnt = cur_neuron.get_dendrite_count();
-        float weight = 1.0f;  // Base weight
-        for (std::size_t branch_idx = 0; branch_idx < branch_cnt; ++branch_idx) {
-            const ngm2::dendrite_t &cur_branch = cur_neuron.get_dendrite(branch_idx);
-            // Weight increases with tree depth (log2 of max_segment_idx)
-            std::size_t max_seg = cur_branch.get_max_segment_idx();
-            if (max_seg > 1) {
-                weight += std::log2(static_cast<float>(max_seg));
-            }
+    // Calculate bounding box for each neuron's tree based on actual node positions
+    struct bbox_t {
+        float min_x = std::numeric_limits<float>::max();
+        float max_x = std::numeric_limits<float>::lowest();
+        float min_y = std::numeric_limits<float>::max();
+        float max_y = std::numeric_limits<float>::lowest();
+        float width() const { return max_x - min_x; }
+        float height() const { return max_y - min_y; }
+        void expand(float x, float y) {
+            min_x = std::min(min_x, x);
+            max_x = std::max(max_x, x);
+            min_y = std::min(min_y, y);
+            max_y = std::max(max_y, y);
         }
-        neuron_weights[neuron_idx] = weight;
-        total_weight += weight;
+    };
+
+    std::vector<bbox_t> neuron_bboxes(neuron_cnt);
+
+    // Calculate bounding boxes from actual node positions
+    for (const auto& node : nodes) {
+        if (node.used == 0 || node.neuron_idx >= neuron_cnt) continue;
+        const auto& pos = vis.get_node_pos(node.node_id);
+        neuron_bboxes[node.neuron_idx].expand(pos[0], pos[1]);
     }
 
-    // Normalize weights
-    if (total_weight > 0) {
-        for (auto& w : neuron_weights) {
-            w /= total_weight;
-        }
+    // Convert bounding boxes to space requirements (with padding)
+    const float padding = 0.05f * region_size_;  // 5% padding around each tree
+    const float min_size = 0.1f * region_size_;  // Minimum cell size
+
+    std::vector<float> neuron_widths(neuron_cnt);
+    std::vector<float> neuron_heights(neuron_cnt);
+
+    for (std::size_t i = 0; i < neuron_cnt; ++i) {
+        neuron_widths[i] = std::max(min_size, neuron_bboxes[i].width() + 2.0f * padding);
+        neuron_heights[i] = std::max(min_size, neuron_bboxes[i].height() + 2.0f * padding);
     }
 
-    // Calculate grid positions with variable spacing based on weights
+    // Calculate grid positions with variable spacing based on actual tree sizes
     auto grid_cnt = static_cast<std::size_t>(std::ceil(std::sqrt(static_cast<float>(neuron_cnt))));
-    const float base_spacing = region_size_ / static_cast<float>(grid_cnt + 2);
+    if (grid_cnt == 0) grid_cnt = 1;
 
-    // Create row/column cumulative spacing
-    std::vector<float> col_positions(grid_cnt + 1, 0.0f);
-    std::vector<float> row_positions(grid_cnt + 1, 0.0f);
+    const float margin = region_size_ * 0.05f;
+    const float available = region_size_ - 2.0f * margin;
 
-    // Calculate column widths based on max weight in each column
-    std::vector<float> col_widths(grid_cnt, base_spacing);
-    std::vector<float> row_heights(grid_cnt, base_spacing);
+    // Calculate column widths and row heights based on max tree size in each column/row
+    std::vector<float> col_widths(grid_cnt, min_size);
+    std::vector<float> row_heights(grid_cnt, min_size);
 
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
         std::size_t col = neuron_idx % grid_cnt;
         std::size_t row = neuron_idx / grid_cnt;
-        float weight_factor = 0.5f + neuron_weights[neuron_idx] * neuron_cnt;  // Scale factor
-        col_widths[col] = std::max(col_widths[col], base_spacing * weight_factor);
+        col_widths[col] = std::max(col_widths[col], neuron_widths[neuron_idx]);
         if (row < grid_cnt) {
-            row_heights[row] = std::max(row_heights[row], base_spacing * weight_factor);
+            row_heights[row] = std::max(row_heights[row], neuron_heights[neuron_idx]);
         }
     }
 
+    // Calculate total width/height and scale to fit in region
+    float total_width = 0.0f, total_height = 0.0f;
+    for (std::size_t i = 0; i < grid_cnt; ++i) {
+        total_width += col_widths[i];
+        total_height += row_heights[i];
+    }
+
+    float scale_x = (total_width > 0) ? available / total_width : 1.0f;
+    float scale_y = (total_height > 0) ? available / total_height : 1.0f;
+
+    // Apply scaling
+    for (auto& w : col_widths) w *= scale_x;
+    for (auto& h : row_heights) h *= scale_y;
+
     // Build cumulative positions
-    col_positions[0] = base_spacing;
+    std::vector<float> col_positions(grid_cnt + 1, margin);
+    std::vector<float> row_positions(grid_cnt + 1, margin);
     for (std::size_t i = 0; i < grid_cnt; ++i) {
         col_positions[i + 1] = col_positions[i] + col_widths[i];
-    }
-    row_positions[0] = base_spacing;
-    for (std::size_t i = 0; i < grid_cnt; ++i) {
         row_positions[i + 1] = row_positions[i] + row_heights[i];
     }
 
     // Update target positions for each root node
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
+        if (neuron_idx >= neuron_lu.size()) break;
         std::size_t root_node_idx = neuron_lu[neuron_idx];
         if (root_node_idx < nodes.size() && nodes[root_node_idx].used > 0) {
             std::size_t col = neuron_idx % grid_cnt;
@@ -356,7 +385,7 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
 
             // Position at center of cell
             float xp = col_positions[col] + col_widths[col] * 0.5f;
-            float yp = row_positions[row] + row_heights[row] * 0.5f;
+            float yp = (row < grid_cnt) ? row_positions[row] + row_heights[row] * 0.5f : margin;
 
             vis.set_node_target_pos(nodes[root_node_idx].node_id, {xp, yp});
         }
@@ -706,8 +735,11 @@ public:
 
         vis_.create_model(fbgd_, ng_);
 
-        // Initial update to build lookup tables before first render
+        // Initial update to build lookup tables (required before accessing node positions)
         fbgd_.update();
+
+        // Set initial root positions based on tree sizes
+        vis_.update_root_positions(fbgd_, ng_);
 
         // Register post-swap hook for thread-safe synchronization
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
@@ -741,8 +773,8 @@ public:
                                                  std::memory_order_acq_rel)) {
             // Safe to read from neuron_group
             vis_.update_model(fbgd_, ng_);
+            fbgd_.update();  // Rebuild lookup tables before accessing positions
             vis_.update_root_positions(fbgd_, ng_);  // Update spacing based on tree sizes
-            fbgd_.update();
 
             // Signal completion
             sync_state_.store(static_cast<int>(sync_state::idle), std::memory_order_release);
