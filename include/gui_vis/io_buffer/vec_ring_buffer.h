@@ -35,6 +35,7 @@ class vec_ring_buffer {
 
     // Colormap selection
     colormap_t colormap = colormap_t::viridis;
+    bool colormap_dirty = false;  // Set when colormap changes, cleared after update
 
 public:
     vec_ring_buffer(uint16_t _vec_size, uint16_t _ring_size);
@@ -48,6 +49,10 @@ public:
     [[nodiscard]] const gl_texture& get_texture() const { return texture; }
     [[nodiscard]] uint16_t get_width() const { return ring_size; }
     [[nodiscard]] uint16_t get_height() const { return vec_size; }
+
+    // Colormap dirty flag - set when colormap changes, triggers re-render
+    [[nodiscard]] bool is_colormap_dirty() const { return colormap_dirty; }
+    void clear_colormap_dirty() { colormap_dirty = false; }
 
     // No longer needed - RAII handles cleanup
     void free_resources();
