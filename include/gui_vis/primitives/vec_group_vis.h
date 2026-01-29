@@ -75,7 +75,7 @@ public:
                     pos_ok = false;
             } break;
         }
-        if (pos_ok) vector_vis.update<2>(vec_data,colors,elem_pos,output);
+        if (pos_ok) vector_vis.update<N>(vec_data,colors,elem_pos,output);
     }
 
     [[nodiscard]] uint32_t get_total_width() const;

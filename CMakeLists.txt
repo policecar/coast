@@ -99,6 +99,8 @@ add_executable(coast
         src/gui_vis/core/gl_texture.cpp
         include/gui_vis/core/gl_texture.h
         include/gui_vis/core/color_types.h
+        include/gui_vis/core/colormap.h
+        src/gui_vis/core/colormap.cpp
         include/gui_vis/core/gradient.h
         include/gui_vis/core/vis_hints.h
 
