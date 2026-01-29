@@ -134,11 +134,6 @@ bool ngm_flat_vis::render_imgui(const char* label, float scale)
             target_pan_x = 0.0f;
             target_pan_y = 0.0f;
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("(?)");
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Scroll wheel to zoom\nLeft-click drag to pan");
-        }
 
         ImGui::Separator();
 
