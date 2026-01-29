@@ -64,15 +64,6 @@ public:
      */
     void render_status_bar();
 
-    /**
-     * Check if simulation should be running.
-     */
-    [[nodiscard]] bool is_simulation_running() const { return simulation_running && has_simulation(); }
-
-    /**
-     * Get the number of simulation steps per frame.
-     */
-    [[nodiscard]] int get_steps_per_frame() const { return steps_per_frame; }
 
     /**
      * Open file browser to select a configuration file.
@@ -137,19 +128,14 @@ private:
     bool show_status = true;
     bool show_config_editor = false;
 
+    // Simulation speed slider value (1-250 = steps/sec, 251 = unlimited)
+    int sim_speed_value = 100;
+
     // Introspection browser windows (created when sim is set)
     std::unique_ptr<entity_browser> entity_browser_window;
     std::unique_ptr<buffer_browser> buffer_browser_window;
     logging_window logging_window_instance;
 
-    // Simulation control state
-    bool simulation_running = false;
-    int steps_per_frame = 100;
-    bool auto_steps = false;
-    int auto_steps_cooldown = 0;
-    static constexpr int AUTO_STEPS_COOLDOWN_FRAMES = 10;
-    static constexpr float AUTO_STEPS_TARGET_FPS = 35.0f;
-    static constexpr float AUTO_STEPS_P_COEFFICIENT = 0.4f;
 
     // Render individual dialogs
     void render_control_dialog();

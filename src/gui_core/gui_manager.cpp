@@ -1,6 +1,7 @@
 #include "gui_manager.h"
+#include "sim_thread_controller.h"
 
-#include <algorithm>
+#include <cfloat>
 
 namespace coast {
 
@@ -14,9 +15,6 @@ gui_manager::gui_manager(sdl_app& app)
 
 void gui_manager::set_sim_instance(sim_instance* instance)
 {
-    // Stop simulation when changing instances
-    simulation_running = false;
-
     // Free resources from old browsers before changing sim
     if (entity_browser_window) {
         entity_browser_window->free_resources();
@@ -222,52 +220,76 @@ void gui_manager::render_control_dialog()
 {
     if (!show_control || !sim) return;
 
-    auto& groups = sim->get_groups();
+    auto* controller = sim->get_thread_controller();
+    if (!controller) return;
 
-    ImGui::SetNextWindowSize(ImVec2(350, 200), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(250, 0), ImVec2(FLT_MAX, FLT_MAX));
     ImGui::SetNextWindowPos(ImVec2(20, 40), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("Simulation Control", &show_control)) {
-        // Start/Stop buttons
-        if (simulation_running) {
-            if (ImGui::Button("Stop", ImVec2(100, 30))) {
-                simulation_running = false;
+        sim::sim_mode current_mode = controller->get_mode();
+        bool is_running = (current_mode != sim::sim_mode::paused);
+
+        const float button_width = 30.0f;
+        const float label_width = 70.0f;
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float available_width = ImGui::GetContentRegionAvail().x;
+
+        // Play/Pause button (pinned left)
+        if (is_running) {
+            if (ImGui::Button("||##playpause", ImVec2(button_width, 0))) {
+                controller->set_mode(sim::sim_mode::paused);
             }
         } else {
-            if (ImGui::Button("Start", ImVec2(100, 30))) {
-                simulation_running = true;
-            }
-        }
-        ImGui::SameLine();
-        ImGui::Text(simulation_running ? "Running" : "Paused");
-
-        ImGui::Separator();
-        ImGui::SliderInt("Steps/frame", &steps_per_frame, 0, 2000);
-        ImGui::SameLine();
-        ImGui::Checkbox("Auto", &auto_steps);
-
-        // Auto-adjust steps/frame based on FPS using P controller
-        if (auto_steps && simulation_running) {
-            if (auto_steps_cooldown > 0) {
-                --auto_steps_cooldown;
-            } else {
-                float fps = ImGui::GetIO().Framerate;
-                float error = fps - AUTO_STEPS_TARGET_FPS;
-                int adjustment = static_cast<int>(error * AUTO_STEPS_P_COEFFICIENT);
-
-                if (adjustment != 0) {
-                    steps_per_frame = std::clamp(steps_per_frame + adjustment, 1, 2000);
-                    auto_steps_cooldown = AUTO_STEPS_COOLDOWN_FRAMES;
+            if (ImGui::Button(">##playpause", ImVec2(button_width, 0))) {
+                if (sim_speed_value > 250) {
+                    controller->set_mode(sim::sim_mode::unlimited);
+                } else {
+                    controller->set_steps_per_second(static_cast<double>(sim_speed_value));
+                    controller->set_mode(sim::sim_mode::throttled);
                 }
             }
         }
 
-        ImGui::Separator();
-        ImGui::Text("Group Parameters:");
-        for (std::size_t i = 0; i < groups.size(); ++i) {
-            std::string label = "Group " + std::to_string(i + 1) + " inhibition";
-            ImGui::SliderFloat(label.c_str(), &groups[i].get_local_inhibition_strength(), 0.1f, 20.0f);
+        // Single step button (pinned left, next to play)
+        ImGui::SameLine();
+        ImGui::BeginDisabled(is_running);
+        if (ImGui::Button(">|##step", ImVec2(button_width, 0))) {
+            controller->single_step();
         }
+        ImGui::EndDisabled();
+
+        // Speed slider (stretches to fill space)
+        ImGui::SameLine();
+        float slider_width = available_width - (button_width * 2) - label_width - (spacing * 3);
+        if (slider_width < 50.0f) slider_width = 50.0f;
+        ImGui::SetNextItemWidth(slider_width);
+        if (ImGui::SliderInt("##speed", &sim_speed_value, 1, 251, "")) {
+            if (is_running) {
+                if (sim_speed_value > 250) {
+                    controller->set_mode(sim::sim_mode::unlimited);
+                } else {
+                    controller->set_steps_per_second(static_cast<double>(sim_speed_value));
+                    controller->set_mode(sim::sim_mode::throttled);
+                }
+            }
+        }
+
+        // Speed label (pinned right)
+        ImGui::SameLine();
+        const char* label_text = (sim_speed_value > 250) ? "unlimited" : nullptr;
+        char label_buf[16];
+        if (!label_text) {
+            snprintf(label_buf, sizeof(label_buf), "%d/s", sim_speed_value);
+            label_text = label_buf;
+        }
+        float text_width = ImGui::CalcTextSize(label_text).x;
+        float label_offset = label_width - text_width;
+        if (label_offset > 0) {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + label_offset);
+        }
+        ImGui::TextUnformatted(label_text);
     }
     ImGui::End();
 }
@@ -308,6 +330,22 @@ void gui_manager::render_status_bar()
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 
         if (sim) {
+            // Simulation status
+            if (auto* controller = sim->get_thread_controller()) {
+                ImGui::SameLine();
+                sim::sim_mode mode = controller->get_mode();
+                if (mode == sim::sim_mode::paused) {
+                    ImGui::Text(" | Sim: Paused");
+                } else {
+                    double actual_sps = controller->get_actual_sps();
+                    if (mode == sim::sim_mode::unlimited) {
+                        ImGui::Text(" | Sim: %.0f/s (unlimited)", actual_sps);
+                    } else {
+                        ImGui::Text(" | Sim: %.0f/s", actual_sps);
+                    }
+                }
+            }
+
             ImGui::SameLine();
             ImGui::Text(" | Config: %s", sim->get_config_path().c_str());
         }

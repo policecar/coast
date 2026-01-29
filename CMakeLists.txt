@@ -134,6 +134,8 @@ add_executable(coast
         include/sim_core/sim_env.h
         src/sim_core/io_buffer.cpp
         include/sim_core/io_buffer.h
+        src/sim_core/sim_thread_controller.cpp
+        include/sim_core/sim_thread_controller.h
 
         # JSON configuration
         include/json_cfg/json_loader.h

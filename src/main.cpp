@@ -47,7 +47,8 @@ int main(int argc, char **argv)
 
     /*
      * Registering a state update function to be called during the state-update-phase
-     * of the GUI-loop. Handles both simulation stepping and loading new configurations.
+     * of the GUI-loop. Handles loading new configurations.
+     * Note: Simulation stepping now runs in a dedicated thread managed by sim_thread_controller.
      */
     main_app.register_state_func(
         [&] {
@@ -55,11 +56,11 @@ int main(int argc, char **argv)
             if (gui.should_start_loading()) {
                 std::string path = gui.get_pending_load_path();
                 try {
-                    // Clear old simulation first
+                    // Clear old simulation first (this stops the simulation thread)
                     gui.set_sim_instance(nullptr);
                     sim.reset();
 
-                    // Load new simulation
+                    // Load new simulation (this starts a new simulation thread in paused mode)
                     sim = std::make_unique<sim_instance>(path);
                     gui.set_sim_instance(sim.get());
                     gui.clear_pending_load();
@@ -68,16 +69,6 @@ int main(int argc, char **argv)
                     gui.clear_pending_load();
                     gui.set_load_error(e.what());
                     std::cerr << "Failed to load configuration: " << e.what() << "\n";
-                }
-            }
-
-            // Run simulation if loaded and running
-            if (sim && gui.is_simulation_running()) {
-                auto& sim_env = sim->get_sim_env();
-
-                for (int i = 0; i < gui.get_steps_per_frame(); ++i) {
-                    sim_env.process();
-                    sim_env.swap_io();
                 }
             }
         }
