@@ -49,6 +49,31 @@ bool InputTextStringWidth(const char* label, std::string& str, float width, std:
     return InputTextString(label, str, max_size);
 }
 
+// Helper: SliderFloat wrapper for double values
+bool SliderDouble(const char* label, double& val, float v_min, float v_max, const char* format = "%.3f")
+{
+    float temp = static_cast<float>(val);
+    if (ImGui::SliderFloat(label, &temp, v_min, v_max, format)) {
+        val = static_cast<double>(temp);
+        return true;
+    }
+    return false;
+}
+
+// Helper: DragFloatRange2 wrapper for double pair values
+bool DragDoubleRange2(const char* label, double& v_min, double& v_max,
+                      float v_speed, float min_limit, float max_limit)
+{
+    float temp_min = static_cast<float>(v_min);
+    float temp_max = static_cast<float>(v_max);
+    if (ImGui::DragFloatRange2(label, &temp_min, &temp_max, v_speed, min_limit, max_limit)) {
+        v_min = static_cast<double>(temp_min);
+        v_max = static_cast<double>(temp_max);
+        return true;
+    }
+    return false;
+}
+
 } // anonymous namespace
 
 // Helper: Render string list editor (returns true if modified)
@@ -98,7 +123,7 @@ static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& c
             modified = true;
         }
 
-        if (ImGui::DragFloatRange2("Noise Range", &cfg.noise_range.first, &cfg.noise_range.second,
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
                                0.01f, 0.0f, 1.0f)) {
             modified = true;
         }
@@ -132,7 +157,7 @@ static bool render_dsprites_config(const std::string& name, dsprites::dsprites_p
             modified = true;
         }
 
-        if (ImGui::DragFloatRange2("Noise Range", &cfg.noise_range.first, &cfg.noise_range.second,
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
                                0.01f, 0.0f, 1.0f)) {
             modified = true;
         }
@@ -171,7 +196,7 @@ static bool render_dendrite_config(const std::string& name, ngm2::dendrite_param
             modified = true;
         }
 
-        if (ImGui::SliderFloat("Permanence Threshold", &cfg.permanence_threshold, 0.0f, 1.0f)) {
+        if (SliderDouble("Permanence Threshold", cfg.permanence_threshold, 0.0f, 1.0f)) {
             modified = true;
         }
 
@@ -186,25 +211,25 @@ static bool render_dendrite_config(const std::string& name, ngm2::dendrite_param
         }
 
         if (ImGui::TreeNode("Learning Parameters")) {
-            if (ImGui::SliderFloat("Primary Learning Rate", &cfg.default_primary_learning_rate, 0.0001f, 0.1f, "%.4f")) {
+            if (SliderDouble("Primary Learning Rate", cfg.default_primary_learning_rate, 0.0001f, 0.1f, "%.4f")) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Secondary Learning Rate", &cfg.default_secondary_learning_rate, 0.00001f, 0.01f, "%.5f")) {
+            if (SliderDouble("Secondary Learning Rate", cfg.default_secondary_learning_rate, 0.00001f, 0.01f, "%.5f")) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Mismatch Act Threshold", &cfg.default_mismatch_act_thres, 0.0f, 1.0f)) {
+            if (SliderDouble("Mismatch Act Threshold", cfg.default_mismatch_act_thres, 0.0f, 1.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Mismatch Smoothing", &cfg.default_mismatch_smoothing, 0.0001f, 0.01f, "%.4f")) {
+            if (SliderDouble("Mismatch Smoothing", cfg.default_mismatch_smoothing, 0.0001f, 0.01f, "%.4f")) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Accumulated Theta Threshold", &cfg.default_accumulated_theta_thres, 0.0f, 10.0f)) {
+            if (SliderDouble("Accumulated Theta Threshold", cfg.default_accumulated_theta_thres, 0.0f, 10.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Min Mismatch Deviation", &cfg.default_min_mismatch_deviation, 0.0f, 5.0f)) {
+            if (SliderDouble("Min Mismatch Deviation", cfg.default_min_mismatch_deviation, 0.0f, 5.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Min Mismatch Percentage", &cfg.default_min_mismatch_percentage, 0.0f, 0.1f, "%.4f")) {
+            if (SliderDouble("Min Mismatch Percentage", cfg.default_min_mismatch_percentage, 0.0f, 0.1f, "%.4f")) {
                 modified = true;
             }
             ImGui::TreePop();
@@ -336,16 +361,16 @@ static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t&
         }
 
         if (ImGui::TreeNode("Activity Learning Window")) {
-            if (ImGui::SliderFloat("Pre Steepness", &cfg.default_activity_learning_window.first.steepness, 0.0f, 1.0f)) {
+            if (SliderDouble("Pre Steepness", cfg.default_activity_learning_window.first.steepness, 0.0f, 1.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Pre Transition", &cfg.default_activity_learning_window.first.transition_point, 0.0f, 1.0f)) {
+            if (SliderDouble("Pre Transition", cfg.default_activity_learning_window.first.transition_point, 0.0f, 1.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Post Steepness", &cfg.default_activity_learning_window.second.steepness, 0.0f, 1.0f)) {
+            if (SliderDouble("Post Steepness", cfg.default_activity_learning_window.second.steepness, 0.0f, 1.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Post Transition", &cfg.default_activity_learning_window.second.transition_point, 0.0f, 1.0f)) {
+            if (SliderDouble("Post Transition", cfg.default_activity_learning_window.second.transition_point, 0.0f, 1.0f)) {
                 modified = true;
             }
             ImGui::TreePop();
@@ -455,24 +480,24 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
             ImGui::TreePop();
         }
 
-        if (ImGui::SliderFloat("Local Inhibition", &cfg.default_local_inhibition_strength, 0.1f, 20.0f)) {
+        if (SliderDouble("Local Inhibition", cfg.default_local_inhibition_strength, 0.1f, 20.0f)) {
             modified = true;
         }
-        if (ImGui::SliderFloat("Common Learning Rate", &cfg.default_common_learning_rate, 0.00001f, 0.01f, "%.5f")) {
+        if (SliderDouble("Common Learning Rate", cfg.default_common_learning_rate, 0.00001f, 0.01f, "%.5f")) {
             modified = true;
         }
 
         if (ImGui::TreeNode("Weight Filter")) {
-            if (ImGui::SliderFloat("Steepness", &cfg.default_weight_filter.steepness, 0.0f, 1.0f)) {
+            if (SliderDouble("Steepness", cfg.default_weight_filter.steepness, 0.0f, 1.0f)) {
                 modified = true;
             }
-            if (ImGui::SliderFloat("Transition Point", &cfg.default_weight_filter.transition_point, 0.0f, 1.0f)) {
+            if (SliderDouble("Transition Point", cfg.default_weight_filter.transition_point, 0.0f, 1.0f)) {
                 modified = true;
             }
             ImGui::TreePop();
         }
 
-        if (ImGui::SliderFloat("Stochastic Win Threshold", &cfg.default_stochastic_win_thres, 0.0f, 1.0f)) {
+        if (SliderDouble("Stochastic Win Threshold", cfg.default_stochastic_win_thres, 0.0f, 1.0f)) {
             modified = true;
         }
         if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
