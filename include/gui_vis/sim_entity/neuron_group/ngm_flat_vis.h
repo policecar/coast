@@ -37,8 +37,10 @@ private:
     uint32_t px_width {};
     uint32_t px_height {};
 
-    // Zoom state
+    // View state (zoom and pan)
     float zoom_level = 1.0f;
+    float pan_x = 0.0f;  // Pan offset in pixels (scaled coordinates)
+    float pan_y = 0.0f;
 
     // Visibility state (for conditional updates)
     bool visible = false;

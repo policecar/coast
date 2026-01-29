@@ -120,20 +120,23 @@ void ngm_flat_vis::update()
 bool ngm_flat_vis::render_imgui(const char* label, float scale)
 {
     bool open = true;
+
+    // Set initial window size on first appearance
+    ImGui::SetNextWindowSize(ImVec2(600, 600), ImGuiCond_FirstUseEver);
+
     if (ImGui::Begin(label, &open)) {
-        // Zoom controls
-        ImGui::Text("Zoom: %.1fx", zoom_level);
+        // Toolbar with zoom display and reset button
+        ImGui::Text("Zoom: %.0f%%", zoom_level * 100.0f);
         ImGui::SameLine();
-        if (ImGui::Button("-")) {
-            zoom_level = std::max(0.25f, zoom_level - 0.25f);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("+")) {
-            zoom_level = std::min(4.0f, zoom_level + 0.25f);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Reset")) {
+        if (ImGui::Button("Reset View")) {
             zoom_level = 1.0f;
+            pan_x = 0.0f;
+            pan_y = 0.0f;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Scroll wheel to zoom\nLeft-click drag to pan");
         }
 
         ImGui::Separator();
@@ -141,14 +144,96 @@ bool ngm_flat_vis::render_imgui(const char* label, float scale)
         if (texture.is_valid()) {
             // Calculate scaled size
             float effective_scale = scale * zoom_level;
-            ImVec2 size(static_cast<float>(texture.get_width()) * effective_scale,
-                        static_cast<float>(texture.get_height()) * effective_scale);
+            ImVec2 tex_size(static_cast<float>(texture.get_width()) * effective_scale,
+                           static_cast<float>(texture.get_height()) * effective_scale);
 
-            // Scrollable region with both horizontal and vertical scrollbars
-            ImGui::BeginChild("ScrollRegion", ImVec2(0, 0), false,
-                              ImGuiWindowFlags_HorizontalScrollbar);
-            ImGui::Image(texture.as_imgui_texture(), size);
-            ImGui::EndChild();
+            // Get available content region
+            ImVec2 canvas_size = ImGui::GetContentRegionAvail();
+            ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+
+            // Create an invisible button to capture input over the canvas area
+            ImGui::InvisibleButton("canvas", canvas_size,
+                                   ImGuiButtonFlags_MouseButtonLeft);
+            bool is_hovered = ImGui::IsItemHovered();
+            bool is_active = ImGui::IsItemActive();
+
+            ImGuiIO& io = ImGui::GetIO();
+
+            // Handle scroll wheel zoom (only when hovered)
+            if (is_hovered && io.MouseWheel != 0.0f) {
+                // Get mouse position relative to canvas
+                ImVec2 mouse_pos = io.MousePos;
+                float mouse_canvas_x = mouse_pos.x - canvas_pos.x;
+                float mouse_canvas_y = mouse_pos.y - canvas_pos.y;
+
+                // Calculate position in texture space before zoom
+                float tex_x = (mouse_canvas_x + pan_x) / (scale * zoom_level);
+                float tex_y = (mouse_canvas_y + pan_y) / (scale * zoom_level);
+
+                // Apply zoom
+                float zoom_delta = io.MouseWheel * 0.1f;
+                zoom_level = std::clamp(zoom_level + zoom_delta * zoom_level, 0.1f, 10.0f);
+
+                // Adjust pan to keep the point under the mouse fixed
+                float new_scale = scale * zoom_level;
+                pan_x = tex_x * new_scale - mouse_canvas_x;
+                pan_y = tex_y * new_scale - mouse_canvas_y;
+            }
+
+            // Handle left-click drag for panning
+            if (is_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                pan_x -= io.MouseDelta.x;
+                pan_y -= io.MouseDelta.y;
+            }
+
+            // Clamp pan to valid range (allow some overpan for usability)
+            float max_pan_x = std::max(0.0f, tex_size.x - canvas_size.x);
+            float max_pan_y = std::max(0.0f, tex_size.y - canvas_size.y);
+            pan_x = std::clamp(pan_x, 0.0f, max_pan_x);
+            pan_y = std::clamp(pan_y, 0.0f, max_pan_y);
+
+            // Draw the texture using DrawList
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+            // Calculate visible UV coordinates based on pan
+            float u0 = pan_x / tex_size.x;
+            float v0 = pan_y / tex_size.y;
+            float u1 = (pan_x + canvas_size.x) / tex_size.x;
+            float v1 = (pan_y + canvas_size.y) / tex_size.y;
+
+            // Clamp UVs and adjust draw rect accordingly
+            float draw_x0 = canvas_pos.x;
+            float draw_y0 = canvas_pos.y;
+            float draw_x1 = canvas_pos.x + canvas_size.x;
+            float draw_y1 = canvas_pos.y + canvas_size.y;
+
+            // If zoomed out so image is smaller than canvas, center it
+            if (tex_size.x < canvas_size.x) {
+                float offset = (canvas_size.x - tex_size.x) * 0.5f;
+                draw_x0 = canvas_pos.x + offset;
+                draw_x1 = draw_x0 + tex_size.x;
+                u0 = 0.0f;
+                u1 = 1.0f;
+            }
+            if (tex_size.y < canvas_size.y) {
+                float offset = (canvas_size.y - tex_size.y) * 0.5f;
+                draw_y0 = canvas_pos.y + offset;
+                draw_y1 = draw_y0 + tex_size.y;
+                v0 = 0.0f;
+                v1 = 1.0f;
+            }
+
+            // Clamp UVs to [0,1]
+            u0 = std::clamp(u0, 0.0f, 1.0f);
+            v0 = std::clamp(v0, 0.0f, 1.0f);
+            u1 = std::clamp(u1, 0.0f, 1.0f);
+            v1 = std::clamp(v1, 0.0f, 1.0f);
+
+            draw_list->AddImage(texture.as_imgui_texture(),
+                               ImVec2(draw_x0, draw_y0),
+                               ImVec2(draw_x1, draw_y1),
+                               ImVec2(u0, v0),
+                               ImVec2(u1, v1));
         }
     }
     ImGui::End();
