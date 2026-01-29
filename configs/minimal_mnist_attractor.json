@@ -1,20 +1,20 @@
 {
     "datasets": {
         "mnist": {
-            "default": {
+            "max_interval": {
                 "image_file": "./data/mnist/train-images-idx3-ubyte",
                 "label_file": "./data/mnist/train-labels-idx1-ubyte",
-                "change_interval": 1,
+                "change_interval": 15,
                 "noise_range": [
                     0.0,
                     0.05000000074505806
                 ],
                 "random_seed": 0
             },
-            "max_interval": {
+            "default": {
                 "image_file": "./data/mnist/train-images-idx3-ubyte",
                 "label_file": "./data/mnist/train-labels-idx1-ubyte",
-                "change_interval": 15,
+                "change_interval": 1,
                 "noise_range": [
                     0.0,
                     0.05000000074505806
@@ -77,6 +77,60 @@
             }
         },
         "neuron_groups": {
+            "L4-MNIST": {
+                "input_channels": [
+                    "mnist_in"
+                ],
+                "neurons": [
+                    {
+                        "name": "stellate",
+                        "neuron_cfg": "default",
+                        "neuron_count": 50
+                    }
+                ],
+                "channel_mappings": [
+                    {
+                        "from_channel": "mnist_in",
+                        "to_name": "stellate",
+                        "to_channel": "na"
+                    }
+                ],
+                "default_local_inhibition_strength": 5.0,
+                "default_common_learning_rate": 0.0001,
+                "default_weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33
+                },
+                "default_stochastic_win_thres": 0.8,
+                "random_seed": 0
+            },
+            "default": {
+                "input_channels": [
+                    "ga"
+                ],
+                "neurons": [
+                    {
+                        "name": "pyramidal",
+                        "neuron_cfg": "default",
+                        "neuron_count": 50
+                    }
+                ],
+                "channel_mappings": [
+                    {
+                        "from_channel": "ga",
+                        "to_name": "pyramidal",
+                        "to_channel": "na"
+                    }
+                ],
+                "default_local_inhibition_strength": 5.0,
+                "default_common_learning_rate": 9.999999747378752e-05,
+                "default_weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33000001311302185
+                },
+                "default_stochastic_win_thres": 0.800000011920929,
+                "random_seed": 0
+            },
             "double_input": {
                 "input_channels": [
                     "A",
@@ -108,60 +162,6 @@
                     "transition_point": 0.33000001311302185
                 },
                 "default_stochastic_win_thres": 0.800000011920929,
-                "random_seed": 0
-            },
-            "default": {
-                "input_channels": [
-                    "ga"
-                ],
-                "neurons": [
-                    {
-                        "name": "pyramidal",
-                        "neuron_cfg": "default",
-                        "neuron_count": 50
-                    }
-                ],
-                "channel_mappings": [
-                    {
-                        "from_channel": "ga",
-                        "to_name": "pyramidal",
-                        "to_channel": "na"
-                    }
-                ],
-                "default_local_inhibition_strength": 5.0,
-                "default_common_learning_rate": 9.999999747378752e-05,
-                "default_weight_filter": {
-                    "steepness": 0.5,
-                    "transition_point": 0.33000001311302185
-                },
-                "default_stochastic_win_thres": 0.800000011920929,
-                "random_seed": 0
-            },
-            "L4-MNIST": {
-                "input_channels": [
-                    "mnist_in"
-                ],
-                "neurons": [
-                    {
-                        "name": "stellate",
-                        "neuron_cfg": "default",
-                        "neuron_count": 50
-                    }
-                ],
-                "channel_mappings": [
-                    {
-                        "from_channel": "mnist_in",
-                        "to_name": "stellate",
-                        "to_channel": "na"
-                    }
-                ],
-                "default_local_inhibition_strength": 5.0,
-                "default_common_learning_rate": 0.0001,
-                "default_weight_filter": {
-                    "steepness": 0.5,
-                    "transition_point": 0.33
-                },
-                "default_stochastic_win_thres": 0.8,
                 "random_seed": 0
             }
         }
@@ -229,15 +229,15 @@
         },
         "ngm2": {
             "neuron_groups": {
-                "default": {
+                "double_input": {
                     "ngm_flat_vis": {
                         "width": 50,
-                        "height": 1,
+                        "height": 2,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
-                        "rep_width": 28,
-                        "rep_height": 28,
+                        "rep_width": 10,
+                        "rep_height": 10,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,
@@ -295,10 +295,10 @@
                         "branch_a": 255
                     }
                 },
-                "double_input": {
+                "default": {
                     "ngm_flat_vis": {
                         "width": 50,
-                        "height": 2,
+                        "height": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
@@ -331,7 +331,8 @@
             }
         },
         "buffer_vis": {
-            "update_interval": 1
+            "update_interval": 1,
+            "ring_length": 500
         }
     }
 }
