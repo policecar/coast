@@ -54,7 +54,7 @@ void vec_ring_buffer::update(const std::span<float> &data, bool auto_norm, float
     ring_pos = (ring_pos + 1) % ring_size;
 }
 
-bool vec_ring_buffer::render_imgui(const char* label, float scale)
+bool vec_ring_buffer::render_imgui(const char* label, int& update_interval, float scale)
 {
     bool open = true;
 
@@ -62,7 +62,7 @@ bool vec_ring_buffer::render_imgui(const char* label, float scale)
     ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin(label, &open)) {
-        // Toolbar with zoom display, reset button, and colormap selector
+        // Toolbar with zoom display, reset button, colormap selector, and update interval
         ImGui::Text("Zoom: %.0f%%", zoom_level * 100.0f);
         ImGui::SameLine();
         if (ImGui::Button("Reset View")) {
@@ -88,6 +88,9 @@ bool vec_ring_buffer::render_imgui(const char* label, float scale)
             }
             ImGui::EndCombo();
         }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120);
+        ImGui::SliderInt("Update", &update_interval, 1, 1000);
 
         ImGui::Separator();
 
@@ -255,7 +258,7 @@ public:
         , vis_(static_cast<uint16_t>(buffer.size()),
                static_cast<uint16_t>(hints.buffer_vis.ring_length > 0 ? hints.buffer_vis.ring_length : DEFAULT_RING_SIZE))
     {
-        update_interval_ = static_cast<std::size_t>(hints.buffer_vis.update_interval);
+        update_interval_ui_ = hints.buffer_vis.update_interval;
 
         // Register post-swap hook for thread-safe synchronization
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
@@ -301,7 +304,7 @@ public:
     bool render_imgui() override
     {
         if (!visible_) return true;
-        return vis_.render_imgui(label_.c_str());
+        return vis_.render_imgui(label_.c_str(), update_interval_ui_);
     }
 
     void free_resources() override
@@ -322,7 +325,7 @@ private:
         inc_on_exit inc{step_count_};  // Increment step_count_ on function exit
 
         // Check if it's time for an update
-        if (update_interval_ == 0) return;  // 0 means disabled
+        if (update_interval_ui_ <= 0) return;  // 0 or negative means disabled
         if (!visible_) return;  // Don't update if not visible
 
         // Check if colormap changed (needs immediate update)
@@ -332,7 +335,7 @@ private:
         }
 
         // Update if interval elapsed OR colormap changed
-        if (step_count_ % update_interval_ != 0 && !colormap_changed) return;
+        if (step_count_ % static_cast<std::size_t>(update_interval_ui_) != 0 && !colormap_changed) return;
 
         // Request an update
         int expected = static_cast<int>(sync_state::idle);
@@ -370,7 +373,7 @@ private:
 
     // Synchronization state
     std::atomic<int> sync_state_{static_cast<int>(sync_state::idle)};
-    std::size_t update_interval_ = 100;
+    int update_interval_ui_ = 100;  // UI-controlled update interval (1-1000)
     std::size_t step_count_ = 0;
     std::size_t hook_id_ = 0;
 };
