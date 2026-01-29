@@ -3,6 +3,7 @@
 //
 
 #include "core/gradient.h"
+#include "core/colormap.h"
 #include "inc_on_exit.h"
 
 #include "sim_entity/neuron_group/ngm_flat_vis.h"
@@ -19,6 +20,22 @@
 #include "imgui.h"
 
 namespace coast {
+
+namespace {
+
+// Helper to create a 5-stop gradient from a colormap
+gradient<5> make_gradient(colormap_t cm)
+{
+    return gradient<5>(std::array<color_t, 5>{
+        apply_colormap(cm, 0.00f),
+        apply_colormap(cm, 0.25f),
+        apply_colormap(cm, 0.50f),
+        apply_colormap(cm, 0.75f),
+        apply_colormap(cm, 1.00f)
+    });
+}
+
+} // anonymous namespace
 
 ngm_flat_vis::ngm_flat_vis(const ngm2::neuron_group_t &neuron_group, const params_t _params) :
     params(_params),
@@ -67,9 +84,7 @@ ngm_flat_vis::ngm_flat_vis(const ngm2::neuron_group_t &neuron_group, const param
 
 void ngm_flat_vis::update()
 {
-    color_t black{0, 0, 0, 255};
-    color_t white{255, 255, 255, 255};
-    gradient<2> def_grad(std::array<color_t, 2>{black, white});
+    auto def_grad = make_gradient(colormap);
     uint32_t group_pos_x = 0;
     uint32_t group_pos_y = 0;
     std::size_t neuron_cnt = ng.get_neuron_count();
@@ -92,7 +107,7 @@ void ngm_flat_vis::update()
                 std::printf("\n");
             }
             for (uint32_t r = 0; r < rep_cnt; ++r)
-                vis.update_vec<2>(r, dendrite.get_representation(r), def_grad,
+                vis.update_vec<5>(r, dendrite.get_representation(r), def_grad,
                                   px_pos_t{group_pos_x, group_pos_y},
                                   pixel_data_t{pixel_data, px_width, px_height});
             const uint32_t dendrite_width = vis.get_total_width();
@@ -126,13 +141,28 @@ bool ngm_flat_vis::render_imgui(const char* label, float scale)
     ImGui::SetNextWindowSize(ImVec2(600, 600), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin(label, &open)) {
-        // Toolbar with zoom display and reset button
+        // Toolbar with zoom display, reset button, and colormap selector
         ImGui::Text("Zoom: %.0f%%", zoom_level * 100.0f);
         ImGui::SameLine();
         if (ImGui::Button("Reset View")) {
             target_zoom = 1.0f;
             target_pan_x = 0.0f;
             target_pan_y = 0.0f;
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::BeginCombo("##colormap", colormap_name(colormap))) {
+            for (int i = 0; i < static_cast<int>(colormap_t::COUNT); ++i) {
+                auto cm = static_cast<colormap_t>(i);
+                bool is_selected = (colormap == cm);
+                if (ImGui::Selectable(colormap_name(cm), is_selected)) {
+                    colormap = cm;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
         }
 
         ImGui::Separator();

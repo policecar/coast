@@ -9,6 +9,7 @@
 #include "../../primitives/vec_group_vis.h"
 #include "hd_ngm2_neuron_group.h"
 #include "../../core/color_types.h"
+#include "../../core/colormap.h"
 #include "../../core/gl_texture.h"
 
 namespace coast {
@@ -47,6 +48,9 @@ private:
 
     // Visibility state (for conditional updates)
     bool visible = false;
+
+    // Colormap selection
+    colormap_t colormap = colormap_t::grayscale;
 
 public:
     explicit ngm_flat_vis(const ngm2::neuron_group_t& neuron_group, params_t _params);

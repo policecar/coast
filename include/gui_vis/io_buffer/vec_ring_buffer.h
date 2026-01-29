@@ -10,25 +10,10 @@
 #include <vector>
 
 #include "../core/color_types.h"
+#include "../core/colormap.h"
 #include "../core/gl_texture.h"
 
 namespace coast {
-
-enum class colormap_t : uint8_t {
-    grayscale = 0,
-    green,      // Original green-tinted
-    viridis,
-    plasma,
-    inferno,
-    cool,
-    COUNT
-};
-
-// Get display name for colormap
-const char* colormap_name(colormap_t cm);
-
-// Apply colormap to normalized value [0,1]
-color_t apply_colormap(colormap_t cm, float value);
 
 class vec_ring_buffer {
 
