@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <thread>
 #include <oneapi/tbb/task_arena.h>
 
@@ -129,9 +130,9 @@ bool ngm_flat_vis::render_imgui(const char* label, float scale)
         ImGui::Text("Zoom: %.0f%%", zoom_level * 100.0f);
         ImGui::SameLine();
         if (ImGui::Button("Reset View")) {
-            zoom_level = 1.0f;
-            pan_x = 0.0f;
-            pan_y = 0.0f;
+            target_zoom = 1.0f;
+            target_pan_x = 0.0f;
+            target_pan_y = 0.0f;
         }
         ImGui::SameLine();
         ImGui::TextDisabled("(?)");
@@ -159,6 +160,10 @@ bool ngm_flat_vis::render_imgui(const char* label, float scale)
 
             ImGuiIO& io = ImGui::GetIO();
 
+            // Smooth interpolation factor (higher = faster response)
+            constexpr float lerp_speed = 15.0f;
+            float lerp_t = std::min(1.0f, lerp_speed * io.DeltaTime);
+
             // Handle scroll wheel zoom (only when hovered)
             if (is_hovered && io.MouseWheel != 0.0f) {
                 // Get mouse position relative to canvas
@@ -166,27 +171,47 @@ bool ngm_flat_vis::render_imgui(const char* label, float scale)
                 float mouse_canvas_x = mouse_pos.x - canvas_pos.x;
                 float mouse_canvas_y = mouse_pos.y - canvas_pos.y;
 
-                // Calculate position in texture space before zoom
+                // Calculate position in texture space before zoom (using current values)
                 float tex_x = (mouse_canvas_x + pan_x) / (scale * zoom_level);
                 float tex_y = (mouse_canvas_y + pan_y) / (scale * zoom_level);
 
-                // Apply zoom
-                float zoom_delta = io.MouseWheel * 0.1f;
-                zoom_level = std::clamp(zoom_level + zoom_delta * zoom_level, 0.1f, 10.0f);
+                // Apply zoom to target (exponential for smoother feel)
+                float zoom_factor = std::pow(1.15f, io.MouseWheel);
+                target_zoom = std::clamp(target_zoom * zoom_factor, 0.1f, 10.0f);
 
-                // Adjust pan to keep the point under the mouse fixed
-                float new_scale = scale * zoom_level;
-                pan_x = tex_x * new_scale - mouse_canvas_x;
-                pan_y = tex_y * new_scale - mouse_canvas_y;
+                // Adjust target pan to keep the point under the mouse fixed
+                float new_scale = scale * target_zoom;
+                target_pan_x = tex_x * new_scale - mouse_canvas_x;
+                target_pan_y = tex_y * new_scale - mouse_canvas_y;
             }
 
-            // Handle left-click drag for panning
+            // Handle left-click drag for panning (immediate response feels better)
             if (is_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                target_pan_x -= io.MouseDelta.x;
+                target_pan_y -= io.MouseDelta.y;
+                // Also update current pan immediately for responsive drag
                 pan_x -= io.MouseDelta.x;
                 pan_y -= io.MouseDelta.y;
             }
 
-            // Clamp pan to valid range (allow some overpan for usability)
+            // Clamp target pan to valid range
+            float target_tex_size_x = static_cast<float>(texture.get_width()) * scale * target_zoom;
+            float target_tex_size_y = static_cast<float>(texture.get_height()) * scale * target_zoom;
+            float max_target_pan_x = std::max(0.0f, target_tex_size_x - canvas_size.x);
+            float max_target_pan_y = std::max(0.0f, target_tex_size_y - canvas_size.y);
+            target_pan_x = std::clamp(target_pan_x, 0.0f, max_target_pan_x);
+            target_pan_y = std::clamp(target_pan_y, 0.0f, max_target_pan_y);
+
+            // Smoothly interpolate current values towards targets
+            zoom_level = zoom_level + (target_zoom - zoom_level) * lerp_t;
+            pan_x = pan_x + (target_pan_x - pan_x) * lerp_t;
+            pan_y = pan_y + (target_pan_y - pan_y) * lerp_t;
+
+            // Recalculate tex_size with interpolated zoom
+            tex_size = ImVec2(static_cast<float>(texture.get_width()) * scale * zoom_level,
+                              static_cast<float>(texture.get_height()) * scale * zoom_level);
+
+            // Clamp current pan to valid range
             float max_pan_x = std::max(0.0f, tex_size.x - canvas_size.x);
             float max_pan_y = std::max(0.0f, tex_size.y - canvas_size.y);
             pan_x = std::clamp(pan_x, 0.0f, max_pan_x);
