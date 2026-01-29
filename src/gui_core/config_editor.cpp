@@ -1209,15 +1209,86 @@ static bool render_dsprites_hint(const std::string& name, dsprites_hint_t& hint,
     return modified;
 }
 
+// Helper: Render ngm_tree_vis_hint_t (returns true if modified)
+static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
+{
+    bool modified = false;
+
+    // Representation dimensions
+    ImGui::SetNextItemWidth(80);
+    if (ImGui::InputInt("Rep Width", &hint.rep_width)) {
+        hint.rep_width = std::max(1, hint.rep_width);
+        modified = true;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(80);
+    if (ImGui::InputInt("Rep Height", &hint.rep_height)) {
+        hint.rep_height = std::max(1, hint.rep_height);
+        modified = true;
+    }
+
+    ImGui::SetNextItemWidth(120);
+    if (ImGui::InputInt("Update Interval##tree", &hint.update_interval)) {
+        hint.update_interval = std::max(0, hint.update_interval);
+        modified = true;
+    }
+
+    // Node appearance
+    if (ImGui::TreeNode("Node Appearance")) {
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputFloat("Root Radius", &hint.root_node_radius, 0.5f)) {
+            hint.root_node_radius = std::max(0.5f, hint.root_node_radius);
+            modified = true;
+        }
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputFloat("Branch Radius", &hint.branch_node_radius, 0.5f)) {
+            hint.branch_node_radius = std::max(0.5f, hint.branch_node_radius);
+            modified = true;
+        }
+        ImGui::SetNextItemWidth(120);
+        if (ImGui::InputFloat("Texture Scale Div", &hint.texture_scale_divisor, 100.0f)) {
+            hint.texture_scale_divisor = std::max(100.0f, hint.texture_scale_divisor);
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+
+    // Edge appearance
+    if (ImGui::TreeNode("Edge Appearance")) {
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputFloat("Min Thickness", &hint.edge_thickness_min, 0.5f)) {
+            hint.edge_thickness_min = std::max(0.5f, hint.edge_thickness_min);
+            modified = true;
+        }
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputFloat("Max Thickness", &hint.edge_thickness_max, 0.5f)) {
+            hint.edge_thickness_max = std::max(hint.edge_thickness_min, hint.edge_thickness_max);
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+
+    return modified;
+}
+
 // Helper: Render neuron group hint (returns true if modified, sets remove_requested if remove clicked)
 static bool render_neuron_group_hint(const std::string& name, neuron_group_hints_t& hint, bool& remove_requested)
 {
     bool modified = false;
     remove_requested = false;
     if (ImGui::TreeNode(name.c_str())) {
-        ImGui::Text("Flat Visualization Dimensions:");
-        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
-            modified = true;
+        if (ImGui::TreeNode("Dendritic Representations")) {
+            if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        if (ImGui::TreeNode("Neuron Tree")) {
+            if (render_ngm_tree_vis_hint(hint.ngm_tree_vis)) {
+                modified = true;
+            }
+            ImGui::TreePop();
         }
 
         ImGui::Separator();

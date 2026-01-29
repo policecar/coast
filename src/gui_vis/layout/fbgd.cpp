@@ -9,14 +9,41 @@
 
 namespace coast {
 
-constexpr fbgd::cell_id_t fbgd::pos_to_cell(const std::array<float, 2> &pos)
+void fbgd::set_region_size(float size)
 {
-    //constexpr float cell_cnt = std::ceil(region_size / cell_size);
-    const float cell_cnt = std::ceil(region_size / cell_size);
+    region_size_ = size;
+    // Adjust cell_size proportionally to maintain similar grid density
+    cell_size_ = size * 0.1f;
+    local_size_ = size * 0.04f;
+}
+
+void fbgd::set_node_repulsion_radius(node_id_t node_id, float radius)
+{
+    if (node_id < node_look_up.size()) {
+        auto idx = node_look_up[node_id];
+        if (idx < nodes.size()) {
+            nodes[idx].repulsion_radius = radius;
+        }
+    }
+}
+
+void fbgd::set_node_fixed(node_id_t node_id, bool fixed)
+{
+    if (node_id < node_look_up.size()) {
+        auto idx = node_look_up[node_id];
+        if (idx < nodes.size()) {
+            nodes[idx].fixed = fixed;
+        }
+    }
+}
+
+fbgd::cell_id_t fbgd::pos_to_cell(const std::array<float, 2> &pos) const
+{
+    const float cell_cnt = std::ceil(region_size_ / cell_size_);
     const float cell_id =
-        std::floor(pos[0] / cell_size) +
-        std::floor(pos[1] / cell_size) * cell_cnt;
-    return static_cast<cell_id_t>(std::clamp(cell_id,0.0f,cell_cnt*cell_cnt));
+        std::floor(pos[0] / cell_size_) +
+        std::floor(pos[1] / cell_size_) * cell_cnt;
+    return static_cast<cell_id_t>(std::clamp(cell_id, 0.0f, cell_cnt * cell_cnt));
 }
 
 void fbgd::rebuild_cell_and_node_look_up()
@@ -35,8 +62,7 @@ void fbgd::rebuild_cell_and_node_look_up()
         }
     );
 
-    //constexpr auto cell_cnt = static_cast<uint32_t>(std::ceil(region_size / cell_size));
-    const auto cell_cnt = static_cast<uint32_t>(std::ceil(region_size / cell_size));
+    const auto cell_cnt = static_cast<uint32_t>(std::ceil(region_size_ / cell_size_));
     cell_look_up.resize( cell_cnt * cell_cnt);
     std::ranges::fill(cell_look_up, std::make_pair(nodes.end(), nodes.end()) );
     cell_id_t cur_id = nodes[0].cell_id;
@@ -100,16 +126,20 @@ void fbgd::rebuild_edge_look_up()
 
 fbgd::node_id_t fbgd::add_node(std::any payload)
 {
-    return add_node( {rnd_dis(rgen),rnd_dis(rgen)}, false, std::move(payload));
+    float x = rnd_dis(rgen) * region_size_;
+    float y = rnd_dis(rgen) * region_size_;
+    return add_node({x, y}, false, 1.0f, std::move(payload));
 }
 
-fbgd::node_id_t fbgd::add_node(const std::array<float, 2> &pos, bool fixed, std::any payload)
+fbgd::node_id_t fbgd::add_node(const std::array<float, 2> &pos, bool fixed,
+                                float repulsion_radius, std::any payload)
 {
     node new_node {};
     new_node.node_id = next_node_id++;
     new_node.pos     = pos;
     new_node.cell_id = pos_to_cell(new_node.pos);
     new_node.fixed   = fixed;
+    new_node.repulsion_radius = repulsion_radius;
     new_node.payload = std::move(payload);
 
     nodes.push_back(new_node);
@@ -127,14 +157,12 @@ void fbgd::add_edge(node_id_t node_a, node_id_t node_b)
 
 void fbgd::update()
 {
-
     const auto node_cnt = nodes.size();
-    //constexpr auto cell_cnt = static_cast<int>(std::ceil(region_size / cell_size));
-    const auto cell_cnt = static_cast<int>(std::ceil(region_size / cell_size));
+    const auto cell_cnt = static_cast<int>(std::ceil(region_size_ / cell_size_));
 
     const float cnt_normalizer = static_cast<float>(node_cnt*3) / static_cast<float>(cell_cnt);
 
-    const float w    = region_size;
+    const float w    = region_size_;
     const float area = w*w;
     const float c1   = attr_force * area;
     const float c2   = rep_force * area / cnt_normalizer;
@@ -190,8 +218,8 @@ void fbgd::update()
 
                     float local_push = 1.0f;
 
-                    if (dist < local_size) {
-                        local_push = 5000.0f * (1.0f - (dist / local_size));
+                    if (dist < local_size_) {
+                        local_push = 5000.0f * (1.0f - (dist / local_size_));
                     }
 
                     /*
@@ -251,7 +279,7 @@ void fbgd::update()
                             delta[1] * delta[1]
                         ));
 
-                    if (sib_dist > local_size)
+                    if (sib_dist > local_size_)
                         continue;
 
                     node_update[0] += sib_delta[0] * c3 / sib_dist ;
@@ -272,7 +300,6 @@ void fbgd::update()
             node_update[0] -= delta[0] * dist_sq * center_pull;
             node_update[1] -= delta[1] * dist_sq * center_pull;
 
-
             // update node pos
             const float nd_length = std::sqrt(node_update[0] * node_update[0] +
                                               node_update[1] * node_update[1]);
@@ -285,12 +312,9 @@ void fbgd::update()
             cur_node.pos[0] += node_update[0] * upd_factor;
             cur_node.pos[1] += node_update[1] * upd_factor;
 
-/*
-            if (cur_node.pos[0] < 0.0f) cur_node.pos[0] = 0;//    rnd_dis(rgen) * border_wiggle;
-            if (cur_node.pos[0] > w)    cur_node.pos[0] = w;// - rnd_dis(rgen) * border_wiggle;
-            if (cur_node.pos[1] < 0.0f) cur_node.pos[1] = 0;//    rnd_dis(rgen) * border_wiggle;
-            if (cur_node.pos[1] > w)    cur_node.pos[1] = w;// - rnd_dis(rgen) * border_wiggle;
-*/
+            // Hard clamp to region bounds as safety net
+            cur_node.pos[0] = std::clamp(cur_node.pos[0], 0.0f, w);
+            cur_node.pos[1] = std::clamp(cur_node.pos[1], 0.0f, w);
 
             cur_node.cell_id = pos_to_cell(cur_node.pos);
 
