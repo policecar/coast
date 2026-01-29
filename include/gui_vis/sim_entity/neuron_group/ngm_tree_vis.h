@@ -11,6 +11,7 @@
 #include "hd_ngm2.h"
 #include "../../layout/fbgd.h"
 #include "../../core/color_types.h"
+#include "../../core/colormap.h"
 #include "../../core/gl_texture.h"
 
 namespace coast {
@@ -43,17 +44,31 @@ public:
         // Root node color (RGBA 0-255)
         uint8_t root_r = 255, root_g = 161, root_b = 0, root_a = 255;
 
-        // Branch node color (RGBA 0-255)
-        uint8_t branch_r = 0, branch_g = 0, branch_b = 0, branch_a = 255;
+        // Branch node color (RGBA 0-255) - light blue
+        uint8_t branch_r = 100, branch_g = 180, branch_b = 255, branch_a = 255;
     };
 
 private:
     params_t params_;
     float region_size_ = 1.0f;  // Stored from fbgd for rendering
 
+    // View state (zoom and pan) - uses target values for smooth interpolation
+    float zoom_level_ = 1.0f;
+    float target_zoom_ = 1.0f;
+    float pan_x_ = 0.0f;
+    float pan_y_ = 0.0f;
+    float target_pan_x_ = 0.0f;
+    float target_pan_y_ = 0.0f;
+
+    // Colormap for representations
+    colormap_t colormap_ = colormap_t::grayscale;
+    bool colormap_dirty_ = false;
+
     // Selection state - which neuron's representations are visible
     // SIZE_MAX means no neuron selected (all representations hidden)
     std::size_t selected_neuron_idx_ = SIZE_MAX;
+    bool show_on_hover_ = false;  // Show representations when hovering over root node
+    std::size_t hovered_neuron_idx_ = SIZE_MAX;  // Currently hovered neuron
 
     struct node_info_t {
         std::size_t neuron_idx  = 0;
@@ -91,6 +106,10 @@ public:
 
     void set_params(const params_t& params) { params_ = params; }
     [[nodiscard]] const params_t& get_params() const { return params_; }
+
+    // Colormap dirty flag - set when colormap changes, triggers re-render
+    [[nodiscard]] bool is_colormap_dirty() const { return colormap_dirty_; }
+    void clear_colormap_dirty() { colormap_dirty_ = false; }
 
     void create_model(fbgd &vis, const ngm2::neuron_group_t &ng);
     void update_model(fbgd &vis, const ngm2::neuron_group_t &ng);

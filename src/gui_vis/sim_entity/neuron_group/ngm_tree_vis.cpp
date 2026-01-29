@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <thread>
 
 #include "inc_on_exit.h"
@@ -39,11 +40,8 @@ void ngm_tree_vis::get_pixel_data(
     std::size_t syn_cnt = synapses.size();
     for (std::size_t i = 0; i < syn_cnt; ++i)
         if (tmp_tree[synapses.segment_idx[i]]) {
-            uint8_t value = static_cast<uint8_t>(std::clamp(synapses.permanence[i] * 255.0f, 0.0f, 255.0f));
-            output[pix].r = value;
-            output[pix].g = value;
-            output[pix].b = value;
-            output[pix].a = 255;
+            float normalized = std::clamp(synapses.permanence[i], 0.0f, 1.0f);
+            output[pix] = apply_colormap(colormap_, normalized);
             ++pix;
         }
 }
@@ -308,6 +306,37 @@ bool ngm_tree_vis::render_imgui(const char* label,
         return open;
     }
 
+    // Toolbar with zoom, reset, colormap, and hover option
+    ImGui::Text("Zoom: %.0f%%", zoom_level_ * 100.0f);
+    ImGui::SameLine();
+    if (ImGui::Button("Reset View")) {
+        target_zoom_ = 1.0f;
+        target_pan_x_ = 0.0f;
+        target_pan_y_ = 0.0f;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    if (ImGui::BeginCombo("##colormap", colormap_name(colormap_))) {
+        for (int i = 0; i < static_cast<int>(colormap_t::COUNT); ++i) {
+            auto cm = static_cast<colormap_t>(i);
+            bool is_selected = (colormap_ == cm);
+            if (ImGui::Selectable(colormap_name(cm), is_selected)) {
+                if (colormap_ != cm) {
+                    colormap_ = cm;
+                    colormap_dirty_ = true;
+                }
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Show on hover", &show_on_hover_);
+
+    ImGui::Separator();
+
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
     ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
     ImVec2 canvas_size = ImGui::GetContentRegionAvail();
@@ -320,21 +349,95 @@ bool ngm_tree_vis::render_imgui(const char* label,
     // Add invisible button to capture mouse input on canvas
     ImGui::InvisibleButton("canvas", canvas_size, ImGuiButtonFlags_MouseButtonLeft);
     bool canvas_clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-    ImVec2 mouse_pos = ImGui::GetIO().MousePos;
+    bool is_hovered = ImGui::IsItemHovered();
+    bool is_active = ImGui::IsItemActive();
+    ImGuiIO& io = ImGui::GetIO();
+    ImVec2 mouse_pos = io.MousePos;
 
-    // Scale factors
+    // Smooth interpolation for zoom/pan
+    constexpr float lerp_speed = 15.0f;
+    float lerp_t = std::min(1.0f, lerp_speed * io.DeltaTime);
+
+    // Handle scroll wheel zoom (only when hovered)
+    if (is_hovered && io.MouseWheel != 0.0f) {
+        float mouse_canvas_x = mouse_pos.x - canvas_pos.x;
+        float mouse_canvas_y = mouse_pos.y - canvas_pos.y;
+
+        // Calculate position in normalized space before zoom
+        float norm_x = (mouse_canvas_x + pan_x_) / (canvas_size.x * zoom_level_);
+        float norm_y = (mouse_canvas_y + pan_y_) / (canvas_size.y * zoom_level_);
+
+        // Apply zoom (exponential for smoother feel)
+        float zoom_factor = std::pow(1.15f, io.MouseWheel);
+        target_zoom_ = std::clamp(target_zoom_ * zoom_factor, 0.1f, 10.0f);
+
+        // Adjust target pan to keep the point under the mouse fixed
+        target_pan_x_ = norm_x * canvas_size.x * target_zoom_ - mouse_canvas_x;
+        target_pan_y_ = norm_y * canvas_size.y * target_zoom_ - mouse_canvas_y;
+    }
+
+    // Handle left-click drag for panning
+    if (is_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+        target_pan_x_ -= io.MouseDelta.x;
+        target_pan_y_ -= io.MouseDelta.y;
+        pan_x_ -= io.MouseDelta.x;
+        pan_y_ -= io.MouseDelta.y;
+    }
+
+    // Clamp target pan
+    float max_pan_x = std::max(0.0f, canvas_size.x * target_zoom_ - canvas_size.x);
+    float max_pan_y = std::max(0.0f, canvas_size.y * target_zoom_ - canvas_size.y);
+    target_pan_x_ = std::clamp(target_pan_x_, 0.0f, max_pan_x);
+    target_pan_y_ = std::clamp(target_pan_y_, 0.0f, max_pan_y);
+
+    // Smoothly interpolate current values
+    zoom_level_ = zoom_level_ + (target_zoom_ - zoom_level_) * lerp_t;
+    pan_x_ = pan_x_ + (target_pan_x_ - pan_x_) * lerp_t;
+    pan_y_ = pan_y_ + (target_pan_y_ - pan_y_) * lerp_t;
+
+    // Clamp current pan
+    max_pan_x = std::max(0.0f, canvas_size.x * zoom_level_ - canvas_size.x);
+    max_pan_y = std::max(0.0f, canvas_size.y * zoom_level_ - canvas_size.y);
+    pan_x_ = std::clamp(pan_x_, 0.0f, max_pan_x);
+    pan_y_ = std::clamp(pan_y_, 0.0f, max_pan_y);
+
+    // Transform function with zoom and pan
     const float region_size = region_size_;
     auto transform = [&](float x, float y) -> ImVec2 {
-        return ImVec2(
-            canvas_pos.x + (x / region_size) * canvas_size.x,
-            canvas_pos.y + (y / region_size) * canvas_size.y
-        );
+        float screen_x = (x / region_size) * canvas_size.x * zoom_level_ - pan_x_;
+        float screen_y = (y / region_size) * canvas_size.y * zoom_level_ - pan_y_;
+        return ImVec2(canvas_pos.x + screen_x, canvas_pos.y + screen_y);
     };
 
-    // Handle click detection on root nodes
-    if (canvas_clicked) {
+    // Hover detection for show_on_hover mode
+    hovered_neuron_idx_ = SIZE_MAX;
+    if (show_on_hover_ && is_hovered && !is_active) {
+        float hover_radius = params_.root_node_radius * zoom_level_ * 2.0f;
+        for (const auto &vis_node : vis_nodes) {
+            auto* node_idx_ptr = std::any_cast<std::size_t>(&vis_node.payload);
+            if (!node_idx_ptr || *node_idx_ptr >= nodes.size())
+                continue;
+
+            const auto &node = nodes[*node_idx_ptr];
+            if (node.segment_idx != 0)
+                continue;
+
+            ImVec2 node_pos = transform(vis_node.pos[0], vis_node.pos[1]);
+            float dx = mouse_pos.x - node_pos.x;
+            float dy = mouse_pos.y - node_pos.y;
+            float dist_sq = dx * dx + dy * dy;
+
+            if (dist_sq <= hover_radius * hover_radius) {
+                hovered_neuron_idx_ = node.neuron_idx;
+                break;
+            }
+        }
+    }
+
+    // Handle click detection on root nodes (only when not dragging)
+    if (canvas_clicked && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
         bool clicked_on_node = false;
-        float click_radius = params_.root_node_radius * 2.0f;  // Generous click area
+        float click_radius = params_.root_node_radius * zoom_level_ * 2.0f;
 
         for (const auto &vis_node : vis_nodes) {
             auto* node_idx_ptr = std::any_cast<std::size_t>(&vis_node.payload);
@@ -342,7 +445,6 @@ bool ngm_tree_vis::render_imgui(const char* label,
                 continue;
 
             const auto &node = nodes[*node_idx_ptr];
-            // Only check root nodes (segment_idx == 0)
             if (node.segment_idx != 0)
                 continue;
 
@@ -352,21 +454,25 @@ bool ngm_tree_vis::render_imgui(const char* label,
             float dist_sq = dx * dx + dy * dy;
 
             if (dist_sq <= click_radius * click_radius) {
-                // Toggle selection: if already selected, deselect; otherwise select
                 if (selected_neuron_idx_ == node.neuron_idx) {
-                    selected_neuron_idx_ = SIZE_MAX;  // Deselect
+                    selected_neuron_idx_ = SIZE_MAX;
                 } else {
-                    selected_neuron_idx_ = node.neuron_idx;  // Select this neuron
+                    selected_neuron_idx_ = node.neuron_idx;
                 }
                 clicked_on_node = true;
                 break;
             }
         }
 
-        // If clicked on empty space, deselect
         if (!clicked_on_node) {
             selected_neuron_idx_ = SIZE_MAX;
         }
+    }
+
+    // Determine which neuron's representations to show
+    std::size_t display_neuron_idx = selected_neuron_idx_;
+    if (display_neuron_idx == SIZE_MAX && show_on_hover_) {
+        display_neuron_idx = hovered_neuron_idx_;
     }
 
     // Precompute colors
@@ -399,7 +505,8 @@ bool ngm_tree_vis::render_imgui(const char* label,
 
         const auto &node2 = nodes[*node_idx_ptr];
         float sc_ratio = static_cast<float>(node2.synapse_count) / max_synapses;
-        float thickness = params_.edge_thickness_min + thickness_range * sc_ratio;
+        float base_thickness = params_.edge_thickness_min + thickness_range * sc_ratio;
+        float thickness = base_thickness * zoom_level_;
 
         draw_list->AddLine(pos1, pos2, edge_color, thickness);
     }
@@ -414,26 +521,33 @@ bool ngm_tree_vis::render_imgui(const char* label,
         const auto &node = nodes[*node_idx_ptr];
         ImVec2 pos = transform(vis_node.pos[0], vis_node.pos[1]);
 
-        // Only show textures for the selected neuron's leaf nodes
-        bool show_texture = (selected_neuron_idx_ != SIZE_MAX) &&
-                           (node.neuron_idx == selected_neuron_idx_) &&
+        // Skip nodes outside visible area
+        if (pos.x < canvas_pos.x - 50 || pos.x > canvas_pos.x + canvas_size.x + 50 ||
+            pos.y < canvas_pos.y - 50 || pos.y > canvas_pos.y + canvas_size.y + 50)
+            continue;
+
+        // Only show textures for the displayed neuron's leaf nodes
+        bool show_texture = (display_neuron_idx != SIZE_MAX) &&
+                           (node.neuron_idx == display_neuron_idx) &&
                            (!node.pixel_data.empty()) &&
                            (node.texture.is_valid());
 
         if (show_texture) {
-            float scale = canvas_size.x / params_.texture_scale_divisor;
+            float scale = canvas_size.x * zoom_level_ / params_.texture_scale_divisor;
             float w = static_cast<float>(node.texture.get_width()) * scale;
             float h = static_cast<float>(node.texture.get_height()) * scale;
             ImVec2 tex_pos(pos.x - w / 2, pos.y - h / 2);
             draw_list->AddImage(node.texture.as_imgui_texture(),
                 tex_pos, ImVec2(tex_pos.x + w, tex_pos.y + h));
         } else {
-            float radius = node.segment_idx == 0 ? params_.root_node_radius : params_.branch_node_radius;
+            float base_radius = node.segment_idx == 0 ? params_.root_node_radius : params_.branch_node_radius;
+            float radius = base_radius * zoom_level_;
             ImU32 color = node.segment_idx == 0 ? root_color : branch_color;
-            // Highlight selected neuron's root node
-            if (node.segment_idx == 0 && node.neuron_idx == selected_neuron_idx_) {
-                // Draw a slightly larger highlight ring around selected root
-                draw_list->AddCircle(pos, radius + 3.0f, IM_COL32(255, 255, 255, 200), 0, 2.0f);
+            // Highlight selected or hovered neuron's root node
+            if (node.segment_idx == 0 &&
+                (node.neuron_idx == selected_neuron_idx_ || node.neuron_idx == hovered_neuron_idx_)) {
+                // Draw a slightly larger highlight ring
+                draw_list->AddCircle(pos, radius + 3.0f * zoom_level_, IM_COL32(255, 255, 255, 200), 0, 2.0f);
             }
             draw_list->AddCircleFilled(pos, radius, color);
         }
@@ -606,7 +720,15 @@ private:
 
         if (update_interval_ == 0) return;
         if (!visible_) return;
-        if (step_count_ % update_interval_ != 0) return;
+
+        // Check if colormap changed (needs immediate update)
+        bool colormap_changed = vis_.is_colormap_dirty();
+        if (colormap_changed) {
+            vis_.clear_colormap_dirty();
+        }
+
+        // Update if interval elapsed OR colormap changed
+        if (step_count_ % update_interval_ != 0 && !colormap_changed) return;
 
         int expected = static_cast<int>(sync_state::idle);
         if (!sync_state_.compare_exchange_strong(expected,
