@@ -37,10 +37,13 @@ private:
     uint32_t px_width {};
     uint32_t px_height {};
 
-    // View state (zoom and pan)
+    // View state (zoom and pan) - uses target values for smooth interpolation
     float zoom_level = 1.0f;
+    float target_zoom = 1.0f;
     float pan_x = 0.0f;  // Pan offset in pixels (scaled coordinates)
     float pan_y = 0.0f;
+    float target_pan_x = 0.0f;
+    float target_pan_y = 0.0f;
 
     // Visibility state (for conditional updates)
     bool visible = false;
