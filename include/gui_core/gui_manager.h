@@ -12,6 +12,7 @@
 #include "config_editor.h"
 #include "entity_browser.h"
 #include "buffer_browser.h"
+#include "dataset_browser.h"
 #include "logging_window.h"
 
 namespace coast {
@@ -135,6 +136,7 @@ private:
     // Introspection browser windows (created when sim is set)
     std::unique_ptr<entity_browser> entity_browser_window;
     std::unique_ptr<buffer_browser> buffer_browser_window;
+    std::unique_ptr<dataset_browser> dataset_browser_window;
     logging_window logging_window_instance;
 
 

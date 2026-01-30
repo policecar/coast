@@ -74,7 +74,7 @@ public:
 
     void free_resources();
 
-    static params_t get_default(uint32_t rep_width, uint32_t rep_height);
+    static params_t get_default(uint32_t rep_width, uint32_t rep_height, uint32_t num_channels = 1);
 
     [[nodiscard]] uint32_t get_height() const;
     [[nodiscard]] uint32_t get_width() const;

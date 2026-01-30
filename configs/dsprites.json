@@ -12,7 +12,12 @@
                 "random_seed": 0,
                 "randomize_readout": true
             }
-        }
+        },
+        "emnist": {},
+        "kmnist": {},
+        "cifar10": {},
+        "cifar100": {},
+        "chairs3d": {}
     },
     "ngm2": {
         "dendrites": {
@@ -128,10 +133,16 @@
                     "ngm_flat_vis": {
                         "width": 64,
                         "height": 64,
+                        "num_channels": 1,
                         "update_interval": 10000
                     }
                 }
-            }
+            },
+            "emnist": {},
+            "kmnist": {},
+            "cifar10": {},
+            "cifar100": {},
+            "chairs3d": {}
         },
         "ngm2": {
             "neuron_groups": {
@@ -139,11 +150,13 @@
                     "ngm_flat_vis": {
                         "width": 64,
                         "height": 64,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 64,
                         "rep_height": 64,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,
@@ -172,11 +185,13 @@
                     "ngm_flat_vis": {
                         "width": 50,
                         "height": 1,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 28,
                         "rep_height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,

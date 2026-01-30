@@ -25,6 +25,7 @@ public:
         // Representation dimensions (for leaf node textures)
         int rep_width  = 28;
         int rep_height = 28;
+        int num_channels = 1;  // 1 = grayscale (use colormap), 3 = RGB
 
         // Background color (RGBA 0-255)
         uint8_t bg_r = 30, bg_g = 30, bg_b = 30, bg_a = 255;

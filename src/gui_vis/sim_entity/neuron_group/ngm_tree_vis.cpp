@@ -45,12 +45,29 @@ void ngm_tree_vis::get_pixel_data(
 
     std::size_t pix = 0;
     std::size_t syn_cnt = synapses.size();
-    for (std::size_t i = 0; i < syn_cnt && pix < buffer_size; ++i)
-        if (tmp_tree[synapses.segment_idx[i]]) {
-            float normalized = std::clamp(synapses.permanence[i], 0.0f, 1.0f);
-            output[pix] = apply_colormap(colormap_, normalized);
-            ++pix;
-        }
+
+    if (params_.num_channels == 3) {
+        // RGB mode: synapses contain interleaved RGB values
+        // We need 3 consecutive synapses per pixel
+        for (std::size_t i = 0; i + 2 < syn_cnt && pix < buffer_size; i += 3)
+            if (tmp_tree[synapses.segment_idx[i]]) {
+                output[pix] = color_t{
+                    static_cast<uint8_t>(std::clamp(synapses.permanence[i + 0] * 255.0f, 0.0f, 255.0f)),
+                    static_cast<uint8_t>(std::clamp(synapses.permanence[i + 1] * 255.0f, 0.0f, 255.0f)),
+                    static_cast<uint8_t>(std::clamp(synapses.permanence[i + 2] * 255.0f, 0.0f, 255.0f)),
+                    255
+                };
+                ++pix;
+            }
+    } else {
+        // Grayscale mode: use colormap
+        for (std::size_t i = 0; i < syn_cnt && pix < buffer_size; ++i)
+            if (tmp_tree[synapses.segment_idx[i]]) {
+                float normalized = std::clamp(synapses.permanence[i], 0.0f, 1.0f);
+                output[pix] = apply_colormap(colormap_, normalized);
+                ++pix;
+            }
+    }
 }
 
 gl_texture ngm_tree_vis::get_texture(int width, int height, const color_t *data)
@@ -769,6 +786,7 @@ public:
         coast::ngm_tree_vis::params_t params;
         params.rep_width = hint.rep_width;
         params.rep_height = hint.rep_height;
+        params.num_channels = hint.num_channels;
         params.bg_r = static_cast<uint8_t>(hint.bg_r);
         params.bg_g = static_cast<uint8_t>(hint.bg_g);
         params.bg_b = static_cast<uint8_t>(hint.bg_b);

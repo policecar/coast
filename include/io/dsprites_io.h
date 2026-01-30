@@ -67,6 +67,10 @@ public:
     [[nodiscard]] std::size_t current_index() const {
         return cur_idx;
     }
+    [[nodiscard]] std::span<const float> get_sample(std::size_t idx) const {
+        if (idx >= image_count) idx = image_count - 1;
+        return std::span(images.data() + idx * image_pixels, image_pixels);
+    }
 };
 
 } // namespace sim
