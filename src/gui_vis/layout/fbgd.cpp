@@ -379,7 +379,15 @@ void fbgd::draw() const
 
 const std::array<float, 2> & fbgd::get_node_pos(node_id_t node_id)
 {
-    return nodes[node_look_up[node_id]].pos;
+    static const std::array<float, 2> default_pos = {0.0f, 0.0f};
+    if (node_id >= node_look_up.size()) {
+        return default_pos;
+    }
+    auto idx = node_look_up[node_id];
+    if (idx >= nodes.size()) {
+        return default_pos;
+    }
+    return nodes[idx].pos;
 }
 
 }

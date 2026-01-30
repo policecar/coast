@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include <thread>
+#include <unordered_map>
 
 #include "inc_on_exit.h"
 #include "sim_entity/neuron_group/ngm_tree_vis.h"
@@ -27,7 +28,11 @@ void ngm_tree_vis::get_pixel_data(
     std::vector<color_t> &output
 )
 {
-    output.resize(width*height);
+    const std::size_t buffer_size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    output.resize(buffer_size);
+
+    // Fill with black (background) initially
+    std::fill(output.begin(), output.end(), color_t{0, 0, 0, 255});
 
     tmp_tree.clear();
     tmp_tree.resize(max_idx+1);
@@ -38,9 +43,9 @@ void ngm_tree_vis::get_pixel_data(
         tmp_tree[leaf_idx] = 1;
     }
 
-    int pix = 0;
+    std::size_t pix = 0;
     std::size_t syn_cnt = synapses.size();
-    for (std::size_t i = 0; i < syn_cnt; ++i)
+    for (std::size_t i = 0; i < syn_cnt && pix < buffer_size; ++i)
         if (tmp_tree[synapses.segment_idx[i]]) {
             float normalized = std::clamp(synapses.permanence[i], 0.0f, 1.0f);
             output[pix] = apply_colormap(colormap_, normalized);
@@ -114,40 +119,69 @@ void ngm_tree_vis::create_model(fbgd &vis, const ngm2::neuron_group_t &ng)
             std::size_t segment_base = branch_lu[branch_base_idx + branch_idx];
             const auto &synapses = cur_branch.get_synapses();
             std::size_t syn_cnt = synapses.size();
+
+            // First pass: mark segments that need to exist (including ancestors)
+            std::vector<uint8_t> segments_needed(max_segment + 1, 0);
             for (std::size_t i = 0; i < syn_cnt; ++i) {
-                if (nodes[segment_base + synapses.segment_idx[i]].used == 0) {
+                uint16_t seg = synapses.segment_idx[i];
+                while (seg >= 1 && segments_needed[seg] == 0) {
+                    segments_needed[seg] = 1;
+                    seg /= 2;
+                }
+            }
+
+            // Second pass: create nodes for all needed segments (ancestors first)
+            for (uint16_t seg = 1; seg <= max_segment; ++seg) {
+                if (segments_needed[seg] == 0) continue;
+                if (segment_base + seg >= nodes.size()) continue;
+
+                auto &cur_node = nodes[segment_base + seg];
+                if (cur_node.used == 0) {
                     gl_texture tex;
                     std::vector<color_t> pdata;
-                    if (leaf_mask[synapses.segment_idx[i]]) {
-                        get_pixel_data(params_.rep_width, params_.rep_height, synapses.segment_idx[i], max_segment, synapses, pdata);
+                    if (seg < leaf_mask.size() && leaf_mask[seg]) {
+                        get_pixel_data(params_.rep_width, params_.rep_height, seg, max_segment, synapses, pdata);
                         tex = get_texture(params_.rep_width, params_.rep_height, pdata.data());
                     }
-                    nodes[segment_base + synapses.segment_idx[i]] = {
-                        neuron_idx,          //std::size_t neuron_idx
-                        branch_idx,          //std::size_t branch_idx
-                        synapses.segment_idx[i], //uint16_t    segment_idx
-                        vis.add_node({xp + rdis(rgen) * (grid_spacing / 3), yp + rdis(rgen) * (grid_spacing / 3)}, false, 1.0f, segment_base + synapses.segment_idx[i]),      //fbgd::node_id_t node_id
-                        1,                    //uint8_t used
+                    cur_node = {
+                        neuron_idx,
+                        branch_idx,
+                        seg,
+                        vis.add_node({xp + rdis(rgen) * (grid_spacing / 3), yp + rdis(rgen) * (grid_spacing / 3)}, false, 1.0f, segment_base + seg),
+                        1,
                         std::move(tex),
                         std::move(pdata),
                         0
                     };
                 }
-                nodes[segment_base + synapses.segment_idx[i]].synapse_count++;
             }
-            // create edges
+
+            // Third pass: count synapses per segment
+            for (std::size_t i = 0; i < syn_cnt; ++i) {
+                if (segment_base + synapses.segment_idx[i] < nodes.size()) {
+                    nodes[segment_base + synapses.segment_idx[i]].synapse_count++;
+                }
+            }
+
+            // Fourth pass: create edges (parents guaranteed to exist now)
             const std::size_t max_idx = cur_branch.get_max_segment_idx();
             uint32_t cur_start = (max_idx + 1) / 2;
             while (cur_start > 1) {
-                for (std::size_t seg_idx = cur_start; seg_idx < cur_start*2; ++seg_idx) {
+                for (std::size_t seg_idx = cur_start; seg_idx < cur_start*2 && seg_idx <= max_idx; ++seg_idx) {
+                    if (segment_base + seg_idx >= nodes.size()) continue;
                     if (nodes[segment_base + seg_idx].used == 1) {
-                        vis.add_edge(nodes[segment_base + seg_idx/2].node_id, nodes[segment_base + seg_idx].node_id);
-                        assert(nodes[segment_base + seg_idx/2].used == 1);
+                        auto &parent = nodes[segment_base + seg_idx/2];
+                        if (parent.used > 0) {
+                            vis.add_edge(parent.node_id, nodes[segment_base + seg_idx].node_id);
+                        }
                     }
                 }
                 cur_start /= 2;
             }
-            vis.add_edge(nodes[root_node_idx].node_id, nodes[segment_base + 1].node_id);
+            // Connect segment 1 to root if it exists
+            if (segment_base + 1 < nodes.size() && nodes[segment_base + 1].used > 0) {
+                vis.add_edge(nodes[root_node_idx].node_id, nodes[segment_base + 1].node_id);
+            }
         }
 
     }
@@ -161,8 +195,8 @@ void ngm_tree_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
     std::size_t neuron_cnt = ng.get_neuron_count();
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx ) {
         const ngm2::neuron_t &cur_neuron = ng.get_neuron(neuron_idx);
+        std::size_t root_node_idx = neuron_lu[neuron_idx];
 
-        // go over all branches and create nodes where necessary
         std::size_t branch_base_idx = branch_start_lu[neuron_idx];
         std::size_t branch_cnt = cur_neuron.get_dendrite_count();
         for (std::size_t branch_idx = 0; branch_idx < branch_cnt; ++branch_idx) {
@@ -172,51 +206,96 @@ void ngm_tree_vis::update_model(fbgd &vis, const ngm2::neuron_group_t &ng)
             std::size_t segment_base = branch_lu[branch_base_idx + branch_idx];
             const auto &synapses = cur_branch.get_synapses();
             std::size_t syn_cnt = synapses.size();
+
+            // Track new nodes that need edges, and their spawn positions
+            std::vector<uint16_t> new_nodes_needing_edges;
+            std::unordered_map<uint16_t, std::array<float, 2>> new_node_positions;
+
+            // Calculate spawn offset based on region size (similar to create_model's grid_spacing/3)
+            const float spawn_offset = region_size_ * 0.05f;
+
+            // Get root position once (root node should always exist and be in lookup)
+            const auto &root_pos = vis.get_node_pos(nodes[root_node_idx].node_id);
+
+            // Helper to get position of a segment (checking new nodes first, then fbgd)
+            auto get_seg_pos = [&](uint16_t seg) -> std::array<float, 2> {
+                if (seg == 0) return root_pos;
+                auto it = new_node_positions.find(seg);
+                if (it != new_node_positions.end()) {
+                    return it->second;
+                }
+                if (segment_base + seg < nodes.size() && nodes[segment_base + seg].used > 0) {
+                    return vis.get_node_pos(nodes[segment_base + seg].node_id);
+                }
+                return root_pos;  // Fallback
+            };
+
+            // Single pass: count synapses and create nodes on-demand
             for (std::size_t i = 0; i < syn_cnt; ++i) {
-                auto &cur_node = nodes[segment_base + synapses.segment_idx[i]];
-                if (cur_node.pixel_data.empty() == false)
-                {
-                    if (leaf_mask[synapses.segment_idx[i]] == 0) {
-                        cur_node.pixel_data.clear();
-                    } else {
-                        get_pixel_data(params_.rep_width, params_.rep_height, synapses.segment_idx[i], max_segment, synapses, cur_node.pixel_data);
-                        cur_node.texture.update(cur_node.pixel_data);
-                    }
-                } else if (cur_node.used == 0) {
-                    auto &vis_pos = vis.get_node_pos(nodes[segment_base + synapses.segment_idx[i]/2].node_id);
-                    float vx = vis_pos[0] + rdis(rgen) * 0.0001f;
-                    float vy = vis_pos[1] + rdis(rgen) * 0.0001f;
-                    gl_texture tex;
-                    std::vector<color_t> pdata;
-                    if (leaf_mask[synapses.segment_idx[i]]) {
-                        get_pixel_data(params_.rep_width, params_.rep_height, synapses.segment_idx[i], max_segment, synapses, pdata);
-                        tex = get_texture(params_.rep_width, params_.rep_height, pdata.data());
-                    }
-                    cur_node = {
-                        neuron_idx,          //std::size_t neuron_idx
-                        branch_idx,          //std::size_t branch_idx
-                        synapses.segment_idx[i], //uint16_t    segment_idx
-                        vis.add_node({vx,vy}, false, 1.0f, segment_base + synapses.segment_idx[i]),      //fbgd::node_id_t node_id
-                        2,                    //uint8_t used
-                        std::move(tex),
-                        std::move(pdata),
-                        0
-                    };
-                }
+                uint16_t seg = synapses.segment_idx[i];
+                if (segment_base + seg >= nodes.size()) continue;
+
+                auto &cur_node = nodes[segment_base + seg];
+
+                // Only count synapse once per segment per update
                 cur_node.synapse_count++;
-            }
-            // create edges
-            const std::size_t max_idx = cur_branch.get_max_segment_idx();
-            uint32_t cur_start = (max_idx + 1) / 2;
-            while (cur_start > 1) {
-                for (std::size_t seg_idx = cur_start; seg_idx < cur_start*2; ++seg_idx) {
-                    if (nodes[segment_base + seg_idx].used == 2) {
-                        nodes[segment_base + seg_idx].used = 1;
-                        vis.add_edge(nodes[segment_base + seg_idx/2].node_id, nodes[segment_base + seg_idx].node_id);
-                        assert(nodes[segment_base + seg_idx/2].used > 0);
+
+                // Create node if it doesn't exist
+                if (cur_node.used == 0) {
+                    // Ensure ancestors exist first (walk up tree from root to seg)
+                    // Build path from seg to root
+                    std::vector<uint16_t> path;
+                    uint16_t ancestor = seg;
+                    while (ancestor >= 1) {
+                        path.push_back(ancestor);
+                        if (ancestor == 1) break;
+                        ancestor /= 2;
+                    }
+
+                    // Process from root towards seg (reverse order)
+                    for (auto it = path.rbegin(); it != path.rend(); ++it) {
+                        uint16_t s = *it;
+                        if (segment_base + s >= nodes.size()) continue;
+                        auto &node = nodes[segment_base + s];
+                        if (node.used != 0) continue;
+
+                        // Get parent position
+                        uint16_t parent_seg = (s == 1) ? 0 : s / 2;
+                        auto parent_pos = get_seg_pos(parent_seg);
+                        float nx = parent_pos[0] + rdis(rgen) * spawn_offset;
+                        float ny = parent_pos[1] + rdis(rgen) * spawn_offset;
+
+                        // Store position for children to use
+                        new_node_positions[s] = {nx, ny};
+
+                        // Create texture only for leaf nodes
+                        gl_texture tex;
+                        std::vector<color_t> pdata;
+                        if (s == seg && s < leaf_mask.size() && leaf_mask[s]) {
+                            get_pixel_data(params_.rep_width, params_.rep_height, s, max_segment, synapses, pdata);
+                            tex = get_texture(params_.rep_width, params_.rep_height, pdata.data());
+                        }
+
+                        node = {
+                            neuron_idx, branch_idx, s,
+                            vis.add_node({nx, ny}, false, 1.0f, segment_base + s),
+                            1, std::move(tex), std::move(pdata), 0
+                        };
+                        new_nodes_needing_edges.push_back(s);
                     }
                 }
-                cur_start /= 2;
+            }
+
+            // Add edges for new nodes (sorted by segment to ensure parents before children)
+            std::sort(new_nodes_needing_edges.begin(), new_nodes_needing_edges.end());
+            for (uint16_t seg : new_nodes_needing_edges) {
+                if (segment_base + seg >= nodes.size()) continue;
+                auto &node = nodes[segment_base + seg];
+                if (seg == 1) {
+                    vis.add_edge(nodes[root_node_idx].node_id, node.node_id);
+                } else if (nodes[segment_base + seg/2].used > 0) {
+                    vis.add_edge(nodes[segment_base + seg/2].node_id, node.node_id);
+                }
             }
         }
     }
@@ -286,6 +365,8 @@ void ngm_tree_vis::update_repulsion_radii(fbgd &vis)
 
 void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &ng)
 {
+    (void)vis;  // Unused after simplification
+
     if (neuron_lu.empty()) return;
 
     std::size_t neuron_cnt = neuron_lu.size();
@@ -297,73 +378,16 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
     }
     if (neuron_cnt == 0) return;
 
-    // Calculate bounding box for each neuron's tree based on actual node positions
-    struct bbox_t {
-        float min_x = std::numeric_limits<float>::max();
-        float max_x = std::numeric_limits<float>::lowest();
-        float min_y = std::numeric_limits<float>::max();
-        float max_y = std::numeric_limits<float>::lowest();
-        float width() const { return max_x - min_x; }
-        float height() const { return max_y - min_y; }
-        void expand(float x, float y) {
-            min_x = std::min(min_x, x);
-            max_x = std::max(max_x, x);
-            min_y = std::min(min_y, y);
-            max_y = std::max(max_y, y);
-        }
-    };
-
-    std::vector<bbox_t> neuron_bboxes(neuron_cnt);
-
-    // Calculate bounding boxes from actual node positions
-    for (const auto& node : nodes) {
-        if (node.used == 0 || node.neuron_idx >= neuron_cnt) continue;
-        const auto& pos = vis.get_node_pos(node.node_id);
-        neuron_bboxes[node.neuron_idx].expand(pos[0], pos[1]);
-    }
-
-    // Convert bounding boxes to space requirements (with generous padding)
-    // spacing_multiplier_ allows user to adjust spacing via UI slider
-    const float padding = 0.05f * region_size_ * spacing_multiplier_;
-    const float min_size = 0.2f * region_size_ * spacing_multiplier_;
-
-    std::vector<float> neuron_widths(neuron_cnt);
-    std::vector<float> neuron_heights(neuron_cnt);
-
-    for (std::size_t i = 0; i < neuron_cnt; ++i) {
-        neuron_widths[i] = std::max(min_size, neuron_bboxes[i].width() + 2.0f * padding);
-        neuron_heights[i] = std::max(min_size, neuron_bboxes[i].height() + 2.0f * padding);
-    }
-
-    // Calculate grid positions with variable spacing based on actual tree sizes
+    // Use fixed grid spacing based on neuron count
     auto grid_cnt = static_cast<std::size_t>(std::ceil(std::sqrt(static_cast<float>(neuron_cnt))));
     if (grid_cnt == 0) grid_cnt = 1;
 
-    const float margin = region_size_ * 0.05f;
-
-    // Calculate column widths and row heights based on max tree size in each column/row
-    std::vector<float> col_widths(grid_cnt, min_size);
-    std::vector<float> row_heights(grid_cnt, min_size);
-
-    for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
-        std::size_t col = neuron_idx % grid_cnt;
-        std::size_t row = neuron_idx / grid_cnt;
-        col_widths[col] = std::max(col_widths[col], neuron_widths[neuron_idx]);
-        if (row < grid_cnt) {
-            row_heights[row] = std::max(row_heights[row], neuron_heights[neuron_idx]);
-        }
-    }
-
-    // No scaling - spacing_multiplier directly controls layout size
-    // User can zoom out to see the full layout if it exceeds the view
-
-    // Build cumulative positions
-    std::vector<float> col_positions(grid_cnt + 1, margin);
-    std::vector<float> row_positions(grid_cnt + 1, margin);
-    for (std::size_t i = 0; i < grid_cnt; ++i) {
-        col_positions[i + 1] = col_positions[i] + col_widths[i];
-        row_positions[i + 1] = row_positions[i] + row_heights[i];
-    }
+    // Cell size fills the region, spacing_multiplier allows expansion beyond region
+    // At multiplier 1.0, grid exactly fills the region
+    // Higher values spread neurons further apart (may need to zoom out)
+    const float base_cell_size = region_size_ / static_cast<float>(grid_cnt);
+    const float cell_size = base_cell_size * spacing_multiplier_;
+    const float margin = cell_size * 0.5f;
 
     // Store target positions for each neuron (animation happens in animate_tree_positions)
     neuron_target_positions_.resize(neuron_cnt);
@@ -376,9 +400,9 @@ void ngm_tree_vis::update_root_positions(fbgd &vis, const ngm2::neuron_group_t &
         std::size_t col = neuron_idx % grid_cnt;
         std::size_t row = neuron_idx / grid_cnt;
 
-        // Calculate ideal position at center of cell
-        float target_x = col_positions[col] + col_widths[col] * 0.5f;
-        float target_y = (row < grid_cnt) ? row_positions[row] + row_heights[row] * 0.5f : margin;
+        // Calculate ideal position at center of cell (uniform grid)
+        float target_x = margin + (static_cast<float>(col) + 0.5f) * cell_size;
+        float target_y = margin + (static_cast<float>(row) + 0.5f) * cell_size;
 
         neuron_target_positions_[neuron_idx] = {target_x, target_y};
     }
@@ -467,7 +491,7 @@ bool ngm_tree_vis::render_imgui(const char* label,
     ImGui::Checkbox("Show on hover", &show_on_hover_);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(scaled(100));
-    if (ImGui::SliderFloat("Spacing", &spacing_multiplier_, 0.3f, 3.0f, "%.1fx")) {
+    if (ImGui::SliderFloat("Spacing", &spacing_multiplier_, 0.5f, 3.0f, "%.1fx")) {
         spacing_dirty_ = true;
     }
 
@@ -661,7 +685,13 @@ bool ngm_tree_vis::render_imgui(const char* label,
                            (node.texture.is_valid());
 
         if (show_texture) {
-            float scale = canvas_size.x * zoom_level_ / params_.texture_scale_divisor;
+            // Scale texture size inversely proportional to representation dimensions
+            // so that larger representations (64x64) display at similar visual size as smaller ones (28x28)
+            constexpr float reference_size = 28.0f;  // MNIST size as reference
+            float max_dim = std::max(static_cast<float>(node.texture.get_width()),
+                                     static_cast<float>(node.texture.get_height()));
+            float size_scale = reference_size / std::max(max_dim, 1.0f);
+            float scale = canvas_size.x * zoom_level_ * size_scale / params_.texture_scale_divisor;
             float w = static_cast<float>(node.texture.get_width()) * scale;
             float h = static_cast<float>(node.texture.get_height()) * scale;
             ImVec2 tex_pos(pos.x - w / 2, pos.y - h / 2);
