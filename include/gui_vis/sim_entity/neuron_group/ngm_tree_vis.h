@@ -65,7 +65,7 @@ private:
     bool colormap_dirty_ = false;
 
     // Spacing control for root nodes
-    float spacing_multiplier_ = 0.3f;
+    float spacing_multiplier_ = 1.0f;
     bool spacing_dirty_ = false;
 
     // Target positions for each neuron's tree (for smooth animation)
