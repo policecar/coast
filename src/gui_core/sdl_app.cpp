@@ -10,8 +10,46 @@
 
 #include <stdexcept>
 #include <ranges>
+#include <cstdlib>
+#include <cstdio>
 
 namespace coast {
+
+// Get display scale factor for HiDPI support
+// On Wayland with fractional scaling, SDL2 doesn't report DPI correctly,
+// so we read Xft.dpi from X resources (set by KDE/GNOME for compatibility)
+static float get_display_scale()
+{
+#ifdef __linux__
+    const char* wayland_display = std::getenv("WAYLAND_DISPLAY");
+    if (wayland_display) {
+        // Try to get DPI from Xft.dpi (X resources, set by desktop environments)
+        FILE* pipe = popen("xrdb -query 2>/dev/null | grep 'Xft.dpi' | cut -f2", "r");
+        if (pipe) {
+            char buffer[32];
+            if (fgets(buffer, sizeof(buffer), pipe)) {
+                float dpi = std::atof(buffer);
+                pclose(pipe);
+                if (dpi > 0) {
+                    return dpi / 96.0f;
+                }
+            } else {
+                pclose(pipe);
+            }
+        }
+
+        // Fallback: check QT_SCALE_FACTOR environment variable
+        const char* qt_scale = std::getenv("QT_SCALE_FACTOR");
+        if (qt_scale) {
+            float scale = std::atof(qt_scale);
+            if (scale > 0) {
+                return scale;
+            }
+        }
+    }
+#endif
+    return 1.0f;
+}
 
 sdl_app::sdl_app(const char* title)
 {
@@ -89,11 +127,15 @@ void sdl_app::init_imgui()
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
+    // Get display scale factor for HiDPI support (especially for Wayland fractional scaling)
+    float scale = get_display_scale();
+
     // Setup style
     ImGui::StyleColorsDark();
 
-    // Load custom font
-    io.Fonts->AddFontFromFileTTF("./3rd_party/DejaVuSans.ttf", 16.0f);
+    // Load custom font with DPI-aware size
+    float base_font_size = 16.0f;
+    io.Fonts->AddFontFromFileTTF("./3rd_party/DejaVuSans.ttf", base_font_size * scale);
 
     // Setup platform/renderer backends
 #ifdef __APPLE__

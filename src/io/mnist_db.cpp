@@ -11,6 +11,7 @@
 #include <numeric>
 #include <limits>
 #include <ranges>
+#include <stdexcept>
 
 namespace mnist {
 
@@ -33,28 +34,26 @@ idx_file::idx_file(const std::string &filename) :
     u8_data(), i8_data(), i16_data(), i32_data(), f32_data(), f64_data(),
     dimensions(),element_size(),num_elements()
 {
-//    std::fstream ifs(filename,std::ios::binary | std::ios::in);
     std::FILE *file = std::fopen(filename.c_str(),"rb");
     if (!file) {
-        std::cerr << "Could not open file " << filename << std::endl;
-        return;
+        throw std::runtime_error("Could not open file: " + filename);
     }
     uint32_t tmp;
     std::size_t elements_read = std::fread(&tmp, sizeof(tmp), 1, file);
     if (elements_read != 1) {
-        std::cerr << "Could not read file " << filename << std::endl;
-        std::cerr << "Read " << elements_read << " elements from " << filename << std::endl;
+        std::fclose(file);
+        throw std::runtime_error("Could not read file: " + filename);
     }
     uint32_t magic = std::byteswap(tmp);
     if ((magic >> 16) != 0) {
-        std::cerr << "Invalid magic number" << std::endl;
-        return;
+        std::fclose(file);
+        throw std::runtime_error("Invalid magic number in file: " + filename);
     }
     uint8_t data_type = (magic >> 8) & 0xff;
     uint8_t dim_count = (magic >> 0) & 0xff;
     if (dim_count == 0) {
-        std::cerr << "Invalid dimensions" << std::endl;
-        return;
+        std::fclose(file);
+        throw std::runtime_error("Invalid dimensions in file: " + filename);
     }
     for (uint8_t i = 0; i < dim_count; i++) {
         //    ifs >> tmp;
@@ -83,7 +82,9 @@ idx_file::idx_file(const std::string &filename) :
         case 0x0E : {
             read_data(file, f64_data);
         } break;
-        default:    std::cerr << "Invalid data type" << std::endl;
+        default:
+            std::fclose(file);
+            throw std::runtime_error("Invalid data type in file: " + filename);
     }
     std::fclose(file);
 }
@@ -94,15 +95,10 @@ mnist_db::mnist_db(const std::string &img_file, const std::string &label_file) :
     norm_img_data( img_data.get_u8().size() )
 {
     if (img_data.get_u8().size() != img_data.get_num_elements() * img_data.get_element_size()) {
-        std::cerr << "unexpected data in img_file" << std::endl;
-        std::cerr << img_data.get_u8().size() << std::endl;
-        std::cerr << img_data.get_num_elements() << std::endl;
-        std::cerr << img_data.get_element_size() << std::endl;
-        return;
+        throw std::runtime_error("Unexpected data size in image file: " + img_file);
     }
     if (img_data.get_num_elements() != label_data.get_num_elements()) {
-        std::cerr << "img_file and label_file have different number of elements" << std::endl;
-        return;
+        throw std::runtime_error("Image file and label file have different number of elements");
     }
 
     for (auto [fval,ival] : std::views::zip(norm_img_data,img_data.get_u8())) {
