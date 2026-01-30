@@ -4,8 +4,8 @@
 
 #include <algorithm>
 #include <ranges>
-#include <cstdio>
 #include <optional>
+#include <stdexcept>
 
 #include "sim_env.h"
 
@@ -17,8 +17,7 @@ void env::init_io_buffers()
         const std::size_t id = io_ent.get_outp_id();
         auto [buf_it,success] = io_buffers.emplace(id, io_buffer(io_ent.get_outp_size()));
         if (success == false) {
-            std::fprintf(stderr,"duplicate io_entity ID!\n");
-            std::terminate();
+            throw std::runtime_error("Duplicate io_entity ID: " + std::to_string(id));
         }
         io_ent.set_outp_func(buf_it->second.outp_buffer_func());
     }
@@ -28,8 +27,7 @@ void env::init_io_buffers()
         for (auto inp_id : inp_ids) {
             auto it = io_buffers.find(inp_id);
             if (it == io_buffers.end()) {
-                std::fprintf(stderr,"missing io_entity ID!\n");
-                std::terminate();
+                throw std::runtime_error("Missing io_entity ID: " + std::to_string(inp_id));
             }
             io_ent.set_inp_func(inp_id, it->second.inp_buffer_func() );
         }
