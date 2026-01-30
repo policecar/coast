@@ -72,6 +72,8 @@ add_executable(coast
         include/gui_core/entity_browser.h
         src/gui_core/buffer_browser.cpp
         include/gui_core/buffer_browser.h
+        src/gui_core/dataset_browser.cpp
+        include/gui_core/dataset_browser.h
         src/gui_core/logging_window.cpp
         include/gui_core/logging_window.h
 
@@ -138,6 +140,26 @@ add_executable(coast
         include/io/mnist_cfg.h
         include/io/dataset_cfg.h
         include/io/dsprites_cfg.h
+        # EMNIST dataset
+        include/io/emnist_cfg.h
+        include/io/emnist_io.h
+        src/io/emnist_io.cpp
+        # KMNIST dataset
+        include/io/kmnist_cfg.h
+        include/io/kmnist_io.h
+        src/io/kmnist_io.cpp
+        # CIFAR-10 dataset
+        include/io/cifar10_cfg.h
+        include/io/cifar10_io.h
+        src/io/cifar10_io.cpp
+        # CIFAR-100 dataset
+        include/io/cifar100_cfg.h
+        include/io/cifar100_io.h
+        src/io/cifar100_io.cpp
+        # 3D Chairs dataset
+        include/io/chairs3d_cfg.h
+        include/io/chairs3d_io.h
+        src/io/chairs3d_io.cpp
 
         # HD-NGM2 neural model
         include/hd_ngm2/hd_ngm2_dendrite.h
@@ -183,6 +205,7 @@ target_include_directories(coast SYSTEM PRIVATE
         3rd_party/ImNodeFlow/src
         3rd_party/imgui-filebrowser
         3rd_party/json/include
+        3rd_party/stb
         ${SDL2_INCLUDE_DIRS}
         ${HDF5_INCLUDE_DIRS}
 )

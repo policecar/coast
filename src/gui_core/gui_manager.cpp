@@ -25,6 +25,10 @@ void gui_manager::set_sim_instance(sim_instance* instance)
         buffer_browser_window->free_resources();
         buffer_browser_window.reset();
     }
+    if (dataset_browser_window) {
+        dataset_browser_window->free_resources();
+        dataset_browser_window.reset();
+    }
 
     sim = instance;
 
@@ -32,6 +36,7 @@ void gui_manager::set_sim_instance(sim_instance* instance)
     if (sim) {
         entity_browser_window = std::make_unique<entity_browser>(*sim);
         buffer_browser_window = std::make_unique<buffer_browser>(*sim);
+        dataset_browser_window = std::make_unique<dataset_browser>(*sim);
 
         cfg_editor = std::make_unique<config_editor>(sim->get_config(), sim->get_config_path());
         // Set reload callback to trigger loading of saved config
@@ -121,6 +126,11 @@ void gui_manager::render_menu_bar()
                 if (buffer_browser_window) {
                     if (ImGui::MenuItem("IO Buffers...", nullptr, buffer_browser_window->visible())) {
                         buffer_browser_window->visible() = !buffer_browser_window->visible();
+                    }
+                }
+                if (dataset_browser_window) {
+                    if (ImGui::MenuItem("Dataset...", nullptr, dataset_browser_window->visible())) {
+                        dataset_browser_window->visible() = !dataset_browser_window->visible();
                     }
                 }
                 if (ImGui::MenuItem("Logging...", nullptr, logging_window_instance.visible())) {
@@ -213,6 +223,9 @@ void gui_manager::render_dialogs()
         }
         if (buffer_browser_window) {
             buffer_browser_window->render();
+        }
+        if (dataset_browser_window) {
+            dataset_browser_window->render();
         }
         render_performance_window();
     }
@@ -332,7 +345,7 @@ void gui_manager::render_status_bar()
                            | ImGuiWindowFlags_NoFocusOnAppearing;
 
     if (ImGui::Begin("##StatusBar", nullptr, flags)) {
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("FPS: %6.1f", ImGui::GetIO().Framerate);
 
         if (sim) {
             // Simulation status
@@ -340,13 +353,13 @@ void gui_manager::render_status_bar()
                 ImGui::SameLine();
                 sim::sim_mode mode = controller->get_mode();
                 if (mode == sim::sim_mode::paused) {
-                    ImGui::Text(" | Sim: Paused");
+                    ImGui::Text(" | Sim: Paused         ");
                 } else {
                     double actual_sps = controller->get_actual_sps();
                     if (mode == sim::sim_mode::unlimited) {
-                        ImGui::Text(" | Sim: %.0f/s (unlimited)", actual_sps);
+                        ImGui::Text(" | Sim: %7.0f/s (max)", actual_sps);
                     } else {
-                        ImGui::Text(" | Sim: %.0f/s", actual_sps);
+                        ImGui::Text(" | Sim: %7.0f/s     ", actual_sps);
                     }
                 }
             }

@@ -16,6 +16,11 @@ NLOHMANN_JSON_SERIALIZE_ENUM( io_entity_type_t, {
     {io_entity_type_t::ngm2_neuron_group, "ngm2_neuron_group"},
     {io_entity_type_t::mnist_input,       "mnist_input"      },
     {io_entity_type_t::dsprites_input,    "dsprites_input"   },
+    {io_entity_type_t::emnist_input,      "emnist_input"     },
+    {io_entity_type_t::kmnist_input,      "kmnist_input"     },
+    {io_entity_type_t::cifar10_input,     "cifar10_input"    },
+    {io_entity_type_t::cifar100_input,    "cifar100_input"   },
+    {io_entity_type_t::chairs3d_input,    "chairs3d_input"   },
     {io_entity_type_t::ENTITY_COUNT,       nullptr           },
 })
 

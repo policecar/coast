@@ -17,6 +17,11 @@ const char* entity_type_name(sim::io_entity_type_t type)
         case sim::io_entity_type_t::ngm2_neuron_group: return "neuron_group";
         case sim::io_entity_type_t::mnist_input:       return "mnist_input";
         case sim::io_entity_type_t::dsprites_input:    return "dsprites_input";
+        case sim::io_entity_type_t::emnist_input:      return "emnist_input";
+        case sim::io_entity_type_t::kmnist_input:      return "kmnist_input";
+        case sim::io_entity_type_t::cifar10_input:     return "cifar10_input";
+        case sim::io_entity_type_t::cifar100_input:    return "cifar100_input";
+        case sim::io_entity_type_t::chairs3d_input:    return "chairs3d_input";
         default:                                       return "unknown";
     }
 }

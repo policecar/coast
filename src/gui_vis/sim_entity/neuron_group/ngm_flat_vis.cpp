@@ -299,7 +299,7 @@ void ngm_flat_vis::free_resources()
     texture.release();
 }
 
-ngm_flat_vis::params_t ngm_flat_vis::get_default(uint32_t rep_width, uint32_t rep_height)
+ngm_flat_vis::params_t ngm_flat_vis::get_default(uint32_t rep_width, uint32_t rep_height, uint32_t num_channels)
 {
     params_t result {};
     result.layout = layout_t::vertical_per_neuron;
@@ -309,6 +309,7 @@ ngm_flat_vis::params_t ngm_flat_vis::get_default(uint32_t rep_width, uint32_t re
     result.vis_params.vec_params.elem_width  = 1;
     result.vis_params.vec_params.rep_width   = rep_width;
     result.vis_params.vec_params.rep_height  = rep_height;
+    result.vis_params.vec_params.num_channels = num_channels;
     return result;
 }
 
@@ -371,7 +372,8 @@ public:
 
         auto params = coast::ngm_flat_vis::get_default(
             static_cast<uint32_t>(hint.width),
-            static_cast<uint32_t>(hint.height)
+            static_cast<uint32_t>(hint.height),
+            static_cast<uint32_t>(hint.num_channels)
         );
         vis_ = std::make_unique<coast::ngm_flat_vis>(ng_, params);
 

@@ -4,7 +4,7 @@
             "max_interval": {
                 "image_file": "./data/mnist/train-images-idx3-ubyte",
                 "label_file": "./data/mnist/train-labels-idx1-ubyte",
-                "change_interval": 15,
+                "change_interval": 1,
                 "noise_range": [
                     0.0,
                     0.05
@@ -22,7 +22,12 @@
                 "random_seed": 0
             }
         },
-        "dsprites": {}
+        "dsprites": {},
+        "emnist": {},
+        "kmnist": {},
+        "cifar10": {},
+        "cifar100": {},
+        "chairs3d": {}
     },
     "ngm2": {
         "dendrites": {
@@ -137,6 +142,7 @@
                     "ngm_flat_vis": {
                         "width": 28,
                         "height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000
                     }
                 },
@@ -144,11 +150,17 @@
                     "ngm_flat_vis": {
                         "width": 28,
                         "height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000
                     }
                 }
             },
-            "dsprites": {}
+            "dsprites": {},
+            "emnist": {},
+            "kmnist": {},
+            "cifar10": {},
+            "cifar100": {},
+                        "chairs3d": {}
         },
         "ngm2": {
             "neuron_groups": {
@@ -156,11 +168,13 @@
                     "ngm_flat_vis": {
                         "width": 28,
                         "height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 28,
                         "rep_height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,
@@ -189,11 +203,13 @@
                     "ngm_flat_vis": {
                         "width": 50,
                         "height": 1,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 28,
                         "rep_height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,

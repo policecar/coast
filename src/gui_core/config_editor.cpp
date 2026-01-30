@@ -11,6 +11,11 @@
 
 #include "mnist_cfg.h"
 #include "dsprites_cfg.h"
+#include "emnist_cfg.h"
+#include "kmnist_cfg.h"
+#include "cifar10_cfg.h"
+#include "cifar100_cfg.h"
+#include "chairs3d_cfg.h"
 #include "hd_ngm2_cfg.h"
 #include "sim_builder_cfg.h"
 
@@ -171,6 +176,203 @@ static bool render_dsprites_config(const std::string& name, dsprites::dsprites_p
             modified = true;
         }
         if (ImGui::Checkbox("Randomize Readout", &cfg.randomize_readout)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render EMNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_emnist_config(const std::string& name, emnist::emnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render KMNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_kmnist_config(const std::string& name, kmnist::kmnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-10 config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar10_config(const std::string& name, cifar10::cifar10_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Data Directory", cfg.data_dir)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Use Test Set", &cfg.use_test_set)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-100 config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar100_config(const std::string& name, cifar100::cifar100_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Data Directory", cfg.data_dir)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Use Test Set", &cfg.use_test_set)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Use Coarse Labels", &cfg.use_coarse_labels)) {
+            modified = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Use 20 superclasses instead of 100 fine classes");
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render 3D Chairs config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_chairs3d_config(const std::string& name, chairs3d::chairs3d_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Data Directory", cfg.data_dir)) {
+            modified = true;
+        }
+
+        if (ImGui::InputInt("Image Width", &cfg.image_width)) {
+            cfg.image_width = std::max(1, cfg.image_width);
+            modified = true;
+        }
+        if (ImGui::InputInt("Image Height", &cfg.image_height)) {
+            cfg.image_height = std::max(1, cfg.image_height);
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
             modified = true;
         }
 
@@ -527,6 +729,11 @@ static std::string_view get_entity_type_name(sim::io_entity_type_t type)
         case sim::io_entity_type_t::ngm2_neuron_group: return "Neuron Group";
         case sim::io_entity_type_t::mnist_input: return "MNIST Input";
         case sim::io_entity_type_t::dsprites_input: return "dSprites Input";
+        case sim::io_entity_type_t::emnist_input: return "EMNIST Input";
+        case sim::io_entity_type_t::kmnist_input: return "KMNIST Input";
+        case sim::io_entity_type_t::cifar10_input: return "CIFAR-10 Input";
+        case sim::io_entity_type_t::cifar100_input: return "CIFAR-100 Input";
+        case sim::io_entity_type_t::chairs3d_input: return "3D Chairs Input";
         default: return "Unknown";
     }
 }
@@ -549,7 +756,11 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
     }
 
     // Entity type dropdown
-    static constexpr std::array type_names = { "Neuron Group", "MNIST Input", "dSprites Input" };
+    static constexpr std::array type_names = {
+        "Neuron Group", "MNIST Input", "dSprites Input",
+        "EMNIST Input", "KMNIST Input", "CIFAR-10 Input",
+        "CIFAR-100 Input", "3D Chairs Input"
+    };
     int type_idx = static_cast<int>(node.entity_type);
     if (ImGui::Combo("Entity Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
         node.entity_type = static_cast<sim::io_entity_type_t>(type_idx);
@@ -577,6 +788,46 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
                 break;
             case sim::io_entity_type_t::dsprites_input:
                 for (const auto& [key, val] : cfg.datasets.dsprites) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::emnist_input:
+                for (const auto& [key, val] : cfg.datasets.emnist) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::kmnist_input:
+                for (const auto& [key, val] : cfg.datasets.kmnist) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::cifar10_input:
+                for (const auto& [key, val] : cfg.datasets.cifar10) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::cifar100_input:
+                for (const auto& [key, val] : cfg.datasets.cifar100) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::chairs3d_input:
+                for (const auto& [key, val] : cfg.datasets.chairs3d) {
                     if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
                         node.entity_cfg = key;
                         modified = true;
@@ -904,6 +1155,166 @@ void config_editor::render_dataset_configs()
             }
             ImGui::TreePop();
         }
+
+        // EMNIST configs
+        if (ImGui::TreeNode("EMNIST Configs")) {
+            std::string emnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.emnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_emnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    emnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!emnist_to_remove.empty()) {
+                config.datasets.emnist.erase(emnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_emnist_name;
+            if (InputTextString("##newemnist", new_emnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add EMNIST Config") && !new_emnist_name.empty()) {
+                config.datasets.emnist[new_emnist_name] = {};
+                new_emnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // KMNIST configs
+        if (ImGui::TreeNode("KMNIST Configs")) {
+            std::string kmnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.kmnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_kmnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    kmnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!kmnist_to_remove.empty()) {
+                config.datasets.kmnist.erase(kmnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_kmnist_name;
+            if (InputTextString("##newkmnist", new_kmnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add KMNIST Config") && !new_kmnist_name.empty()) {
+                config.datasets.kmnist[new_kmnist_name] = {};
+                new_kmnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // CIFAR-10 configs
+        if (ImGui::TreeNode("CIFAR-10 Configs")) {
+            std::string cifar10_to_remove;
+            for (auto& [name, cfg] : config.datasets.cifar10) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_cifar10_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    cifar10_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!cifar10_to_remove.empty()) {
+                config.datasets.cifar10.erase(cifar10_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_cifar10_name;
+            if (InputTextString("##newcifar10", new_cifar10_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add CIFAR-10 Config") && !new_cifar10_name.empty()) {
+                config.datasets.cifar10[new_cifar10_name] = {};
+                new_cifar10_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // CIFAR-100 configs
+        if (ImGui::TreeNode("CIFAR-100 Configs")) {
+            std::string cifar100_to_remove;
+            for (auto& [name, cfg] : config.datasets.cifar100) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_cifar100_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    cifar100_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!cifar100_to_remove.empty()) {
+                config.datasets.cifar100.erase(cifar100_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_cifar100_name;
+            if (InputTextString("##newcifar100", new_cifar100_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add CIFAR-100 Config") && !new_cifar100_name.empty()) {
+                config.datasets.cifar100[new_cifar100_name] = {};
+                new_cifar100_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // 3D Chairs configs
+        if (ImGui::TreeNode("3D Chairs Configs")) {
+            std::string chairs3d_to_remove;
+            for (auto& [name, cfg] : config.datasets.chairs3d) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_chairs3d_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    chairs3d_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!chairs3d_to_remove.empty()) {
+                config.datasets.chairs3d.erase(chairs3d_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_chairs3d_name;
+            if (InputTextString("##newchairs3d", new_chairs3d_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add 3D Chairs Config") && !new_chairs3d_name.empty()) {
+                config.datasets.chairs3d[new_chairs3d_name] = {};
+                new_chairs3d_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
     }
 }
 
@@ -1182,6 +1593,15 @@ static bool render_ngm_flat_vis_hint(ngm_flat_vis_hint_t& hint)
         modified = true;
     }
 
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Channels", &hint.num_channels)) {
+        hint.num_channels = std::clamp(hint.num_channels, 1, 3);
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("1 = grayscale (colormap), 3 = RGB");
+    }
+
     ImGui::SetNextItemWidth(scaled_width(120));
     if (ImGui::InputInt("Update Interval", &hint.update_interval)) {
         hint.update_interval = std::max(0, hint.update_interval);
@@ -1234,6 +1654,106 @@ static bool render_dsprites_hint(const std::string& name, dsprites_hint_t& hint,
     return modified;
 }
 
+// Helper: Render EMNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_emnist_hint(const std::string& name, emnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render KMNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_kmnist_hint(const std::string& name, kmnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-10 hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar10_hint(const std::string& name, cifar10_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-100 hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar100_hint(const std::string& name, cifar100_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render 3D Chairs hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_chairs3d_hint(const std::string& name, chairs3d_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
 // Helper: Render ngm_tree_vis_hint_t (returns true if modified)
 static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
 {
@@ -1250,6 +1770,15 @@ static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
     if (ImGui::InputInt("Rep Height", &hint.rep_height)) {
         hint.rep_height = std::max(1, hint.rep_height);
         modified = true;
+    }
+
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Channels##tree", &hint.num_channels)) {
+        hint.num_channels = std::clamp(hint.num_channels, 1, 3);
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("1 = grayscale (colormap), 3 = RGB");
     }
 
     ImGui::SetNextItemWidth(scaled_width(120));
@@ -1407,6 +1936,166 @@ void config_editor::render_visualization_hints()
                 if (ImGui::SmallButton("+ Add dSprites Hint") && !new_dsprites_hint_name.empty()) {
                     config.vis_hints.datasets.dsprites[new_dsprites_hint_name] = {{64, 64}};
                     new_dsprites_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // EMNIST hints
+            if (ImGui::TreeNode("EMNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.emnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_emnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.emnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_emnist_hint_name;
+                if (InputTextString("##newemnisthint", new_emnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add EMNIST Hint") && !new_emnist_hint_name.empty()) {
+                    config.vis_hints.datasets.emnist[new_emnist_hint_name] = {{28, 28, 1}};
+                    new_emnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // KMNIST hints
+            if (ImGui::TreeNode("KMNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.kmnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_kmnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.kmnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_kmnist_hint_name;
+                if (InputTextString("##newkmnisthint", new_kmnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add KMNIST Hint") && !new_kmnist_hint_name.empty()) {
+                    config.vis_hints.datasets.kmnist[new_kmnist_hint_name] = {{28, 28, 1}};
+                    new_kmnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // CIFAR-10 hints
+            if (ImGui::TreeNode("CIFAR-10")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.cifar10) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_cifar10_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.cifar10.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_cifar10_hint_name;
+                if (InputTextString("##newcifar10hint", new_cifar10_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add CIFAR-10 Hint") && !new_cifar10_hint_name.empty()) {
+                    config.vis_hints.datasets.cifar10[new_cifar10_hint_name] = {{32, 32, 3}};
+                    new_cifar10_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // CIFAR-100 hints
+            if (ImGui::TreeNode("CIFAR-100")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.cifar100) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_cifar100_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.cifar100.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_cifar100_hint_name;
+                if (InputTextString("##newcifar100hint", new_cifar100_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add CIFAR-100 Hint") && !new_cifar100_hint_name.empty()) {
+                    config.vis_hints.datasets.cifar100[new_cifar100_hint_name] = {{32, 32, 3}};
+                    new_cifar100_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // 3D Chairs hints
+            if (ImGui::TreeNode("3D Chairs")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.chairs3d) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_chairs3d_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.chairs3d.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_chairs3d_hint_name;
+                if (InputTextString("##newchairs3dhint", new_chairs3d_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add 3D Chairs Hint") && !new_chairs3d_hint_name.empty()) {
+                    config.vis_hints.datasets.chairs3d[new_chairs3d_hint_name] = {{64, 64, 3}};
+                    new_chairs3d_hint_name.clear();
                     mark_dirty();
                 }
                 ImGui::TreePop();
