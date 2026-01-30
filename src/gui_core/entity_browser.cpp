@@ -3,6 +3,7 @@
 #include "sim_builder.h"
 #include "vis_registry.h"
 #include "imgui.h"
+#include "imgui_scaling.h"
 
 #include <algorithm>
 
@@ -103,7 +104,7 @@ void entity_browser::render_browser_window()
         }
 
         // Filter bar
-        ImGui::SetNextItemWidth(200);
+        ImGui::SetNextItemWidth(scaled(200));
         ImGui::InputTextWithHint("##filter", "Filter...", filter_text, sizeof(filter_text));
         ImGui::SameLine();
         ImGui::TextDisabled("(%zu entities)", cached_rows.size());
@@ -128,12 +129,12 @@ void entity_browser::render_browser_window()
         if (ImGui::BeginTable("entities_table", 6, table_flags, ImVec2(0, table_height))) {
             // Setup columns
             ImGui::TableSetupScrollFreeze(0, 1); // Freeze header row
-            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, 50.0f);
-            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, scaled(50));
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, scaled(120));
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, scaled(100));
             ImGui::TableSetupColumn("Config", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Out Size", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-            ImGui::TableSetupColumn("Inputs", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+            ImGui::TableSetupColumn("Out Size", ImGuiTableColumnFlags_WidthFixed, scaled(70));
+            ImGui::TableSetupColumn("Inputs", ImGuiTableColumnFlags_WidthFixed, scaled(50));
             ImGui::TableHeadersRow();
 
             // Handle sorting

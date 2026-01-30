@@ -1,5 +1,6 @@
 #include "gui_manager.h"
 #include "sim_thread_controller.h"
+#include "imgui_scaling.h"
 
 #include <cfloat>
 
@@ -187,7 +188,7 @@ void gui_manager::render_dialogs()
             ImGui::Spacing();
             ImGui::TextWrapped("%s", load_error_message.c_str());
             ImGui::Spacing();
-            if (ImGui::Button("OK", ImVec2(120, 0))) {
+            if (ImGui::Button("OK", ImVec2(scaled(120), 0))) {
                 load_error_message.clear();
             }
         }

@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "imgui.h"
+#include "imgui_scaling.h"
 
 namespace coast {
 
@@ -71,7 +72,7 @@ bool vec_ring_buffer::render_imgui(const char* label, int& update_interval, floa
             target_pan_y = 0.0f;
         }
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(100);
+        ImGui::SetNextItemWidth(scaled(100));
         if (ImGui::BeginCombo("##colormap", colormap_name(colormap))) {
             for (int i = 0; i < static_cast<int>(colormap_t::COUNT); ++i) {
                 auto cm = static_cast<colormap_t>(i);
@@ -89,7 +90,7 @@ bool vec_ring_buffer::render_imgui(const char* label, int& update_interval, floa
             ImGui::EndCombo();
         }
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(scaled(120));
         ImGui::SliderInt("Update", &update_interval, 1, 1000);
 
         ImGui::Separator();
