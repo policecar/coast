@@ -46,7 +46,7 @@
       }
     },
     "neuron_groups": {
-      "default": {
+      "L4-dsprites": {
         "input_channels": ["ga"],
         "neurons": [
           { "name": "pyramidal", "neuron_cfg": "default", "neuron_count": 50 }
@@ -75,7 +75,7 @@
         "id": 1,
         "label": "group 1",
         "entity_type": "ngm2_neuron_group",
-        "entity_cfg": "default",
+        "entity_cfg": "L4-dsprites",
         "inputs": [[0, "ga"]]
       }
     ],
@@ -90,7 +90,8 @@
     },
     "ngm2": {
       "neuron_groups": {
-        "default": { "ngm_flat_vis": { "width": 50, "height": 1 } }
+        "default": { "ngm_flat_vis": { "width": 50, "height": 1 } },
+        "L4-dsprites": { "ngm_flat_vis": { "width": 64, "height": 64 } }
       }
     }
   }
