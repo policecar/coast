@@ -236,8 +236,8 @@ void gui_manager::render_control_dialog()
         sim::sim_mode current_mode = controller->get_mode();
         bool is_running = (current_mode != sim::sim_mode::paused);
 
-        const float button_width = 30.0f;
-        const float label_width = 70.0f;
+        const float button_width = scaled(30);
+        const float label_width = ImGui::CalcTextSize("unlimited").x + scaled(8);
         const float spacing = ImGui::GetStyle().ItemSpacing.x;
         const float available_width = ImGui::GetContentRegionAvail().x;
 
