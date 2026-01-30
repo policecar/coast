@@ -16,6 +16,7 @@
 #include "cifar10_cfg.h"
 #include "cifar100_cfg.h"
 #include "chairs3d_cfg.h"
+#include "color_mnist_cfg.h"
 #include "hd_ngm2_cfg.h"
 #include "sim_builder_cfg.h"
 
@@ -386,6 +387,45 @@ static bool render_chairs3d_config(const std::string& name, chairs3d::chairs3d_p
     return modified;
 }
 
+// Helper: Render Color MNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_color_mnist_config(const std::string& name, color_mnist::color_mnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::TextDisabled("(Colors digits randomly as Red, Green, or Blue)");
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
 // Helper: Render dendrite config (returns true if modified, sets remove_requested if remove clicked)
 static bool render_dendrite_config(const std::string& name, ngm2::dendrite_params_t& cfg, bool& remove_requested)
 {
@@ -726,14 +766,15 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
 static std::string_view get_entity_type_name(sim::io_entity_type_t type)
 {
     switch (type) {
-        case sim::io_entity_type_t::ngm2_neuron_group: return "Neuron Group";
-        case sim::io_entity_type_t::mnist_input: return "MNIST Input";
-        case sim::io_entity_type_t::dsprites_input: return "dSprites Input";
-        case sim::io_entity_type_t::emnist_input: return "EMNIST Input";
-        case sim::io_entity_type_t::kmnist_input: return "KMNIST Input";
-        case sim::io_entity_type_t::cifar10_input: return "CIFAR-10 Input";
-        case sim::io_entity_type_t::cifar100_input: return "CIFAR-100 Input";
-        case sim::io_entity_type_t::chairs3d_input: return "3D Chairs Input";
+        case sim::io_entity_type_t::ngm2_neuron_group:  return "Neuron Group";
+        case sim::io_entity_type_t::mnist_input:        return "MNIST Input";
+        case sim::io_entity_type_t::dsprites_input:     return "dSprites Input";
+        case sim::io_entity_type_t::emnist_input:       return "EMNIST Input";
+        case sim::io_entity_type_t::kmnist_input:       return "KMNIST Input";
+        case sim::io_entity_type_t::cifar10_input:      return "CIFAR-10 Input";
+        case sim::io_entity_type_t::cifar100_input:     return "CIFAR-100 Input";
+        case sim::io_entity_type_t::chairs3d_input:     return "3D Chairs Input";
+        case sim::io_entity_type_t::color_mnist_input:  return "Color MNIST Input";
         default: return "Unknown";
     }
 }
@@ -759,7 +800,7 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
     static constexpr std::array type_names = {
         "Neuron Group", "MNIST Input", "dSprites Input",
         "EMNIST Input", "KMNIST Input", "CIFAR-10 Input",
-        "CIFAR-100 Input", "3D Chairs Input"
+        "CIFAR-100 Input", "3D Chairs Input", "Color MNIST Input"
     };
     int type_idx = static_cast<int>(node.entity_type);
     if (ImGui::Combo("Entity Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
@@ -828,6 +869,14 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
                 break;
             case sim::io_entity_type_t::chairs3d_input:
                 for (const auto& [key, val] : cfg.datasets.chairs3d) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::color_mnist_input:
+                for (const auto& [key, val] : cfg.datasets.color_mnist) {
                     if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
                         node.entity_cfg = key;
                         modified = true;
@@ -1315,6 +1364,38 @@ void config_editor::render_dataset_configs()
             }
             ImGui::TreePop();
         }
+
+        // Color MNIST configs
+        if (ImGui::TreeNode("Color MNIST Configs")) {
+            std::string color_mnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.color_mnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_color_mnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    color_mnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!color_mnist_to_remove.empty()) {
+                config.datasets.color_mnist.erase(color_mnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_color_mnist_name;
+            if (InputTextString("##newcolormnist", new_color_mnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add Color MNIST Config") && !new_color_mnist_name.empty()) {
+                config.datasets.color_mnist[new_color_mnist_name] = {};
+                new_color_mnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
     }
 }
 
@@ -1754,6 +1835,26 @@ static bool render_chairs3d_hint(const std::string& name, chairs3d_hint_t& hint,
     return modified;
 }
 
+// Helper: Render Color MNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_color_mnist_hint(const std::string& name, color_mnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
 // Helper: Render ngm_tree_vis_hint_t (returns true if modified)
 static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
 {
@@ -2096,6 +2197,38 @@ void config_editor::render_visualization_hints()
                 if (ImGui::SmallButton("+ Add 3D Chairs Hint") && !new_chairs3d_hint_name.empty()) {
                     config.vis_hints.datasets.chairs3d[new_chairs3d_hint_name] = {{64, 64, 3}};
                     new_chairs3d_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // Color MNIST hints
+            if (ImGui::TreeNode("Color MNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.color_mnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_color_mnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.color_mnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_color_mnist_hint_name;
+                if (InputTextString("##newcolormnisthint", new_color_mnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add Color MNIST Hint") && !new_color_mnist_hint_name.empty()) {
+                    config.vis_hints.datasets.color_mnist[new_color_mnist_hint_name] = {{28, 28, 3}};
+                    new_color_mnist_hint_name.clear();
                     mark_dirty();
                 }
                 ImGui::TreePop();

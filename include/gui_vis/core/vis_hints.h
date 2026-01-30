@@ -76,19 +76,24 @@ struct chairs3d_hint_t {
     ngm_flat_vis_hint_t ngm_flat_vis = {.width = 64, .height = 64, .num_channels = 3, .update_interval = 1000};
 };
 
+struct color_mnist_hint_t {
+    ngm_flat_vis_hint_t ngm_flat_vis = {.width = 28, .height = 28, .num_channels = 3, .update_interval = 1000};
+};
+
 struct buffer_vis_hint_t {
     int update_interval = 100;  // Simulation steps between updates (0 = every frame)
     int ring_length = 500;      // Number of time steps to show in time series
 };
 
 struct dataset_hints_t {
-    std::unordered_map<std::string,mnist_hint_t>    mnist;
-    std::unordered_map<std::string,dsprites_hint_t> dsprites;
-    std::unordered_map<std::string,emnist_hint_t>   emnist;
-    std::unordered_map<std::string,kmnist_hint_t>   kmnist;
-    std::unordered_map<std::string,cifar10_hint_t>  cifar10;
-    std::unordered_map<std::string,cifar100_hint_t> cifar100;
-    std::unordered_map<std::string,chairs3d_hint_t> chairs3d;
+    std::unordered_map<std::string,mnist_hint_t>       mnist;
+    std::unordered_map<std::string,dsprites_hint_t>    dsprites;
+    std::unordered_map<std::string,emnist_hint_t>      emnist;
+    std::unordered_map<std::string,kmnist_hint_t>      kmnist;
+    std::unordered_map<std::string,cifar10_hint_t>     cifar10;
+    std::unordered_map<std::string,cifar100_hint_t>    cifar100;
+    std::unordered_map<std::string,chairs3d_hint_t>    chairs3d;
+    std::unordered_map<std::string,color_mnist_hint_t> color_mnist;
 
     dataset_hints_t()
     {
@@ -99,6 +104,7 @@ struct dataset_hints_t {
         cifar10["default"];
         cifar100["default"];
         chairs3d["default"];
+        color_mnist["default"];
     }
 };
 

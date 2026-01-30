@@ -160,6 +160,10 @@ add_executable(coast
         include/io/chairs3d_cfg.h
         include/io/chairs3d_io.h
         src/io/chairs3d_io.cpp
+        # Color MNIST dataset (MNIST with random R/G/B coloring)
+        include/io/color_mnist_cfg.h
+        include/io/color_mnist_io.h
+        src/io/color_mnist_io.cpp
 
         # HD-NGM2 neural model
         include/hd_ngm2/hd_ngm2_dendrite.h

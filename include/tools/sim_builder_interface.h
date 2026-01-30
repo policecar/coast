@@ -16,6 +16,7 @@
 #include "cifar10_io.h"
 #include "cifar100_io.h"
 #include "chairs3d_io.h"
+#include "color_mnist_io.h"
 
 namespace sim {
 
@@ -167,6 +168,25 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
         [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
             // nothing to init for chairs3d
+        }
+    );
+
+    // create function for color_mnist datasets
+    sb.register_create_func( sim::io_entity_type_t::color_mnist_input,
+        [cfg_store = jl.get_datasets_cfg()](const std::string &cfg_type, sim::output_id_t out_id, sim::env &sim_env)
+        {
+            const auto it = cfg_store.color_mnist.find(cfg_type);
+            if (it == cfg_store.color_mnist.end())
+                throw std::runtime_error("Unknown color_mnist configuration: " + cfg_type);
+            color_mnist::color_mnist_param_t params = it->second;
+            sim_env.emplace_back<color_mnist::color_mnist_io>(params,out_id);
+        }
+    );
+    // init function for color_mnist datasets
+    sb.register_init_func( sim::io_entity_type_t::color_mnist_input,
+        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        {
+            // nothing to init for color_mnist
         }
     );
 

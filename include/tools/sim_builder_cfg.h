@@ -21,6 +21,7 @@ enum class io_entity_type_t {
     cifar10_input,
     cifar100_input,
     chairs3d_input,
+    color_mnist_input,
     ENTITY_COUNT
 };
 

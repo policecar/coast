@@ -69,6 +69,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(chairs3d_hint_t,
     ngm_flat_vis
 )
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(color_mnist_hint_t,
+    ngm_flat_vis
+)
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(dataset_hints_t,
     mnist,
     dsprites,
@@ -76,7 +80,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(dataset_hints_t,
     kmnist,
     cifar10,
     cifar100,
-    chairs3d
+    chairs3d,
+    color_mnist
 )
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(neuron_group_hints_t,

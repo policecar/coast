@@ -15,6 +15,7 @@
 #include "cifar10_cfg.h"
 #include "cifar100_cfg.h"
 #include "chairs3d_cfg.h"
+#include "color_mnist_cfg.h"
 
 using json = nlohmann::ordered_json;
 
@@ -104,6 +105,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(chairs3d_param_t,
 
 }
 
+namespace color_mnist {
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(color_mnist_param_t,
+    image_file,
+    label_file,
+    change_interval,
+    noise_range,
+    random_seed
+)
+
+}
+
 namespace dataset {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(cfg_store,
@@ -113,7 +126,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(cfg_store,
     kmnist,
     cifar10,
     cifar100,
-    chairs3d
+    chairs3d,
+    color_mnist
 )
 
 
