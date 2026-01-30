@@ -15,6 +15,7 @@
 #include "vis_registry.h"
 #include "sim_env.h"
 #include "imgui.h"
+#include "imgui_scaling.h"
 
 namespace coast {
 
@@ -445,7 +446,7 @@ bool ngm_tree_vis::render_imgui(const char* label,
         target_pan_y_ = 0.0f;
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(100);
+    ImGui::SetNextItemWidth(scaled(100));
     if (ImGui::BeginCombo("##colormap", colormap_name(colormap_))) {
         for (int i = 0; i < static_cast<int>(colormap_t::COUNT); ++i) {
             auto cm = static_cast<colormap_t>(i);
@@ -465,7 +466,7 @@ bool ngm_tree_vis::render_imgui(const char* label,
     ImGui::SameLine();
     ImGui::Checkbox("Show on hover", &show_on_hover_);
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(100);
+    ImGui::SetNextItemWidth(scaled(100));
     if (ImGui::SliderFloat("Spacing", &spacing_multiplier_, 0.3f, 3.0f, "%.1fx")) {
         spacing_dirty_ = true;
     }

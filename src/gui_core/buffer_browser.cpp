@@ -4,6 +4,7 @@
 #include "vis_registry.h"
 #include "io_buffer.h"
 #include "imgui.h"
+#include "imgui_scaling.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -120,7 +121,7 @@ void buffer_browser::render_browser_window()
         rebuild_cache();
 
         // Filter bar
-        ImGui::SetNextItemWidth(200);
+        ImGui::SetNextItemWidth(scaled(200));
         ImGui::InputTextWithHint("##filter", "Filter...", filter_text, sizeof(filter_text));
         ImGui::SameLine();
         ImGui::TextDisabled("(%zu buffers)", cached_rows.size());
@@ -142,12 +143,12 @@ void buffer_browser::render_browser_window()
         if (ImGui::BeginTable("buffers_table", 6, table_flags, ImVec2(0, table_height))) {
             // Setup columns
             ImGui::TableSetupScrollFreeze(0, 1);
-            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, scaled(50));
             ImGui::TableSetupColumn("Output of", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-            ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, scaled(70));
+            ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthFixed, scaled(80));
+            ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed, scaled(80));
+            ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed, scaled(80));
             ImGui::TableHeadersRow();
 
             // Track which row is selected

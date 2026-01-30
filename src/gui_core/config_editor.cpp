@@ -74,6 +74,12 @@ bool DragDoubleRange2(const char* label, double& v_min, double& v_max,
     return false;
 }
 
+// Helper: Get scaled width for input widgets (accounts for HiDPI font scaling)
+float scaled_width(float base_width)
+{
+    return base_width * (ImGui::GetFontSize() / 16.0f);
+}
+
 } // anonymous namespace
 
 // Helper: Render string list editor (returns true if modified)
@@ -589,13 +595,13 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
             ImGui::PushID(static_cast<int>(i));
             int src_id = static_cast<int>(node.inputs[i].first);
 
-            ImGui::SetNextItemWidth(80);
+            ImGui::SetNextItemWidth(scaled_width(80));
             if (ImGui::InputInt("##src", &src_id)) {
                 node.inputs[i].first = static_cast<sim::sim_node_id_t>(src_id);
                 modified = true;
             }
             ImGui::SameLine();
-            if (InputTextStringWidth("##chan", node.inputs[i].second, 120)) {
+            if (InputTextStringWidth("##chan", node.inputs[i].second, scaled_width(120))) {
                 modified = true;
             }
             ImGui::SameLine();
@@ -746,7 +752,7 @@ void config_editor::render_save_confirm_dialog()
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button("Save", ImVec2(100, 0))) {
+        if (ImGui::Button("Save", ImVec2(scaled_width(100), 0))) {
             if (save_config(pending_save_path)) {
                 original_config = config;
                 is_dirty = false;
@@ -759,7 +765,7 @@ void config_editor::render_save_confirm_dialog()
             pending_save_path.clear();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+        if (ImGui::Button("Cancel", ImVec2(scaled_width(100), 0))) {
             show_save_confirm_dialog = false;
             pending_save_path.clear();
         }
@@ -788,7 +794,7 @@ void config_editor::render_save_as_confirm_dialog()
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button("Overwrite", ImVec2(100, 0))) {
+        if (ImGui::Button("Overwrite", ImVec2(scaled_width(100), 0))) {
             if (save_config(pending_save_path)) {
                 config_path = pending_save_path;
                 original_config = config;
@@ -802,7 +808,7 @@ void config_editor::render_save_as_confirm_dialog()
             pending_save_path.clear();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+        if (ImGui::Button("Cancel", ImVec2(scaled_width(100), 0))) {
             show_save_as_confirm_dialog = false;
             pending_save_path.clear();
         }
@@ -1164,19 +1170,19 @@ static bool render_ngm_flat_vis_hint(ngm_flat_vis_hint_t& hint)
 {
     bool modified = false;
 
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(scaled_width(80));
     if (ImGui::InputInt("Width", &hint.width)) {
         hint.width = std::max(1, hint.width);
         modified = true;
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(scaled_width(80));
     if (ImGui::InputInt("Height", &hint.height)) {
         hint.height = std::max(1, hint.height);
         modified = true;
     }
 
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(scaled_width(120));
     if (ImGui::InputInt("Update Interval", &hint.update_interval)) {
         hint.update_interval = std::max(0, hint.update_interval);
         modified = true;
@@ -1234,19 +1240,19 @@ static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
     bool modified = false;
 
     // Representation dimensions
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(scaled_width(80));
     if (ImGui::InputInt("Rep Width", &hint.rep_width)) {
         hint.rep_width = std::max(1, hint.rep_width);
         modified = true;
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(80);
+    ImGui::SetNextItemWidth(scaled_width(80));
     if (ImGui::InputInt("Rep Height", &hint.rep_height)) {
         hint.rep_height = std::max(1, hint.rep_height);
         modified = true;
     }
 
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(scaled_width(120));
     if (ImGui::InputInt("Update Interval##tree", &hint.update_interval)) {
         hint.update_interval = std::max(0, hint.update_interval);
         modified = true;
@@ -1271,17 +1277,17 @@ static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
 
     // Node appearance
     if (ImGui::TreeNode("Node Appearance")) {
-        ImGui::SetNextItemWidth(80);
+        ImGui::SetNextItemWidth(scaled_width(80));
         if (ImGui::InputFloat("Root Radius", &hint.root_node_radius, 0.5f)) {
             hint.root_node_radius = std::max(0.5f, hint.root_node_radius);
             modified = true;
         }
-        ImGui::SetNextItemWidth(80);
+        ImGui::SetNextItemWidth(scaled_width(80));
         if (ImGui::InputFloat("Branch Radius", &hint.branch_node_radius, 0.5f)) {
             hint.branch_node_radius = std::max(0.5f, hint.branch_node_radius);
             modified = true;
         }
-        ImGui::SetNextItemWidth(120);
+        ImGui::SetNextItemWidth(scaled_width(120));
         if (ImGui::InputFloat("Texture Scale Div", &hint.texture_scale_divisor, 100.0f)) {
             hint.texture_scale_divisor = std::max(100.0f, hint.texture_scale_divisor);
             modified = true;
@@ -1291,12 +1297,12 @@ static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
 
     // Edge appearance
     if (ImGui::TreeNode("Edge Appearance")) {
-        ImGui::SetNextItemWidth(80);
+        ImGui::SetNextItemWidth(scaled_width(80));
         if (ImGui::InputFloat("Min Thickness", &hint.edge_thickness_min, 0.5f)) {
             hint.edge_thickness_min = std::max(0.5f, hint.edge_thickness_min);
             modified = true;
         }
-        ImGui::SetNextItemWidth(80);
+        ImGui::SetNextItemWidth(scaled_width(80));
         if (ImGui::InputFloat("Max Thickness", &hint.edge_thickness_max, 0.5f)) {
             hint.edge_thickness_max = std::max(hint.edge_thickness_min, hint.edge_thickness_max);
             modified = true;
@@ -1447,7 +1453,7 @@ void config_editor::render_visualization_hints()
 
         // IO Buffer hints
         if (ImGui::TreeNode("IO Buffer Hints")) {
-            ImGui::SetNextItemWidth(120);
+            ImGui::SetNextItemWidth(scaled_width(120));
             if (ImGui::InputInt("Update Interval", &config.vis_hints.buffer_vis.update_interval)) {
                 config.vis_hints.buffer_vis.update_interval = std::max(0, config.vis_hints.buffer_vis.update_interval);
                 mark_dirty();
@@ -1456,7 +1462,7 @@ void config_editor::render_visualization_hints()
                 ImGui::SetTooltip("Simulation steps between updates (0 = disabled)");
             }
 
-            ImGui::SetNextItemWidth(120);
+            ImGui::SetNextItemWidth(scaled_width(120));
             if (ImGui::InputInt("Ring Length", &config.vis_hints.buffer_vis.ring_length)) {
                 config.vis_hints.buffer_vis.ring_length = std::clamp(config.vis_hints.buffer_vis.ring_length, 10, 10000);
                 mark_dirty();

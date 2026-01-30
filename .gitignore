@@ -62,3 +62,4 @@ imgui.ini
 
 # debug information files
 *.dwo
+data/
