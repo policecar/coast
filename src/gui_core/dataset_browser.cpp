@@ -11,6 +11,7 @@
 #include "cifar10_io.h"
 #include "cifar100_io.h"
 #include "chairs3d_io.h"
+#include "color_mnist_io.h"
 
 #include <algorithm>
 #include <cmath>
@@ -22,14 +23,15 @@ namespace {
 const char* entity_type_name(sim::io_entity_type_t type)
 {
     switch (type) {
-        case sim::io_entity_type_t::mnist_input:    return "MNIST";
-        case sim::io_entity_type_t::emnist_input:   return "EMNIST";
-        case sim::io_entity_type_t::kmnist_input:   return "KMNIST";
-        case sim::io_entity_type_t::dsprites_input: return "dSprites";
-        case sim::io_entity_type_t::cifar10_input:  return "CIFAR-10";
-        case sim::io_entity_type_t::cifar100_input: return "CIFAR-100";
-        case sim::io_entity_type_t::chairs3d_input: return "3D Chairs";
-        default:                                    return nullptr;
+        case sim::io_entity_type_t::mnist_input:       return "MNIST";
+        case sim::io_entity_type_t::emnist_input:      return "EMNIST";
+        case sim::io_entity_type_t::kmnist_input:      return "KMNIST";
+        case sim::io_entity_type_t::dsprites_input:    return "dSprites";
+        case sim::io_entity_type_t::cifar10_input:     return "CIFAR-10";
+        case sim::io_entity_type_t::cifar100_input:    return "CIFAR-100";
+        case sim::io_entity_type_t::chairs3d_input:    return "3D Chairs";
+        case sim::io_entity_type_t::color_mnist_input: return "Color MNIST";
+        default:                                       return nullptr;
     }
 }
 
@@ -228,6 +230,15 @@ void dataset_browser::select_dataset(int idx)
                 img_width = w; img_height = h; img_channels = c;
                 sample_count = ds->sample_count();
                 get_sample_func = [ds](std::size_t idx) { return ds->get_sample(idx); };
+            }
+        } break;
+        case sim::io_entity_type_t::color_mnist_input: {
+            auto* ds = dynamic_cast<color_mnist::color_mnist_io*>(entity_ptr);
+            if (ds) {
+                // Show underlying grayscale images (color is applied at runtime)
+                img_width = 28; img_height = 28; img_channels = 1;
+                sample_count = ds->sample_count();
+                get_sample_func = [ds](std::size_t idx) { return ds->get_norm_image(idx); };
             }
         } break;
         default:

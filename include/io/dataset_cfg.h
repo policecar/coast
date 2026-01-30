@@ -14,18 +14,20 @@
 #include "cifar10_cfg.h"
 #include "cifar100_cfg.h"
 #include "chairs3d_cfg.h"
+#include "color_mnist_cfg.h"
 
 namespace dataset {
 
 struct cfg_store {
 
-    std::unordered_map<std::string,mnist::mnist_param_t>       mnist;
-    std::unordered_map<std::string,dsprites::dsprites_param_t> dsprites;
-    std::unordered_map<std::string,emnist::emnist_param_t>     emnist;
-    std::unordered_map<std::string,kmnist::kmnist_param_t>     kmnist;
-    std::unordered_map<std::string,cifar10::cifar10_param_t>   cifar10;
-    std::unordered_map<std::string,cifar100::cifar100_param_t> cifar100;
-    std::unordered_map<std::string,chairs3d::chairs3d_param_t> chairs3d;
+    std::unordered_map<std::string,mnist::mnist_param_t>             mnist;
+    std::unordered_map<std::string,dsprites::dsprites_param_t>       dsprites;
+    std::unordered_map<std::string,emnist::emnist_param_t>           emnist;
+    std::unordered_map<std::string,kmnist::kmnist_param_t>           kmnist;
+    std::unordered_map<std::string,cifar10::cifar10_param_t>         cifar10;
+    std::unordered_map<std::string,cifar100::cifar100_param_t>       cifar100;
+    std::unordered_map<std::string,chairs3d::chairs3d_param_t>       chairs3d;
+    std::unordered_map<std::string,color_mnist::color_mnist_param_t> color_mnist;
 
     cfg_store()
     {
@@ -36,6 +38,7 @@ struct cfg_store {
         cifar10["default"];
         cifar100["default"];
         chairs3d["default"];
+        color_mnist["default"];
     }
 
 };
