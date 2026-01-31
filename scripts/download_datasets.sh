@@ -772,14 +772,41 @@ download_selected() {
                 update_dataset_status "$dataset" "$line"
                 ((line++))
 
-                # Check if still running
+                # Check if this dataset is still in progress
                 if [[ "$status" != "done" && "$status" != "failed" && "$status" != "skipped" ]]; then
                     all_done=false
                 fi
             fi
         done
 
-        sleep 0.5
+        # If status files say all done, verify by waiting briefly for any remaining processes
+        if [[ "$all_done" == "true" ]]; then
+            # Double-check: wait a moment and re-verify all statuses are terminal
+            sleep 0.2
+            for dataset in "${DATASET_ORDER[@]}"; do
+                if [[ "${DATASET_SELECTED[$dataset]}" == "1" ]]; then
+                    local status_line
+                    status_line=$(read_status "$dataset")
+                    IFS=':' read -r status _ _ <<< "$status_line"
+                    if [[ "$status" != "done" && "$status" != "failed" && "$status" != "skipped" ]]; then
+                        all_done=false
+                        break
+                    fi
+                fi
+            done
+        fi
+
+        [[ "$all_done" == "false" ]] && sleep 0.5
+    done
+
+    # Wait for all background processes to fully terminate
+    for dataset in "${DATASET_ORDER[@]}"; do
+        if [[ "${DATASET_SELECTED[$dataset]}" == "1" ]]; then
+            local pid="${DOWNLOAD_PIDS[$dataset]}"
+            if [[ -n "$pid" ]]; then
+                wait "$pid" 2>/dev/null || true
+            fi
+        fi
     done
 
     printf "${SHOW_CURSOR}"
