@@ -23,12 +23,17 @@ buffer_browser::~buffer_browser()
 
 void buffer_browser::render()
 {
-    if (!is_visible) return;
-
-    // Update all active visualizations
+    // Always update active visualizations, even when browser window is closed
+    // This ensures the GUI thread processes sync requests from the sim thread
     update_visualizations();
 
-    render_browser_window();
+    // Always render visualization windows (they're separate from the browser)
+    render_visualization_windows();
+
+    // Only render the browser table/details panel when visible
+    if (is_visible) {
+        render_browser_window();
+    }
 }
 
 void buffer_browser::free_resources()
@@ -213,8 +218,11 @@ void buffer_browser::render_browser_window()
         }
     }
     ImGui::End();
+}
 
-    // Render visualization windows (outside main window)
+void buffer_browser::render_visualization_windows()
+{
+    // Render visualization windows (separate from browser window)
     std::vector<std::string> to_remove;
     for (auto& [key, vis] : active_visualizations) {
         if (vis && vis->is_visible()) {

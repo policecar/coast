@@ -11,6 +11,8 @@
 #include <utility>
 #include <generator>
 #include <memory>
+#include <atomic>
+#include <mutex>
 
 #include "io_entity.h"
 #include "io_buffer.h"
@@ -51,11 +53,34 @@ class env {
     std::unordered_map<std::type_index,std::unique_ptr<entity_vec>> entities;
     std::unordered_map<std::size_t,io_buffer> io_buffers;
 
-    std::size_t next_hook_id {};
-    std::unordered_map<std::size_t,std::function<void()>> pre_process_hooks;
-    std::unordered_map<std::size_t,std::function<void()>> post_process_hooks;
-    std::unordered_map<std::size_t,std::function<void()>> pre_swap_hooks;
-    std::unordered_map<std::size_t,std::function<void()>> post_swap_hooks;
+    // Hook management - deferred registration pattern
+    // GUI thread adds to pending vectors (mutex protected)
+    // Sim thread processes pending vectors at start of process()/swap_io() only when non-empty
+    std::mutex pending_hooks_mutex_;
+    std::atomic<bool> has_pending_hooks_{false};  // Fast check to avoid mutex in hot path
+    std::size_t next_hook_id_{};
+
+    struct pending_hook_t {
+        std::size_t id;
+        std::function<void()> func;
+    };
+    std::vector<pending_hook_t> pending_pre_process_hooks_;
+    std::vector<pending_hook_t> pending_post_process_hooks_;
+    std::vector<pending_hook_t> pending_pre_swap_hooks_;
+    std::vector<pending_hook_t> pending_post_swap_hooks_;
+    std::vector<std::size_t> pending_remove_pre_process_;
+    std::vector<std::size_t> pending_remove_post_process_;
+    std::vector<std::size_t> pending_remove_pre_swap_;
+    std::vector<std::size_t> pending_remove_post_swap_;
+
+    // Active hooks (only modified by sim thread)
+    std::unordered_map<std::size_t,std::function<void()>> pre_process_hooks_;
+    std::unordered_map<std::size_t,std::function<void()>> post_process_hooks_;
+    std::unordered_map<std::size_t,std::function<void()>> pre_swap_hooks_;
+    std::unordered_map<std::size_t,std::function<void()>> post_swap_hooks_;
+
+    // Process pending hook additions/removals (called from sim thread)
+    void process_pending_hooks();
 
 public:
 
@@ -101,11 +126,15 @@ public:
     void process();
     void swap_io();
 
+    // Hook registration - adds to pending queue, returns hook ID immediately
+    // Actual registration happens on sim thread at next process()/swap_io() call
     std::size_t set_pre_process_hook(std::function<void()> func);
     std::size_t set_post_process_hook(std::function<void()> func);
     std::size_t set_pre_swap_hook(std::function<void()> func);
     std::size_t set_post_swap_hook(std::function<void()> func);
 
+    // Hook removal - adds to pending removal queue
+    // Actual removal happens on sim thread at next process()/swap_io() call
     void remove_pre_process_hook(std::size_t id);
     void remove_post_process_hook(std::size_t id);
     void remove_pre_swap_hook(std::size_t id);

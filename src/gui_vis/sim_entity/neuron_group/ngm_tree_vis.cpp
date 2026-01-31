@@ -823,6 +823,7 @@ public:
         vis_.update_root_positions(fbgd_, ng_);
 
         // Register post-swap hook for thread-safe synchronization
+        // Uses deferred registration - added to pending queue, processed by sim thread
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
             on_post_swap();
         });
@@ -831,6 +832,7 @@ public:
     ~ngm_tree_vis_instance() override
     {
         // Unregister the hook before destruction
+        // Uses deferred removal - added to pending queue, processed by sim thread
         sim_env_.remove_post_swap_hook(hook_id_);
 
         // Ensure we're not in the middle of an update
@@ -845,7 +847,7 @@ public:
      */
     void update() override
     {
-        if (!visible_) return;
+        if (!visible_.load(std::memory_order_acquire)) return;
 
         // Check if sim thread has requested an update
         int expected = static_cast<int>(sync_state::requested);
@@ -864,7 +866,7 @@ public:
 
     bool render_imgui() override
     {
-        if (!visible_) return true;
+        if (!visible_.load(std::memory_order_acquire)) return true;
 
         // Animate tree positions (moves entire trees towards their targets)
         vis_.animate_tree_positions(fbgd_, 0.05f);
@@ -899,8 +901,8 @@ public:
         vis_.free_resources();
     }
 
-    [[nodiscard]] bool is_visible() const override { return visible_; }
-    void set_visible(bool v) override { visible_ = v; }
+    [[nodiscard]] bool is_visible() const override { return visible_.load(std::memory_order_acquire); }
+    void set_visible(bool v) override { visible_.store(v, std::memory_order_release); }
 
 private:
     /**
@@ -911,7 +913,7 @@ private:
         inc_on_exit inc{step_count_};  // Increment step_count_ on function exit
 
         if (update_interval_ == 0) return;
-        if (!visible_) return;
+        if (!visible_.load(std::memory_order_acquire)) return;
 
         // Check if colormap changed (needs immediate update)
         bool colormap_changed = vis_.is_colormap_dirty();
@@ -948,7 +950,7 @@ private:
     std::string label_;
     coast::fbgd fbgd_;
     coast::ngm_tree_vis vis_;
-    bool visible_ = true;
+    std::atomic<bool> visible_{true};  // Must be atomic: read by sim thread, written by GUI thread
 
     // Synchronization state
     std::atomic<int> sync_state_{static_cast<int>(sync_state::idle)};

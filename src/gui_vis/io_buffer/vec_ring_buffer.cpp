@@ -262,6 +262,7 @@ public:
         update_interval_ui_ = hints.buffer_vis.update_interval;
 
         // Register post-swap hook for thread-safe synchronization
+        // Uses deferred registration - added to pending queue, processed by sim thread
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
             on_post_swap();
         });
@@ -270,10 +271,10 @@ public:
     ~vec_ring_buffer_instance() override
     {
         // Unregister the hook before destruction
+        // Uses deferred removal - added to pending queue, processed by sim thread
         sim_env_.remove_post_swap_hook(hook_id_);
 
         // Ensure we're not in the middle of an update
-        // Wait for any pending update to complete
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
             std::this_thread::yield();
         }
@@ -285,7 +286,7 @@ public:
      */
     void update() override
     {
-        if (!visible_) return;
+        if (!visible_.load(std::memory_order_acquire)) return;
 
         // Check if sim thread has requested an update
         int expected = static_cast<int>(sync_state::requested);
@@ -304,7 +305,7 @@ public:
 
     bool render_imgui() override
     {
-        if (!visible_) return true;
+        if (!visible_.load(std::memory_order_acquire)) return true;
         return vis_.render_imgui(label_.c_str(), update_interval_ui_);
     }
 
@@ -313,8 +314,8 @@ public:
         vis_.free_resources();
     }
 
-    [[nodiscard]] bool is_visible() const override { return visible_; }
-    void set_visible(bool v) override { visible_ = v; }
+    [[nodiscard]] bool is_visible() const override { return visible_.load(std::memory_order_acquire); }
+    void set_visible(bool v) override { visible_.store(v, std::memory_order_release); }
 
 private:
     /**
@@ -327,7 +328,7 @@ private:
 
         // Check if it's time for an update
         if (update_interval_ui_ <= 0) return;  // 0 or negative means disabled
-        if (!visible_) return;  // Don't update if not visible
+        if (!visible_.load(std::memory_order_acquire)) return;  // Don't update if not visible
 
         // Check if colormap changed (needs immediate update)
         bool colormap_changed = vis_.is_colormap_dirty();
@@ -370,7 +371,7 @@ private:
     sim::env& sim_env_;
     std::string label_;
     coast::vec_ring_buffer vis_;
-    bool visible_ = true;
+    std::atomic<bool> visible_{true};  // Must be atomic: read by sim thread, written by GUI thread
 
     // Synchronization state
     std::atomic<int> sync_state_{static_cast<int>(sync_state::idle)};

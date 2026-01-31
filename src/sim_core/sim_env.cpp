@@ -2,14 +2,13 @@
 // Created by jk on 04.09.25.
 //
 
-#include <algorithm>
 #include <ranges>
-#include <optional>
 #include <stdexcept>
 
 #include "sim_env.h"
 
 namespace sim {
+
 void env::init_io_buffers()
 {
     // construct buffers and set output functions
@@ -56,78 +55,158 @@ io_entity* env::get_entity(output_id_t output_id)
     return nullptr;
 }
 
+void env::process_pending_hooks()
+{
+    // Fast path: no pending work
+    if (!has_pending_hooks_.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    std::lock_guard lock(pending_hooks_mutex_);
+
+    // Process additions
+    for (auto& [id, func] : pending_pre_process_hooks_) {
+        pre_process_hooks_.emplace(id, std::move(func));
+    }
+    pending_pre_process_hooks_.clear();
+
+    for (auto& [id, func] : pending_post_process_hooks_) {
+        post_process_hooks_.emplace(id, std::move(func));
+    }
+    pending_post_process_hooks_.clear();
+
+    for (auto& [id, func] : pending_pre_swap_hooks_) {
+        pre_swap_hooks_.emplace(id, std::move(func));
+    }
+    pending_pre_swap_hooks_.clear();
+
+    for (auto& [id, func] : pending_post_swap_hooks_) {
+        post_swap_hooks_.emplace(id, std::move(func));
+    }
+    pending_post_swap_hooks_.clear();
+
+    // Process removals
+    for (auto id : pending_remove_pre_process_) {
+        pre_process_hooks_.erase(id);
+    }
+    pending_remove_pre_process_.clear();
+
+    for (auto id : pending_remove_post_process_) {
+        post_process_hooks_.erase(id);
+    }
+    pending_remove_post_process_.clear();
+
+    for (auto id : pending_remove_pre_swap_) {
+        pre_swap_hooks_.erase(id);
+    }
+    pending_remove_pre_swap_.clear();
+
+    for (auto id : pending_remove_post_swap_) {
+        post_swap_hooks_.erase(id);
+    }
+    pending_remove_post_swap_.clear();
+
+    has_pending_hooks_.store(false, std::memory_order_release);
+}
+
 void env::process()
 {
-    for (auto &pre_proc : pre_process_hooks | std::views::values ) {
-        pre_proc();
+    // Process any pending hook changes before iterating
+    process_pending_hooks();
+
+    for (auto &[id, func] : pre_process_hooks_) {
+        func();
     }
 
     for (auto &io_ent : iterate_entities()) {
         io_ent.process();
     }
 
-    for (auto &post_proc : post_process_hooks | std::views::values ) {
-        post_proc();
+    for (auto &[id, func] : post_process_hooks_) {
+        func();
     }
 }
 
 void env::swap_io()
 {
-    for (auto &pre_proc : pre_swap_hooks | std::views::values) {
-        pre_proc();
+    // Process any pending hook changes before iterating
+    process_pending_hooks();
+
+    for (auto &[id, func] : pre_swap_hooks_) {
+        func();
     }
 
     for (auto &buf : io_buffers | std::views::values ) {
         buf.swap_buffer();
     }
 
-    for (auto &post_proc : post_swap_hooks | std::views::values) {
-        post_proc();
+    for (auto &[id, func] : post_swap_hooks_) {
+        func();
     }
 }
 
 std::size_t env::set_pre_process_hook(std::function<void()> func)
 {
-    pre_process_hooks.emplace(next_hook_id, func);
-    return next_hook_id++;
+    std::lock_guard lock(pending_hooks_mutex_);
+    std::size_t id = next_hook_id_++;
+    pending_pre_process_hooks_.push_back({id, std::move(func)});
+    has_pending_hooks_.store(true, std::memory_order_release);
+    return id;
 }
 
 std::size_t env::set_post_process_hook(std::function<void()> func)
 {
-    post_process_hooks.emplace(next_hook_id, func);
-    return next_hook_id++;
+    std::lock_guard lock(pending_hooks_mutex_);
+    std::size_t id = next_hook_id_++;
+    pending_post_process_hooks_.push_back({id, std::move(func)});
+    has_pending_hooks_.store(true, std::memory_order_release);
+    return id;
 }
 
 std::size_t env::set_pre_swap_hook(std::function<void()> func)
 {
-    pre_swap_hooks.emplace(next_hook_id, func);
-    return next_hook_id++;
+    std::lock_guard lock(pending_hooks_mutex_);
+    std::size_t id = next_hook_id_++;
+    pending_pre_swap_hooks_.push_back({id, std::move(func)});
+    has_pending_hooks_.store(true, std::memory_order_release);
+    return id;
 }
 
 std::size_t env::set_post_swap_hook(std::function<void()> func)
 {
-    post_swap_hooks.emplace(next_hook_id, func);
-    return next_hook_id++;
+    std::lock_guard lock(pending_hooks_mutex_);
+    std::size_t id = next_hook_id_++;
+    pending_post_swap_hooks_.push_back({id, std::move(func)});
+    has_pending_hooks_.store(true, std::memory_order_release);
+    return id;
 }
 
 void env::remove_pre_process_hook(const std::size_t id)
 {
-    pre_process_hooks.erase(id);
+    std::lock_guard lock(pending_hooks_mutex_);
+    pending_remove_pre_process_.push_back(id);
+    has_pending_hooks_.store(true, std::memory_order_release);
 }
 
 void env::remove_post_process_hook(const std::size_t id)
 {
-    post_process_hooks.erase(id);
+    std::lock_guard lock(pending_hooks_mutex_);
+    pending_remove_post_process_.push_back(id);
+    has_pending_hooks_.store(true, std::memory_order_release);
 }
 
 void env::remove_pre_swap_hook(const std::size_t id)
 {
-    pre_swap_hooks.erase(id);
+    std::lock_guard lock(pending_hooks_mutex_);
+    pending_remove_pre_swap_.push_back(id);
+    has_pending_hooks_.store(true, std::memory_order_release);
 }
 
 void env::remove_post_swap_hook(const std::size_t id)
 {
-    post_swap_hooks.erase(id);
+    std::lock_guard lock(pending_hooks_mutex_);
+    pending_remove_post_swap_.push_back(id);
+    has_pending_hooks_.store(true, std::memory_order_release);
 }
 
 } // sim

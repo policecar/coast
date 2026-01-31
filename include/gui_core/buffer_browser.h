@@ -75,6 +75,7 @@ private:
 
     void rebuild_cache();
     void render_browser_window();
+    void render_visualization_windows();
     void render_detail_panel(const buffer_row& selected);
     void update_visualizations();
 
