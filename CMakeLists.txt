@@ -17,15 +17,9 @@ set(CMAKE_CXX_STANDARD 23)
 
 # Architecture-specific optimizations (applied globally)
 if (APPLE)
-<<<<<<< HEAD
-    add_compile_options(-march=native -Wall -Wpedantic -Wextra -Wno-psabi -stdlib=libstdc++)
-else()
-    add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl -Wall -Wpedantic -Wextra -Wno-psabi)
-=======
     add_compile_options(-march=native -stdlib=libstdc++)
 else()
     add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl)
->>>>>>> 9bdb24b (build: suppress warnings for 3rd-party libraries)
 endif()
 
 # ImPlot library (3rd-party, warnings disabled)
