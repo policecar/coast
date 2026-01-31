@@ -175,12 +175,13 @@ write_status() {
     echo "${status}:${progress}:${speed}" > "${STATUS_DIR}/${dataset}.status"
 }
 
-# Read status for a dataset
+# Read status for a dataset (no subprocess)
 read_status() {
     local dataset=$1
     local status_file="${STATUS_DIR}/${dataset}.status"
-    if [[ -f "$status_file" ]]; then
-        cat "$status_file"
+    local line
+    if [[ -f "$status_file" ]] && read -r line < "$status_file"; then
+        echo "$line"
     else
         echo "waiting:0:0"
     fi
@@ -215,8 +216,11 @@ download_file() {
     # Variables for speed calculation (using SECONDS builtin - no subprocess)
     local prev_size=0
     local prev_seconds=$SECONDS
+    local last_speed=0
 
-    # Monitor progress (less frequently to reduce CPU usage)
+    # Monitor progress - sleep first to let download start
+    sleep 2
+
     while kill -0 "$curl_pid" 2>/dev/null; do
         if [[ "$ABORT_DOWNLOADS" == "true" ]]; then
             kill "$curl_pid" 2>/dev/null || true
@@ -228,12 +232,11 @@ download_file() {
             current_size=$(stat -c%s "$output" 2>/dev/null || stat -f%z "$output" 2>/dev/null || echo 0)
             local current_seconds=$SECONDS
 
-            # Calculate speed (bytes per second) - only if at least 1 second passed
+            # Calculate speed (bytes per second) - only if at least 2 seconds passed
             local time_diff=$((current_seconds - prev_seconds))
-            local speed=0
-            if [[ $time_diff -ge 1 ]]; then
+            if [[ $time_diff -ge 2 ]]; then
                 local size_diff=$((current_size - prev_size))
-                speed=$((size_diff / time_diff))
+                last_speed=$((size_diff / time_diff))
                 prev_size=$current_size
                 prev_seconds=$current_seconds
             fi
@@ -241,9 +244,9 @@ download_file() {
             local percent=$((current_size * 100 / expected_size))
             [[ $percent -gt 100 ]] && percent=100
 
-            write_status "$dataset" "downloading" "$percent" "$speed"
+            write_status "$dataset" "downloading" "$percent" "$last_speed"
         fi
-        sleep 1
+        sleep 2
     done
 
     wait "$curl_pid"
@@ -779,24 +782,8 @@ download_selected() {
             fi
         done
 
-        # If status files say all done, verify by waiting briefly for any remaining processes
-        if [[ "$all_done" == "true" ]]; then
-            # Double-check: wait a moment and re-verify all statuses are terminal
-            sleep 0.2
-            for dataset in "${DATASET_ORDER[@]}"; do
-                if [[ "${DATASET_SELECTED[$dataset]}" == "1" ]]; then
-                    local status_line
-                    status_line=$(read_status "$dataset")
-                    IFS=':' read -r status _ _ <<< "$status_line"
-                    if [[ "$status" != "done" && "$status" != "failed" && "$status" != "skipped" ]]; then
-                        all_done=false
-                        break
-                    fi
-                fi
-            done
-        fi
-
-        [[ "$all_done" == "false" ]] && sleep 0.5
+        # Sleep between iterations to reduce CPU usage
+        [[ "$all_done" == "false" ]] && sleep 1
     done
 
     # Wait for all background processes to fully terminate
