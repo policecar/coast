@@ -186,13 +186,15 @@ read_status() {
     fi
 }
 
-# Format bytes per second to human readable
+# Format bytes per second to human readable (no subprocesses)
 format_speed() {
     local bytes_per_sec=$1
     if [[ $bytes_per_sec -ge 1048576 ]]; then
-        awk "BEGIN {printf \"%.1f MB/s\", $bytes_per_sec / 1048576}"
+        local mb=$((bytes_per_sec / 1048576))
+        local mb_frac=$(( (bytes_per_sec % 1048576) * 10 / 1048576 ))
+        printf "%d.%d MB/s" "$mb" "$mb_frac"
     elif [[ $bytes_per_sec -ge 1024 ]]; then
-        awk "BEGIN {printf \"%.0f KB/s\", $bytes_per_sec / 1024}"
+        printf "%d KB/s" "$((bytes_per_sec / 1024))"
     else
         printf "%d B/s" "$bytes_per_sec"
     fi
@@ -210,12 +212,11 @@ download_file() {
     curl -L -s -o "$output" "$url" &
     local curl_pid=$!
 
-    # Variables for speed calculation
+    # Variables for speed calculation (using SECONDS builtin - no subprocess)
     local prev_size=0
-    local prev_time
-    prev_time=$(date +%s%N)
+    local prev_seconds=$SECONDS
 
-    # Monitor progress
+    # Monitor progress (less frequently to reduce CPU usage)
     while kill -0 "$curl_pid" 2>/dev/null; do
         if [[ "$ABORT_DOWNLOADS" == "true" ]]; then
             kill "$curl_pid" 2>/dev/null || true
@@ -225,26 +226,24 @@ download_file() {
         if [[ -f "$output" && "$expected_size" -gt 0 ]]; then
             local current_size
             current_size=$(stat -c%s "$output" 2>/dev/null || stat -f%z "$output" 2>/dev/null || echo 0)
-            local current_time
-            current_time=$(date +%s%N)
+            local current_seconds=$SECONDS
 
-            # Calculate speed (bytes per second)
-            local time_diff=$(( (current_time - prev_time) / 1000000 ))  # milliseconds
-            local size_diff=$((current_size - prev_size))
+            # Calculate speed (bytes per second) - only if at least 1 second passed
+            local time_diff=$((current_seconds - prev_seconds))
             local speed=0
-            if [[ $time_diff -gt 0 ]]; then
-                speed=$((size_diff * 1000 / time_diff))  # bytes per second
+            if [[ $time_diff -ge 1 ]]; then
+                local size_diff=$((current_size - prev_size))
+                speed=$((size_diff / time_diff))
+                prev_size=$current_size
+                prev_seconds=$current_seconds
             fi
 
             local percent=$((current_size * 100 / expected_size))
             [[ $percent -gt 100 ]] && percent=100
 
             write_status "$dataset" "downloading" "$percent" "$speed"
-
-            prev_size=$current_size
-            prev_time=$current_time
         fi
-        sleep 0.3
+        sleep 1
     done
 
     wait "$curl_pid"
@@ -780,7 +779,7 @@ download_selected() {
             fi
         done
 
-        sleep 0.3
+        sleep 0.5
     done
 
     printf "${SHOW_CURSOR}"
