@@ -6,6 +6,7 @@
 
 # claude
 .claude
+CLAUDE_SESSION.md
 
 # Build
 build*/
@@ -62,3 +63,4 @@ imgui.ini
 
 # debug information files
 *.dwo
+data/

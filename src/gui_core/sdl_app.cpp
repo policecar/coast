@@ -6,11 +6,50 @@
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
+#include "implot.h"
 
 #include <stdexcept>
 #include <ranges>
+#include <cstdlib>
+#include <cstdio>
 
 namespace coast {
+
+// Get display scale factor for HiDPI support
+// On Wayland with fractional scaling, SDL2 doesn't report DPI correctly,
+// so we read Xft.dpi from X resources (set by KDE/GNOME for compatibility)
+static float get_display_scale()
+{
+#ifdef __linux__
+    const char* wayland_display = std::getenv("WAYLAND_DISPLAY");
+    if (wayland_display) {
+        // Try to get DPI from Xft.dpi (X resources, set by desktop environments)
+        FILE* pipe = popen("xrdb -query 2>/dev/null | grep 'Xft.dpi' | cut -f2", "r");
+        if (pipe) {
+            char buffer[32];
+            if (fgets(buffer, sizeof(buffer), pipe)) {
+                float dpi = std::atof(buffer);
+                pclose(pipe);
+                if (dpi > 0) {
+                    return dpi / 96.0f;
+                }
+            } else {
+                pclose(pipe);
+            }
+        }
+
+        // Fallback: check QT_SCALE_FACTOR environment variable
+        const char* qt_scale = std::getenv("QT_SCALE_FACTOR");
+        if (qt_scale) {
+            float scale = std::atof(qt_scale);
+            if (scale > 0) {
+                return scale;
+            }
+        }
+    }
+#endif
+    return 1.0f;
+}
 
 sdl_app::sdl_app(const char* title)
 {
@@ -21,11 +60,16 @@ sdl_app::sdl_app(const char* title)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-    // GL 3.0 + GLSL 130 (good balance of compatibility and features)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#ifdef __APPLE__
+    // macOS requires OpenGL 3.2+ for core profile
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 
     SDL_WindowFlags window_flags = static_cast<SDL_WindowFlags>(
         SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
@@ -78,18 +122,27 @@ void sdl_app::init_imgui()
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
+    // Get display scale factor for HiDPI support (especially for Wayland fractional scaling)
+    float scale = get_display_scale();
+
     // Setup style
     ImGui::StyleColorsDark();
 
-    // Load custom font
-    io.Fonts->AddFontFromFileTTF("../3rd_party/DejaVuSans.ttf", 16.0f);
+    // Load custom font with DPI-aware size
+    float base_font_size = 16.0f;
+    io.Fonts->AddFontFromFileTTF("./3rd_party/DejaVuSans.ttf", base_font_size * scale);
 
     // Setup platform/renderer backends
+#ifdef __APPLE__
+    const char* glsl_version = "#version 150";  // macOS requires OpenGL 3.2 core profile
+#else
     const char* glsl_version = "#version 130";
+#endif
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 }
@@ -98,6 +151,7 @@ void sdl_app::cleanup_imgui()
 {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 }
 

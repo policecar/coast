@@ -62,6 +62,9 @@ public:
     [[nodiscard]] std::size_t current_index() const {
         return cur_idx;
     }
+    [[nodiscard]] std::span<const float> get_sample(std::size_t idx) const {
+        return get_norm_image(idx);
+    }
 };
 
 } // sim

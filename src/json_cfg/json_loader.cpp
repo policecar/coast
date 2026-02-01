@@ -8,9 +8,11 @@
 #include "ngm2_json.h"
 #include "sim_json.h"
 #include "dataset_json.h"
+#include "gui_vis_json.h"
+
 #include "json_loader.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 namespace loader {
 

@@ -40,8 +40,8 @@ void softmax(auto &vec, float beta = 1.0f)
 }
 
 struct sigmoid_shape_t {
-    float steepness        = 0.5f;
-    float transition_point = 0.5f;
+    double steepness        = 0.5;
+    double transition_point = 0.5;
 };
 
 inline float sigmoid(

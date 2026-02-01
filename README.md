@@ -13,6 +13,14 @@ On macOS, GCC 15 is required for C++23 features (default clang lacks some):
 brew install gcc@15 sdl2 tbb hdf5
 ```
 
+## Submodules
+
+Use the following git command to update the submodules after an initial clone
+```bash
+git submodule update --init --recursive
+```
+
+
 ## Build
 
 ```bash

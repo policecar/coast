@@ -1,0 +1,86 @@
+
+//
+// Created by jk on 08.09.25.
+//
+
+#ifndef NGM_FLAT_VIS_H
+#define NGM_FLAT_VIS_H
+
+#include "../../primitives/vec_group_vis.h"
+#include "hd_ngm2_neuron_group.h"
+#include "../../core/color_types.h"
+#include "../../core/colormap.h"
+#include "../../core/gl_texture.h"
+
+namespace coast {
+
+class ngm_flat_vis {
+
+public:
+    enum class layout_t
+    {
+        horizontal_per_neuron,
+        vertical_per_neuron
+    };
+
+    struct params_t
+    {
+        vec_group_vis::params_t vis_params;
+        layout_t                layout;
+    };
+
+private:
+
+    params_t params;
+    const ngm2::neuron_group_t& ng;
+    gl_texture texture;
+    std::vector<color_t> pixel_data;
+    uint32_t px_width {};
+    uint32_t px_height {};
+
+    // View state (zoom and pan) - uses target values for smooth interpolation
+    float zoom_level = 1.0f;
+    float target_zoom = 1.0f;
+    float pan_x = 0.0f;  // Pan offset in pixels (scaled coordinates)
+    float pan_y = 0.0f;
+    float target_pan_x = 0.0f;
+    float target_pan_y = 0.0f;
+
+    // Visibility state (for conditional updates)
+    bool visible = false;
+
+    // Colormap selection
+    colormap_t colormap = colormap_t::grayscale;
+    bool colormap_dirty = false;  // Set when colormap changes, cleared after update
+
+public:
+    explicit ngm_flat_vis(const ngm2::neuron_group_t& neuron_group, params_t _params);
+
+    void update();
+
+    // Render in ImGui window with scroll and zoom support. Returns false if window was closed.
+    bool render_imgui(const char* label, float scale = 1.0f);
+
+    // Visibility state for conditional updates
+    void set_visible(bool v) { visible = v; }
+    [[nodiscard]] bool is_visible() const { return visible; }
+
+    // Colormap dirty flag - set when colormap changes, triggers re-render
+    [[nodiscard]] bool is_colormap_dirty() const { return colormap_dirty; }
+    void clear_colormap_dirty() { colormap_dirty = false; }
+
+    // Get texture for custom rendering
+    [[nodiscard]] const gl_texture& get_texture() const { return texture; }
+
+    void free_resources();
+
+    static params_t get_default(uint32_t rep_width, uint32_t rep_height, uint32_t num_channels = 1);
+
+    [[nodiscard]] uint32_t get_height() const;
+    [[nodiscard]] uint32_t get_width() const;
+
+};
+
+} // coast
+
+#endif //NGM_FLAT_VIS_H

@@ -16,6 +16,12 @@ enum class io_entity_type_t {
     ngm2_neuron_group,
     mnist_input,
     dsprites_input,
+    emnist_input,
+    kmnist_input,
+    cifar10_input,
+    cifar100_input,
+    chairs3d_input,
+    color_mnist_input,
     ENTITY_COUNT
 };
 

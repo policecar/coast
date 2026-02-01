@@ -1,0 +1,2300 @@
+#include "config_editor.h"
+
+#include <algorithm>
+#include <array>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <string>
+
+#include <nlohmann/json.hpp>
+
+#include "mnist_cfg.h"
+#include "dsprites_cfg.h"
+#include "emnist_cfg.h"
+#include "kmnist_cfg.h"
+#include "cifar10_cfg.h"
+#include "cifar100_cfg.h"
+#include "chairs3d_cfg.h"
+#include "color_mnist_cfg.h"
+#include "hd_ngm2_cfg.h"
+#include "sim_builder_cfg.h"
+
+// Include JSON serialization headers
+#include "ngm2_json.h"
+#include "sim_json.h"
+#include "dataset_json.h"
+#include "gui_vis_json.h"
+
+namespace coast {
+
+namespace {
+
+// Buffer size for ImGui text input fields
+constexpr std::size_t INPUT_BUFFER_SIZE = 512;
+
+// Helper: InputText wrapper for std::string
+// Returns true if the value was modified
+bool InputTextString(const char* label, std::string& str, std::size_t max_size = INPUT_BUFFER_SIZE)
+{
+    // Ensure string has enough capacity for editing
+    str.resize(max_size);
+
+    bool modified = ImGui::InputText(label, str.data(), str.size());
+
+    // Resize to actual content length
+    str.resize(std::strlen(str.c_str()));
+
+    return modified;
+}
+
+// Helper: InputText wrapper with item width
+bool InputTextStringWidth(const char* label, std::string& str, float width, std::size_t max_size = INPUT_BUFFER_SIZE)
+{
+    ImGui::SetNextItemWidth(width);
+    return InputTextString(label, str, max_size);
+}
+
+// Helper: SliderFloat wrapper for double values
+bool SliderDouble(const char* label, double& val, float v_min, float v_max, const char* format = "%.3f")
+{
+    float temp = static_cast<float>(val);
+    if (ImGui::SliderFloat(label, &temp, v_min, v_max, format)) {
+        val = static_cast<double>(temp);
+        return true;
+    }
+    return false;
+}
+
+// Helper: DragFloatRange2 wrapper for double pair values
+bool DragDoubleRange2(const char* label, double& v_min, double& v_max,
+                      float v_speed, float min_limit, float max_limit)
+{
+    float temp_min = static_cast<float>(v_min);
+    float temp_max = static_cast<float>(v_max);
+    if (ImGui::DragFloatRange2(label, &temp_min, &temp_max, v_speed, min_limit, max_limit)) {
+        v_min = static_cast<double>(temp_min);
+        v_max = static_cast<double>(temp_max);
+        return true;
+    }
+    return false;
+}
+
+// Helper: Get scaled width for input widgets (accounts for HiDPI font scaling)
+float scaled_width(float base_width)
+{
+    return base_width * (ImGui::GetFontSize() / 16.0f);
+}
+
+} // anonymous namespace
+
+// Helper: Render string list editor (returns true if modified)
+static bool render_string_list(const char* label, std::vector<std::string>& list)
+{
+    bool modified = false;
+    if (ImGui::TreeNode(label)) {
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            if (InputTextStringWidth("##item", list[i], 200)) {
+                modified = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X")) {
+                list.erase(list.begin() + static_cast<std::ptrdiff_t>(i));
+                modified = true;
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+        if (ImGui::SmallButton("+ Add")) {
+            list.emplace_back("");
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render MNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render dSprites config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_dsprites_config(const std::string& name, dsprites::dsprites_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("HDF5 File", cfg.hdf5_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Randomize Readout", &cfg.randomize_readout)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render EMNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_emnist_config(const std::string& name, emnist::emnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render KMNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_kmnist_config(const std::string& name, kmnist::kmnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-10 config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar10_config(const std::string& name, cifar10::cifar10_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Data Directory", cfg.data_dir)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Use Test Set", &cfg.use_test_set)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-100 config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar100_config(const std::string& name, cifar100::cifar100_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Data Directory", cfg.data_dir)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Use Test Set", &cfg.use_test_set)) {
+            modified = true;
+        }
+        if (ImGui::Checkbox("Use Coarse Labels", &cfg.use_coarse_labels)) {
+            modified = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Use 20 superclasses instead of 100 fine classes");
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render 3D Chairs config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_chairs3d_config(const std::string& name, chairs3d::chairs3d_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Data Directory", cfg.data_dir)) {
+            modified = true;
+        }
+
+        if (ImGui::InputInt("Image Width", &cfg.image_width)) {
+            cfg.image_width = std::max(1, cfg.image_width);
+            modified = true;
+        }
+        if (ImGui::InputInt("Image Height", &cfg.image_height)) {
+            cfg.image_height = std::max(1, cfg.image_height);
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render Color MNIST config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_color_mnist_config(const std::string& name, color_mnist::color_mnist_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (InputTextString("Image File", cfg.image_file)) {
+            modified = true;
+        }
+        if (InputTextString("Label File", cfg.label_file)) {
+            modified = true;
+        }
+
+        int change_interval = static_cast<int>(cfg.change_interval);
+        if (ImGui::InputInt("Change Interval", &change_interval)) {
+            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+            modified = true;
+        }
+
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.01f, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::TextDisabled("(Colors digits randomly as Red, Green, or Blue)");
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render dendrite config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_dendrite_config(const std::string& name, ngm2::dendrite_params_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        // Dendrite type dropdown
+        static constexpr std::array type_names = { "Apical", "Proximal" };
+        int type_idx = static_cast<int>(cfg.type);
+        if (ImGui::Combo("Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
+            cfg.type = static_cast<ngm2::dendrite_type_t>(type_idx);
+            modified = true;
+        }
+
+        if (render_string_list("Input Channels", cfg.input_channels)) {
+            modified = true;
+        }
+
+        if (SliderDouble("Permanence Threshold", cfg.permanence_threshold, 0.0f, 1.0f)) {
+            modified = true;
+        }
+
+        int max_branch = cfg.max_branch_level;
+        if (ImGui::SliderInt("Max Branch Level", &max_branch, 1, 10)) {
+            cfg.max_branch_level = static_cast<uint8_t>(max_branch);
+            modified = true;
+        }
+
+        if (ImGui::InputInt("Random Seed", &cfg.rnd_seed)) {
+            modified = true;
+        }
+
+        if (ImGui::TreeNode("Learning Parameters")) {
+            if (SliderDouble("Primary Learning Rate", cfg.default_primary_learning_rate, 0.0001f, 0.1f, "%.4f")) {
+                modified = true;
+            }
+            if (SliderDouble("Secondary Learning Rate", cfg.default_secondary_learning_rate, 0.00001f, 0.01f, "%.5f")) {
+                modified = true;
+            }
+            if (SliderDouble("Mismatch Act Threshold", cfg.default_mismatch_act_thres, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Mismatch Smoothing", cfg.default_mismatch_smoothing, 0.0001f, 0.01f, "%.4f")) {
+                modified = true;
+            }
+            if (SliderDouble("Accumulated Theta Threshold", cfg.default_accumulated_theta_thres, 0.0f, 10.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Min Mismatch Deviation", cfg.default_min_mismatch_deviation, 0.0f, 5.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Min Mismatch Percentage", cfg.default_min_mismatch_percentage, 0.0f, 0.1f, "%.4f")) {
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render dendrite set (returns true if modified)
+static bool render_dendrite_set(ngm2::dendrite_set_t& ds, const ngm2::cfg_store& store)
+{
+    bool modified = false;
+
+    if (InputTextString("Name", ds.name)) {
+        modified = true;
+    }
+
+    // Dropdown for dendrite_cfg from available dendrite configs
+    if (ImGui::BeginCombo("Dendrite Config", ds.dendrite_cfg.c_str())) {
+        for (const auto& [key, val] : store.dendrites) {
+            bool selected = (ds.dendrite_cfg == key);
+            if (ImGui::Selectable(key.c_str(), selected)) {
+                ds.dendrite_cfg = key;
+                modified = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    int count = static_cast<int>(ds.dendrite_count);
+    if (ImGui::InputInt("Count", &count)) {
+        ds.dendrite_count = static_cast<std::size_t>(std::max(1, count));
+        modified = true;
+    }
+    return modified;
+}
+
+// Helper: Render channel mapping (returns true if modified)
+static bool render_channel_mapping(ngm2::channel_mapping_t& cm)
+{
+    bool modified = false;
+
+    if (InputTextStringWidth("From", cm.from_channel, 100)) {
+        modified = true;
+    }
+    ImGui::SameLine();
+    if (InputTextStringWidth("To Name", cm.to_name, 100)) {
+        modified = true;
+    }
+    ImGui::SameLine();
+    if (InputTextStringWidth("To Channel", cm.to_channel, 100)) {
+        modified = true;
+    }
+    return modified;
+}
+
+// Helper: Render neuron config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t& cfg,
+                                  const ngm2::cfg_store& store, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (render_string_list("Input Channels", cfg.input_channels)) {
+            modified = true;
+        }
+
+        // Dendrite sets
+        if (ImGui::TreeNode("Dendrite Sets")) {
+            for (std::size_t i = 0; i < cfg.dendrites.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                std::string set_label = std::format("Set {}", i + 1);
+                if (ImGui::TreeNode("##ds", "%s", set_label.c_str())) {
+                    if (render_dendrite_set(cfg.dendrites[i], store)) {
+                        modified = true;
+                    }
+                    if (ImGui::SmallButton("Remove")) {
+                        cfg.dendrites.erase(cfg.dendrites.begin() + static_cast<std::ptrdiff_t>(i));
+                        modified = true;
+                        ImGui::TreePop();
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Dendrite Set")) {
+                cfg.dendrites.push_back({});
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        // Channel mappings
+        if (ImGui::TreeNode("Channel Mappings")) {
+            for (std::size_t i = 0; i < cfg.channel_mappings.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (render_channel_mapping(cfg.channel_mappings[i])) {
+                    modified = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) {
+                    cfg.channel_mappings.erase(cfg.channel_mappings.begin() + static_cast<std::ptrdiff_t>(i));
+                    modified = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Mapping")) {
+                cfg.channel_mappings.push_back({});
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        int branch_interval = static_cast<int>(cfg.default_branch_interval);
+        if (ImGui::InputInt("Branch Interval", &branch_interval)) {
+            cfg.default_branch_interval = static_cast<std::size_t>(std::max(1, branch_interval));
+            modified = true;
+        }
+
+        if (ImGui::TreeNode("Activity Learning Window")) {
+            if (SliderDouble("Pre Steepness", cfg.default_activity_learning_window.first.steepness, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Pre Transition", cfg.default_activity_learning_window.first.transition_point, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Post Steepness", cfg.default_activity_learning_window.second.steepness, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Post Transition", cfg.default_activity_learning_window.second.transition_point, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render neuron set (returns true if modified)
+static bool render_neuron_set(ngm2::neuron_set_t& ns, const ngm2::cfg_store& store)
+{
+    bool modified = false;
+
+    if (InputTextString("Name", ns.name)) {
+        modified = true;
+    }
+
+    // Dropdown for neuron_cfg
+    if (ImGui::BeginCombo("Neuron Config", ns.neuron_cfg.c_str())) {
+        for (const auto& [key, val] : store.neurons) {
+            bool selected = (ns.neuron_cfg == key);
+            if (ImGui::Selectable(key.c_str(), selected)) {
+                ns.neuron_cfg = key;
+                modified = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    int count = static_cast<int>(ns.neuron_count);
+    if (ImGui::InputInt("Count", &count)) {
+        ns.neuron_count = static_cast<std::size_t>(std::max(1, count));
+        modified = true;
+    }
+    return modified;
+}
+
+// Helper: Render neuron group config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_neuron_group_config(const std::string& name, ngm2::neuron_group_params_t& cfg,
+                                        const ngm2::cfg_store& store, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (render_string_list("Input Channels", cfg.input_channels)) {
+            modified = true;
+        }
+
+        // Neuron sets
+        if (ImGui::TreeNode("Neuron Sets")) {
+            for (std::size_t i = 0; i < cfg.neurons.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                std::string set_label = std::format("Set {}", i + 1);
+                if (ImGui::TreeNode("##ns", "%s", set_label.c_str())) {
+                    if (render_neuron_set(cfg.neurons[i], store)) {
+                        modified = true;
+                    }
+                    if (ImGui::SmallButton("Remove")) {
+                        cfg.neurons.erase(cfg.neurons.begin() + static_cast<std::ptrdiff_t>(i));
+                        modified = true;
+                        ImGui::TreePop();
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Neuron Set")) {
+                cfg.neurons.push_back({});
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        // Channel mappings
+        if (ImGui::TreeNode("Channel Mappings")) {
+            for (std::size_t i = 0; i < cfg.channel_mappings.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (render_channel_mapping(cfg.channel_mappings[i])) {
+                    modified = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) {
+                    cfg.channel_mappings.erase(cfg.channel_mappings.begin() + static_cast<std::ptrdiff_t>(i));
+                    modified = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Mapping")) {
+                cfg.channel_mappings.push_back({});
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        if (SliderDouble("Local Inhibition", cfg.default_local_inhibition_strength, 0.1f, 20.0f)) {
+            modified = true;
+        }
+        if (SliderDouble("Common Learning Rate", cfg.default_common_learning_rate, 0.00001f, 0.01f, "%.5f")) {
+            modified = true;
+        }
+
+        if (ImGui::TreeNode("Weight Filter")) {
+            if (SliderDouble("Steepness", cfg.default_weight_filter.steepness, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            if (SliderDouble("Transition Point", cfg.default_weight_filter.transition_point, 0.0f, 1.0f)) {
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        if (SliderDouble("Stochastic Win Threshold", cfg.default_stochastic_win_thres, 0.0f, 1.0f)) {
+            modified = true;
+        }
+        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Get entity type name
+static std::string_view get_entity_type_name(sim::io_entity_type_t type)
+{
+    switch (type) {
+        case sim::io_entity_type_t::ngm2_neuron_group:  return "Neuron Group";
+        case sim::io_entity_type_t::mnist_input:        return "MNIST Input";
+        case sim::io_entity_type_t::dsprites_input:     return "dSprites Input";
+        case sim::io_entity_type_t::emnist_input:       return "EMNIST Input";
+        case sim::io_entity_type_t::kmnist_input:       return "KMNIST Input";
+        case sim::io_entity_type_t::cifar10_input:      return "CIFAR-10 Input";
+        case sim::io_entity_type_t::cifar100_input:     return "CIFAR-100 Input";
+        case sim::io_entity_type_t::chairs3d_input:     return "3D Chairs Input";
+        case sim::io_entity_type_t::color_mnist_input:  return "Color MNIST Input";
+        default: return "Unknown";
+    }
+}
+
+// Helper: Render simulation node (returns true if modified)
+static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& cfg)
+{
+    bool modified = false;
+
+    // ID
+    int id = static_cast<int>(node.id);
+    if (ImGui::InputInt("ID", &id)) {
+        node.id = static_cast<sim::sim_node_id_t>(id);
+        modified = true;
+    }
+
+    // Label
+    if (InputTextString("Label", node.label)) {
+        modified = true;
+    }
+
+    // Entity type dropdown
+    static constexpr std::array type_names = {
+        "Neuron Group", "MNIST Input", "dSprites Input",
+        "EMNIST Input", "KMNIST Input", "CIFAR-10 Input",
+        "CIFAR-100 Input", "3D Chairs Input", "Color MNIST Input"
+    };
+    int type_idx = static_cast<int>(node.entity_type);
+    if (ImGui::Combo("Entity Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
+        node.entity_type = static_cast<sim::io_entity_type_t>(type_idx);
+        modified = true;
+    }
+
+    // Entity config dropdown - show configs from appropriate store
+    if (ImGui::BeginCombo("Entity Config", node.entity_cfg.c_str())) {
+        switch (node.entity_type) {
+            case sim::io_entity_type_t::ngm2_neuron_group:
+                for (const auto& [key, val] : cfg.ngm2.neuron_groups) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::mnist_input:
+                for (const auto& [key, val] : cfg.datasets.mnist) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::dsprites_input:
+                for (const auto& [key, val] : cfg.datasets.dsprites) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::emnist_input:
+                for (const auto& [key, val] : cfg.datasets.emnist) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::kmnist_input:
+                for (const auto& [key, val] : cfg.datasets.kmnist) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::cifar10_input:
+                for (const auto& [key, val] : cfg.datasets.cifar10) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::cifar100_input:
+                for (const auto& [key, val] : cfg.datasets.cifar100) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::chairs3d_input:
+                for (const auto& [key, val] : cfg.datasets.chairs3d) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            case sim::io_entity_type_t::color_mnist_input:
+                for (const auto& [key, val] : cfg.datasets.color_mnist) {
+                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                        node.entity_cfg = key;
+                        modified = true;
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+        ImGui::EndCombo();
+    }
+
+    // Inputs list
+    if (ImGui::TreeNode("Inputs")) {
+        for (std::size_t i = 0; i < node.inputs.size(); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            int src_id = static_cast<int>(node.inputs[i].first);
+
+            ImGui::SetNextItemWidth(scaled_width(80));
+            if (ImGui::InputInt("##src", &src_id)) {
+                node.inputs[i].first = static_cast<sim::sim_node_id_t>(src_id);
+                modified = true;
+            }
+            ImGui::SameLine();
+            if (InputTextStringWidth("##chan", node.inputs[i].second, scaled_width(120))) {
+                modified = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X")) {
+                node.inputs.erase(node.inputs.begin() + static_cast<std::ptrdiff_t>(i));
+                modified = true;
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+        if (ImGui::SmallButton("+ Add Input")) {
+            node.inputs.emplace_back(0, "");
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// ============================================================================
+// config_editor implementation
+// ============================================================================
+
+config_editor::config_editor(loader::global_cfg_t& config, const std::string& config_path)
+    : config(config)
+    , original_config(config)  // Make a copy for restore
+    , config_path(config_path)
+    , save_file_browser(ImGuiFileBrowserFlags_EnterNewFilename
+                       | ImGuiFileBrowserFlags_CloseOnEsc
+                       | ImGuiFileBrowserFlags_ConfirmOnEnter
+                       | ImGuiFileBrowserFlags_CreateNewDir)
+{
+    save_file_browser.SetTitle("Save Configuration As");
+    save_file_browser.SetTypeFilters({ ".json" });
+
+    // Create network editor (ImNodeFlow-based)
+    net_editor = std::make_unique<network_editor>(config);
+    net_editor->set_dirty_callback([this]() { mark_dirty(); });
+    net_editor->set_edit_callbacks({
+        .add_link = [this](auto src, auto dst, const auto& ch) { return request_add_link(src, dst, ch); },
+        .remove_link = [this](auto src, auto dst, const auto& ch) { return request_remove_link(src, dst, ch); },
+        .remove_node = [this](auto id) { return request_remove_node(id); },
+        .add_node = [this](auto type, const auto& label) { return request_add_node(type, label); }
+    });
+}
+
+void config_editor::render(bool* p_open)
+{
+    ImGui::SetNextWindowSize(ImVec2(550, 700), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+
+    // Window title shows dirty indicator
+    // Use ###id to keep stable window ID when title changes
+    std::string title = "Configuration Editor";
+    if (is_dirty) {
+        title += " *";
+    }
+    title += "###ConfigEditor";
+
+    if (ImGui::Begin(title.c_str(), p_open, ImGuiWindowFlags_MenuBar)) {
+        render_menu_bar();
+        render_dataset_configs();
+        render_ngm2_configs();
+        render_simulation_graph();
+        render_visualization_hints();
+    }
+    ImGui::End();
+
+    // Render file browser (outside main window)
+    save_file_browser.Display();
+    if (save_file_browser.HasSelected()) {
+        pending_save_path = save_file_browser.GetSelected().string();
+        // Ensure .json extension
+        if (!pending_save_path.ends_with(".json")) {
+            pending_save_path += ".json";
+        }
+        save_file_browser.ClearSelected();
+
+        // Check if file exists - if so, show overwrite confirmation
+        if (std::filesystem::exists(pending_save_path)) {
+            show_save_as_confirm_dialog = true;
+        } else {
+            // File doesn't exist, save directly
+            if (save_config(pending_save_path)) {
+                config_path = pending_save_path;
+                original_config = config;
+                is_dirty = false;
+            }
+            pending_save_path.clear();
+        }
+    }
+
+    // Render confirmation dialogs
+    render_save_confirm_dialog();
+    render_save_as_confirm_dialog();
+
+    // Render network editor
+    if (net_editor) {
+        net_editor->render(&show_network_editor);
+    }
+}
+
+void config_editor::render_menu_bar()
+{
+    if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            // Save - only enabled if dirty
+            if (ImGui::MenuItem("Save", "Ctrl+S", false, is_dirty)) {
+                show_save_confirm_dialog = true;
+                pending_save_path = config_path;
+            }
+
+            // Save As - always enabled
+            if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
+                save_file_browser.Open();
+            }
+
+            ImGui::Separator();
+
+            // Restore - only enabled if dirty
+            if (ImGui::MenuItem("Restore", nullptr, false, is_dirty)) {
+                restore_config();
+            }
+
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+}
+
+void config_editor::render_save_confirm_dialog()
+{
+    if (!show_save_confirm_dialog) return;
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::Begin("Confirm Save", &show_save_confirm_dialog,
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+        ImGui::Text("Save configuration to:");
+        ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", pending_save_path.c_str());
+        ImGui::Spacing();
+
+        ImGui::Checkbox("Reload simulation with saved configuration", &reload_after_save);
+        ImGui::Spacing();
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Save", ImVec2(scaled_width(100), 0))) {
+            if (save_config(pending_save_path)) {
+                original_config = config;
+                is_dirty = false;
+
+                if (reload_after_save && reload_callback) {
+                    reload_callback(pending_save_path);
+                }
+            }
+            show_save_confirm_dialog = false;
+            pending_save_path.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(scaled_width(100), 0))) {
+            show_save_confirm_dialog = false;
+            pending_save_path.clear();
+        }
+    }
+    ImGui::End();
+}
+
+void config_editor::render_save_as_confirm_dialog()
+{
+    if (!show_save_as_confirm_dialog) return;
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::Begin("Confirm Overwrite", &show_save_as_confirm_dialog,
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "File already exists:");
+        ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", pending_save_path.c_str());
+        ImGui::Spacing();
+        ImGui::Text("Do you want to overwrite it?");
+        ImGui::Spacing();
+
+        ImGui::Checkbox("Reload simulation with saved configuration", &reload_after_save_as);
+        ImGui::Spacing();
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Overwrite", ImVec2(scaled_width(100), 0))) {
+            if (save_config(pending_save_path)) {
+                config_path = pending_save_path;
+                original_config = config;
+                is_dirty = false;
+
+                if (reload_after_save_as && reload_callback) {
+                    reload_callback(pending_save_path);
+                }
+            }
+            show_save_as_confirm_dialog = false;
+            pending_save_path.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(scaled_width(100), 0))) {
+            show_save_as_confirm_dialog = false;
+            pending_save_path.clear();
+        }
+    }
+    ImGui::End();
+}
+
+bool config_editor::save_config(const std::string& path)
+{
+    try {
+        nlohmann::ordered_json j = config;
+        std::ofstream file(path);
+        if (!file.is_open()) {
+            return false;
+        }
+        file << j.dump(4);  // Pretty print with 4-space indent
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void config_editor::restore_config()
+{
+    config = original_config;
+    is_dirty = false;
+}
+
+void config_editor::render_dataset_configs()
+{
+    if (ImGui::CollapsingHeader("Dataset Configurations", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+        // MNIST configs
+        if (ImGui::TreeNode("MNIST Configs")) {
+            std::string mnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.mnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_mnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    mnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!mnist_to_remove.empty()) {
+                config.datasets.mnist.erase(mnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_mnist_name;
+            if (InputTextString("##newmnist", new_mnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add MNIST Config") && !new_mnist_name.empty()) {
+                config.datasets.mnist[new_mnist_name] = {};
+                new_mnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // dSprites configs
+        if (ImGui::TreeNode("dSprites Configs")) {
+            std::string dsprites_to_remove;
+            for (auto& [name, cfg] : config.datasets.dsprites) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_dsprites_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    dsprites_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!dsprites_to_remove.empty()) {
+                config.datasets.dsprites.erase(dsprites_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_dsprites_name;
+            if (InputTextString("##newdsprites", new_dsprites_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add dSprites Config") && !new_dsprites_name.empty()) {
+                config.datasets.dsprites[new_dsprites_name] = {};
+                new_dsprites_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // EMNIST configs
+        if (ImGui::TreeNode("EMNIST Configs")) {
+            std::string emnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.emnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_emnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    emnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!emnist_to_remove.empty()) {
+                config.datasets.emnist.erase(emnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_emnist_name;
+            if (InputTextString("##newemnist", new_emnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add EMNIST Config") && !new_emnist_name.empty()) {
+                config.datasets.emnist[new_emnist_name] = {};
+                new_emnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // KMNIST configs
+        if (ImGui::TreeNode("KMNIST Configs")) {
+            std::string kmnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.kmnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_kmnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    kmnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!kmnist_to_remove.empty()) {
+                config.datasets.kmnist.erase(kmnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_kmnist_name;
+            if (InputTextString("##newkmnist", new_kmnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add KMNIST Config") && !new_kmnist_name.empty()) {
+                config.datasets.kmnist[new_kmnist_name] = {};
+                new_kmnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // CIFAR-10 configs
+        if (ImGui::TreeNode("CIFAR-10 Configs")) {
+            std::string cifar10_to_remove;
+            for (auto& [name, cfg] : config.datasets.cifar10) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_cifar10_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    cifar10_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!cifar10_to_remove.empty()) {
+                config.datasets.cifar10.erase(cifar10_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_cifar10_name;
+            if (InputTextString("##newcifar10", new_cifar10_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add CIFAR-10 Config") && !new_cifar10_name.empty()) {
+                config.datasets.cifar10[new_cifar10_name] = {};
+                new_cifar10_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // CIFAR-100 configs
+        if (ImGui::TreeNode("CIFAR-100 Configs")) {
+            std::string cifar100_to_remove;
+            for (auto& [name, cfg] : config.datasets.cifar100) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_cifar100_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    cifar100_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!cifar100_to_remove.empty()) {
+                config.datasets.cifar100.erase(cifar100_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_cifar100_name;
+            if (InputTextString("##newcifar100", new_cifar100_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add CIFAR-100 Config") && !new_cifar100_name.empty()) {
+                config.datasets.cifar100[new_cifar100_name] = {};
+                new_cifar100_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // 3D Chairs configs
+        if (ImGui::TreeNode("3D Chairs Configs")) {
+            std::string chairs3d_to_remove;
+            for (auto& [name, cfg] : config.datasets.chairs3d) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_chairs3d_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    chairs3d_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!chairs3d_to_remove.empty()) {
+                config.datasets.chairs3d.erase(chairs3d_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_chairs3d_name;
+            if (InputTextString("##newchairs3d", new_chairs3d_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add 3D Chairs Config") && !new_chairs3d_name.empty()) {
+                config.datasets.chairs3d[new_chairs3d_name] = {};
+                new_chairs3d_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // Color MNIST configs
+        if (ImGui::TreeNode("Color MNIST Configs")) {
+            std::string color_mnist_to_remove;
+            for (auto& [name, cfg] : config.datasets.color_mnist) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_color_mnist_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    color_mnist_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!color_mnist_to_remove.empty()) {
+                config.datasets.color_mnist.erase(color_mnist_to_remove);
+                mark_dirty();
+            }
+            // Add new config
+            static std::string new_color_mnist_name;
+            if (InputTextString("##newcolormnist", new_color_mnist_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add Color MNIST Config") && !new_color_mnist_name.empty()) {
+                config.datasets.color_mnist[new_color_mnist_name] = {};
+                new_color_mnist_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+void config_editor::render_ngm2_configs()
+{
+    if (ImGui::CollapsingHeader("Neural Model Configurations")) {
+
+        // Dendrite configs
+        if (ImGui::TreeNode("Dendrite Configs")) {
+            std::string dendrite_to_remove;
+            for (auto& [name, cfg] : config.ngm2.dendrites) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_dendrite_config(name, cfg, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    dendrite_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!dendrite_to_remove.empty()) {
+                config.ngm2.dendrites.erase(dendrite_to_remove);
+                mark_dirty();
+            }
+            static std::string new_dendrite_name;
+            if (InputTextString("##newdendrite", new_dendrite_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add Dendrite Config") && !new_dendrite_name.empty()) {
+                config.ngm2.dendrites[new_dendrite_name] = {};
+                new_dendrite_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // Neuron configs
+        if (ImGui::TreeNode("Neuron Configs")) {
+            std::string neuron_to_remove;
+            for (auto& [name, cfg] : config.ngm2.neurons) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_neuron_config(name, cfg, config.ngm2, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    neuron_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!neuron_to_remove.empty()) {
+                config.ngm2.neurons.erase(neuron_to_remove);
+                mark_dirty();
+            }
+            static std::string new_neuron_name;
+            if (InputTextString("##newneuron", new_neuron_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add Neuron Config") && !new_neuron_name.empty()) {
+                config.ngm2.neurons[new_neuron_name] = {};
+                new_neuron_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // Neuron group configs
+        if (ImGui::TreeNode("Neuron Group Configs")) {
+            std::string group_to_remove;
+            for (auto& [name, cfg] : config.ngm2.neuron_groups) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_neuron_group_config(name, cfg, config.ngm2, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    group_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!group_to_remove.empty()) {
+                config.ngm2.neuron_groups.erase(group_to_remove);
+                mark_dirty();
+            }
+            static std::string new_group_name;
+            if (InputTextString("##newgroup", new_group_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add Group Config") && !new_group_name.empty()) {
+                config.ngm2.neuron_groups[new_group_name] = {};
+                new_group_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+void config_editor::render_simulation_graph()
+{
+    if (ImGui::CollapsingHeader("Simulation Graph")) {
+        if (ImGui::TreeNode("Nodes")) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Graph View...")) {
+                show_network_editor = true;
+            }
+            for (std::size_t i = 0; i < config.sim.nodes.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                auto& node = config.sim.nodes[i];
+                std::string header = std::format("Node ID {}: {} ({})",
+                         node.id, node.label, get_entity_type_name(node.entity_type));
+                if (ImGui::TreeNode("##node", "%s", header.c_str())) {
+                    if (render_sim_node(node, config)) {
+                        mark_dirty();
+                    }
+                    if (ImGui::SmallButton("Remove Node")) {
+                        config.sim.nodes.erase(config.sim.nodes.begin() + static_cast<std::ptrdiff_t>(i));
+                        mark_dirty();
+                        ImGui::TreePop();
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Node")) {
+                config.sim.nodes.push_back({});
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+// ============================================================================
+// Delegation methods for network_editor edit requests
+// ============================================================================
+
+bool config_editor::request_add_link(sim::sim_node_id_t src, sim::sim_node_id_t dst, const std::string& channel) {
+    // Find destination node
+    sim::sim_node_t* dst_node = nullptr;
+    for (auto& node : config.sim.nodes) {
+        if (node.id == dst) {
+            dst_node = &node;
+            break;
+        }
+    }
+    if (!dst_node) return false;
+
+    // Check if source node exists
+    bool src_exists = false;
+    for (const auto& node : config.sim.nodes) {
+        if (node.id == src) {
+            src_exists = true;
+            break;
+        }
+    }
+    if (!src_exists) return false;
+
+    // Check if link already exists
+    for (const auto& [existing_src, existing_ch] : dst_node->inputs) {
+        if (existing_src == src && existing_ch == channel) {
+            return false;  // Already exists
+        }
+    }
+
+    // Add the link
+    dst_node->inputs.emplace_back(src, channel);
+    mark_dirty();
+    return true;
+}
+
+bool config_editor::request_remove_link(sim::sim_node_id_t src, sim::sim_node_id_t dst, const std::string& channel) {
+    // Find destination node
+    for (auto& node : config.sim.nodes) {
+        if (node.id == dst) {
+            // Find and remove the link
+            for (auto it = node.inputs.begin(); it != node.inputs.end(); ++it) {
+                if (it->first == src && it->second == channel) {
+                    node.inputs.erase(it);
+                    mark_dirty();
+                    return true;
+                }
+            }
+            break;
+        }
+    }
+    return false;
+}
+
+bool config_editor::request_remove_node(sim::sim_node_id_t id) {
+    // Find and remove the node
+    for (auto it = config.sim.nodes.begin(); it != config.sim.nodes.end(); ++it) {
+        if (it->id == id) {
+            config.sim.nodes.erase(it);
+            mark_dirty();
+
+            // Also remove any links pointing to this node
+            for (auto& node : config.sim.nodes) {
+                auto& inputs = node.inputs;
+                inputs.erase(
+                    std::remove_if(inputs.begin(), inputs.end(),
+                        [id](const auto& link) { return link.first == id; }),
+                    inputs.end()
+                );
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+sim::sim_node_id_t config_editor::request_add_node(sim::io_entity_type_t type, const std::string& label) {
+    // Generate a new unique ID
+    sim::sim_node_id_t new_id = 1;
+    for (const auto& node : config.sim.nodes) {
+        if (node.id >= new_id) {
+            new_id = node.id + 1;
+        }
+    }
+
+    // Create the new node
+    sim::sim_node_t new_node;
+    new_node.id = new_id;
+    new_node.label = label;
+    new_node.entity_type = type;
+    new_node.entity_cfg = "";  // Empty config initially
+
+    config.sim.nodes.push_back(new_node);
+    mark_dirty();
+    return new_id;
+}
+
+// ============================================================================
+// Visualization Hints
+// ============================================================================
+
+// Helper: Edit RGBA color stored as int (0-255) using ImGui ColorEdit4
+static bool ColorEdit4FromInts(const char* label, int& r, int& g, int& b, int& a, ImGuiColorEditFlags flags = 0)
+{
+    float col[4] = {
+        r / 255.0f,
+        g / 255.0f,
+        b / 255.0f,
+        a / 255.0f
+    };
+    if (ImGui::ColorEdit4(label, col, flags)) {
+        r = static_cast<int>(col[0] * 255.0f + 0.5f);
+        g = static_cast<int>(col[1] * 255.0f + 0.5f);
+        b = static_cast<int>(col[2] * 255.0f + 0.5f);
+        a = static_cast<int>(col[3] * 255.0f + 0.5f);
+        return true;
+    }
+    return false;
+}
+
+// Helper: Render ngm_flat_vis_hint_t (returns true if modified)
+static bool render_ngm_flat_vis_hint(ngm_flat_vis_hint_t& hint)
+{
+    bool modified = false;
+
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Width", &hint.width)) {
+        hint.width = std::max(1, hint.width);
+        modified = true;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Height", &hint.height)) {
+        hint.height = std::max(1, hint.height);
+        modified = true;
+    }
+
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Channels", &hint.num_channels)) {
+        hint.num_channels = std::clamp(hint.num_channels, 1, 3);
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("1 = grayscale (colormap), 3 = RGB");
+    }
+
+    ImGui::SetNextItemWidth(scaled_width(120));
+    if (ImGui::InputInt("Update Interval", &hint.update_interval)) {
+        hint.update_interval = std::max(0, hint.update_interval);
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Simulation steps between updates (0 = disabled)");
+    }
+
+    return modified;
+}
+
+// Helper: Render MNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_mnist_hint(const std::string& name, mnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render dSprites hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_dsprites_hint(const std::string& name, dsprites_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render EMNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_emnist_hint(const std::string& name, emnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render KMNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_kmnist_hint(const std::string& name, kmnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-10 hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar10_hint(const std::string& name, cifar10_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render CIFAR-100 hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_cifar100_hint(const std::string& name, cifar100_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render 3D Chairs hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_chairs3d_hint(const std::string& name, chairs3d_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render Color MNIST hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_color_mnist_hint(const std::string& name, color_mnist_hint_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        ImGui::Text("Flat Visualization Dimensions:");
+        if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+            modified = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render ngm_tree_vis_hint_t (returns true if modified)
+static bool render_ngm_tree_vis_hint(ngm_tree_vis_hint_t& hint)
+{
+    bool modified = false;
+
+    // Representation dimensions
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Rep Width", &hint.rep_width)) {
+        hint.rep_width = std::max(1, hint.rep_width);
+        modified = true;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Rep Height", &hint.rep_height)) {
+        hint.rep_height = std::max(1, hint.rep_height);
+        modified = true;
+    }
+
+    ImGui::SetNextItemWidth(scaled_width(80));
+    if (ImGui::InputInt("Channels##tree", &hint.num_channels)) {
+        hint.num_channels = std::clamp(hint.num_channels, 1, 3);
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("1 = grayscale (colormap), 3 = RGB");
+    }
+
+    ImGui::SetNextItemWidth(scaled_width(120));
+    if (ImGui::InputInt("Update Interval##tree", &hint.update_interval)) {
+        hint.update_interval = std::max(0, hint.update_interval);
+        modified = true;
+    }
+
+    // Colors
+    if (ImGui::TreeNode("Colors")) {
+        if (ColorEdit4FromInts("Background", hint.bg_r, hint.bg_g, hint.bg_b, hint.bg_a)) {
+            modified = true;
+        }
+        if (ColorEdit4FromInts("Root Node", hint.root_r, hint.root_g, hint.root_b, hint.root_a)) {
+            modified = true;
+        }
+        if (ColorEdit4FromInts("Branch Node", hint.branch_r, hint.branch_g, hint.branch_b, hint.branch_a)) {
+            modified = true;
+        }
+        if (ColorEdit4FromInts("Edge", hint.edge_r, hint.edge_g, hint.edge_b, hint.edge_a)) {
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+
+    // Node appearance
+    if (ImGui::TreeNode("Node Appearance")) {
+        ImGui::SetNextItemWidth(scaled_width(80));
+        if (ImGui::InputFloat("Root Radius", &hint.root_node_radius, 0.5f)) {
+            hint.root_node_radius = std::max(0.5f, hint.root_node_radius);
+            modified = true;
+        }
+        ImGui::SetNextItemWidth(scaled_width(80));
+        if (ImGui::InputFloat("Branch Radius", &hint.branch_node_radius, 0.5f)) {
+            hint.branch_node_radius = std::max(0.5f, hint.branch_node_radius);
+            modified = true;
+        }
+        ImGui::SetNextItemWidth(scaled_width(120));
+        if (ImGui::InputFloat("Texture Scale Div", &hint.texture_scale_divisor, 100.0f)) {
+            hint.texture_scale_divisor = std::max(100.0f, hint.texture_scale_divisor);
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+
+    // Edge appearance
+    if (ImGui::TreeNode("Edge Appearance")) {
+        ImGui::SetNextItemWidth(scaled_width(80));
+        if (ImGui::InputFloat("Min Thickness", &hint.edge_thickness_min, 0.5f)) {
+            hint.edge_thickness_min = std::max(0.5f, hint.edge_thickness_min);
+            modified = true;
+        }
+        ImGui::SetNextItemWidth(scaled_width(80));
+        if (ImGui::InputFloat("Max Thickness", &hint.edge_thickness_max, 0.5f)) {
+            hint.edge_thickness_max = std::max(hint.edge_thickness_min, hint.edge_thickness_max);
+            modified = true;
+        }
+        ImGui::TreePop();
+    }
+
+    return modified;
+}
+
+// Helper: Render neuron group hint (returns true if modified, sets remove_requested if remove clicked)
+static bool render_neuron_group_hint(const std::string& name, neuron_group_hints_t& hint, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (ImGui::TreeNode("Dendritic Representations")) {
+            if (render_ngm_flat_vis_hint(hint.ngm_flat_vis)) {
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        if (ImGui::TreeNode("Neuron Tree")) {
+            if (render_ngm_tree_vis_hint(hint.ngm_tree_vis)) {
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove")) {
+            remove_requested = true;
+        }
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+void config_editor::render_visualization_hints()
+{
+    if (ImGui::CollapsingHeader("Visualization Hints")) {
+
+        // Dataset hints
+        if (ImGui::TreeNode("Dataset Hints")) {
+            // MNIST hints
+            if (ImGui::TreeNode("MNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.mnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_mnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.mnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_mnist_hint_name;
+                if (InputTextString("##newmnisthint", new_mnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add MNIST Hint") && !new_mnist_hint_name.empty()) {
+                    config.vis_hints.datasets.mnist[new_mnist_hint_name] = {{28, 28}};
+                    new_mnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // dSprites hints
+            if (ImGui::TreeNode("dSprites")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.dsprites) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_dsprites_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.dsprites.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_dsprites_hint_name;
+                if (InputTextString("##newdspriteshint", new_dsprites_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add dSprites Hint") && !new_dsprites_hint_name.empty()) {
+                    config.vis_hints.datasets.dsprites[new_dsprites_hint_name] = {{64, 64}};
+                    new_dsprites_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // EMNIST hints
+            if (ImGui::TreeNode("EMNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.emnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_emnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.emnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_emnist_hint_name;
+                if (InputTextString("##newemnisthint", new_emnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add EMNIST Hint") && !new_emnist_hint_name.empty()) {
+                    config.vis_hints.datasets.emnist[new_emnist_hint_name] = {{28, 28, 1}};
+                    new_emnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // KMNIST hints
+            if (ImGui::TreeNode("KMNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.kmnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_kmnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.kmnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_kmnist_hint_name;
+                if (InputTextString("##newkmnisthint", new_kmnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add KMNIST Hint") && !new_kmnist_hint_name.empty()) {
+                    config.vis_hints.datasets.kmnist[new_kmnist_hint_name] = {{28, 28, 1}};
+                    new_kmnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // CIFAR-10 hints
+            if (ImGui::TreeNode("CIFAR-10")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.cifar10) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_cifar10_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.cifar10.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_cifar10_hint_name;
+                if (InputTextString("##newcifar10hint", new_cifar10_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add CIFAR-10 Hint") && !new_cifar10_hint_name.empty()) {
+                    config.vis_hints.datasets.cifar10[new_cifar10_hint_name] = {{32, 32, 3}};
+                    new_cifar10_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // CIFAR-100 hints
+            if (ImGui::TreeNode("CIFAR-100")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.cifar100) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_cifar100_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.cifar100.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_cifar100_hint_name;
+                if (InputTextString("##newcifar100hint", new_cifar100_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add CIFAR-100 Hint") && !new_cifar100_hint_name.empty()) {
+                    config.vis_hints.datasets.cifar100[new_cifar100_hint_name] = {{32, 32, 3}};
+                    new_cifar100_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // 3D Chairs hints
+            if (ImGui::TreeNode("3D Chairs")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.chairs3d) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_chairs3d_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.chairs3d.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_chairs3d_hint_name;
+                if (InputTextString("##newchairs3dhint", new_chairs3d_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add 3D Chairs Hint") && !new_chairs3d_hint_name.empty()) {
+                    config.vis_hints.datasets.chairs3d[new_chairs3d_hint_name] = {{64, 64, 3}};
+                    new_chairs3d_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // Color MNIST hints
+            if (ImGui::TreeNode("Color MNIST")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.datasets.color_mnist) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_color_mnist_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.datasets.color_mnist.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_color_mnist_hint_name;
+                if (InputTextString("##newcolormnisthint", new_color_mnist_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add Color MNIST Hint") && !new_color_mnist_hint_name.empty()) {
+                    config.vis_hints.datasets.color_mnist[new_color_mnist_hint_name] = {{28, 28, 3}};
+                    new_color_mnist_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            ImGui::TreePop();
+        }
+
+        // NGM2 hints
+        if (ImGui::TreeNode("Neural Model Hints")) {
+            // Neuron group hints
+            if (ImGui::TreeNode("Neuron Groups")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.ngm2.neuron_groups) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_neuron_group_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.ngm2.neuron_groups.erase(to_remove);
+                    mark_dirty();
+                }
+                // Add new hint
+                static std::string new_ngm2_hint_name;
+                if (InputTextString("##newngm2hint", new_ngm2_hint_name, 64)) {
+                    // Text changed
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add Neuron Group Hint") && !new_ngm2_hint_name.empty()) {
+                    config.vis_hints.ngm2.neuron_groups[new_ngm2_hint_name] = {{50, 1}};
+                    new_ngm2_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+            ImGui::TreePop();
+        }
+
+        // IO Buffer hints
+        if (ImGui::TreeNode("IO Buffer Hints")) {
+            ImGui::SetNextItemWidth(scaled_width(120));
+            if (ImGui::InputInt("Update Interval", &config.vis_hints.buffer_vis.update_interval)) {
+                config.vis_hints.buffer_vis.update_interval = std::max(0, config.vis_hints.buffer_vis.update_interval);
+                mark_dirty();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Simulation steps between updates (0 = disabled)");
+            }
+
+            ImGui::SetNextItemWidth(scaled_width(120));
+            if (ImGui::InputInt("Ring Length", &config.vis_hints.buffer_vis.ring_length)) {
+                config.vis_hints.buffer_vis.ring_length = std::clamp(config.vis_hints.buffer_vis.ring_length, 10, 10000);
+                mark_dirty();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Number of time steps to show in time series visualization");
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+} // namespace coast

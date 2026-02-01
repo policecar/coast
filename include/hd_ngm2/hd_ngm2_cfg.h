@@ -26,16 +26,16 @@ enum class dendrite_type_t {
 struct dendrite_params_t {
     dendrite_type_t type                        = dendrite_type_t::proximal;
     std::vector<std::string> input_channels     = {};
-    float       permanence_threshold            = 0.3;
+    double      permanence_threshold            = 0.3;
     uint8_t     max_branch_level                = 3;
     int         rnd_seed                        = 0;
-    float       default_primary_learning_rate   = 0.01f;
-    float       default_secondary_learning_rate = 0.0001f;
-    float       default_mismatch_act_thres      = 0.8f;
-    float       default_mismatch_smoothing      = 0.001f;
-    float       default_accumulated_theta_thres = 2.0f;
-    float       default_min_mismatch_deviation  = 1.0f;
-    float       default_min_mismatch_percentage = 0.002f;
+    double      default_primary_learning_rate   = 0.01;
+    double      default_secondary_learning_rate = 0.0001;
+    double      default_mismatch_act_thres      = 0.8;
+    double      default_mismatch_smoothing      = 0.001;
+    double      default_accumulated_theta_thres = 2.0;
+    double      default_min_mismatch_deviation  = 1.0;
+    double      default_min_mismatch_percentage = 0.002;
 };
 
 using learning_window_t = std::pair<sigmoid_shape_t,sigmoid_shape_t>;
@@ -75,10 +75,10 @@ struct neuron_group_params_t {
     std::vector<std::string>       input_channels                    = {};
     std::vector<neuron_set_t>      neurons                           = {};
     std::vector<channel_mapping_t> channel_mappings                  = {};
-    float                          default_local_inhibition_strength = 5.0f;
-    float                          default_common_learning_rate      = 0.0001f;
+    double                         default_local_inhibition_strength = 5.0;
+    double                         default_common_learning_rate      = 0.0001;
     sigmoid_shape_t                default_weight_filter             = { 0.5, 0.33 };
-    float                          default_stochastic_win_thres      = 0.8f;
+    double                         default_stochastic_win_thres      = 0.8;
     int                            random_seed                       = 0;
 };
 
