@@ -14,6 +14,8 @@
 #include "buffer_browser.h"
 #include "dataset_browser.h"
 #include "logging_window.h"
+#include "gui_probe/probe_browser.h"
+#include "gui_probe/observer_panel.h"
 
 namespace coast {
 
@@ -138,6 +140,10 @@ private:
     std::unique_ptr<buffer_browser> buffer_browser_window;
     std::unique_ptr<dataset_browser> dataset_browser_window;
     logging_window logging_window_instance;
+
+    // Probe system windows
+    gui_probe::probe_browser probe_browser_window;
+    gui_probe::observer_panel observer_panel_window;
 
 
     // Render individual dialogs

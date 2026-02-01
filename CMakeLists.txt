@@ -68,6 +68,11 @@ add_executable(coast
         src/probe/observers/scalar_observer.cpp
         src/probe/observers/time_series_observer.cpp
         src/probe/observers/histogram_observer.cpp
+        # Probe GUI
+        include/gui_probe/probe_browser.h
+        include/gui_probe/observer_panel.h
+        src/gui_probe/probe_browser.cpp
+        src/gui_probe/observer_panel.cpp
 
         # SDL2 application framework
         src/gui_core/sdl_app.cpp
@@ -237,6 +242,7 @@ target_include_directories(coast PRIVATE
         include/core
         include/probe
         include/probe/observers
+        include/gui_probe
         include/gui_core
         include/gui_vis
         include/hd_ngm2

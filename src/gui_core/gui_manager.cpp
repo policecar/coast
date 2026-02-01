@@ -38,6 +38,10 @@ void gui_manager::set_sim_instance(sim_instance* instance)
         buffer_browser_window = std::make_unique<buffer_browser>(*sim);
         dataset_browser_window = std::make_unique<dataset_browser>(*sim);
 
+        // Initialize probe system windows with sim environment
+        probe_browser_window.set_env(&sim->get_sim_env());
+        observer_panel_window.set_env(&sim->get_sim_env());
+
         cfg_editor = std::make_unique<config_editor>(sim->get_config(), sim->get_config_path());
         // Set reload callback to trigger loading of saved config
         cfg_editor->set_reload_callback([this](const std::string& path) {
@@ -47,6 +51,8 @@ void gui_manager::set_sim_instance(sim_instance* instance)
     } else {
         cfg_editor.reset();
         show_config_editor = false;
+        probe_browser_window.set_env(nullptr);
+        observer_panel_window.set_env(nullptr);
     }
 }
 
@@ -139,6 +145,13 @@ void gui_manager::render_menu_bar()
                 if (ImGui::MenuItem("Performance...", nullptr, show_performance)) {
                     show_performance = !show_performance;
                 }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Probe Browser...", nullptr, probe_browser_window.is_visible())) {
+                    probe_browser_window.toggle();
+                }
+                if (ImGui::MenuItem("Probe Observers...", nullptr, observer_panel_window.is_visible())) {
+                    observer_panel_window.toggle();
+                }
                 ImGui::EndMenu();
             }
         }
@@ -228,6 +241,11 @@ void gui_manager::render_dialogs()
             dataset_browser_window->render();
         }
         render_performance_window();
+
+        // Probe system windows
+        observer_panel_window.update();  // Drain probe values to observers
+        probe_browser_window.render();
+        observer_panel_window.render();
     }
 
     // Logging window doesn't require a simulation
