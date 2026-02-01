@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Download script for CIMC-COAST datasets
 # This script downloads all required datasets for the project.
@@ -127,30 +127,12 @@ check_command() {
     fi
 }
 
-check_python_module() {
-    if python3 -c "import $1" &> /dev/null; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Check required commands
 check_command curl
 check_command gunzip
 check_command unzip
 check_command tar
-check_command python3
 
-# Check Python modules (needed for dSprites conversion)
-HAS_NUMPY=false
-HAS_H5PY=false
-if check_python_module numpy; then
-    HAS_NUMPY=true
-fi
-if check_python_module h5py; then
-    HAS_H5PY=true
-fi
 
 # Create data directory structure
 create_directories() {
@@ -294,41 +276,17 @@ download_dsprites_tracked() {
         return 0
     fi
 
-    # Check for required Python modules
-    if [[ "$HAS_NUMPY" != "true" || "$HAS_H5PY" != "true" ]]; then
-        write_status "dsprites" "skipped" 0
-        return 0
-    fi
-
     cd "$dir"
     write_status "dsprites" "downloading" 0
 
-    local npz_file="dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
-
-    # ~18MB download (expands to ~2.9GB)
+    # ~2.9GB direct HDF5 download
     download_file "dsprites" \
-        "https://github.com/deepmind/dsprites-dataset/raw/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz" \
-        "$npz_file" 19318135 || {
+        "https://github.com/deepmind/dsprites-dataset/raw/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5" \
+        "$hdf5_file" 3070925658 || {
         write_status "dsprites" "failed" 0
         return 1
     }
 
-    write_status "dsprites" "extracting" 100
-    python3 << 'PYTHON_SCRIPT'
-import numpy as np
-import h5py
-
-npz_path = "dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
-hdf5_path = "dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5"
-
-data = np.load(npz_path, allow_pickle=True, encoding='latin1')
-
-with h5py.File(hdf5_path, 'w') as f:
-    for key in data.files:
-        f.create_dataset(key, data=data[key])
-PYTHON_SCRIPT
-
-    rm -f "$npz_file"
     write_status "dsprites" "done" 100
 }
 
@@ -493,7 +451,7 @@ download_3dchairs_tracked() {
 # Format: name|download_size|installed_size|check_function
 declare -A DATASET_INFO
 DATASET_INFO["mnist"]="MNIST|11 MB|47 MB"
-DATASET_INFO["dsprites"]="dSprites|18 MB|2.9 GB"
+DATASET_INFO["dsprites"]="dSprites|2.9 GB|2.9 GB"
 DATASET_INFO["emnist"]="EMNIST|535 MB|700 MB"
 DATASET_INFO["kmnist"]="KMNIST|18 MB|47 MB"
 DATASET_INFO["cifar10"]="CIFAR-10|163 MB|163 MB"
