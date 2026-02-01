@@ -46,6 +46,14 @@ add_executable(coast
         # Main
         src/main.cpp
 
+        # Core infrastructure (entity element hierarchy)
+        include/core/element_type.h
+        include/core/entity_element.h
+        include/core/entity_element_macros.h
+        include/core/structure_registry.h
+        src/core/entity_element.cpp
+        src/core/structure_registry.cpp
+
         # SDL2 application framework
         src/gui_core/sdl_app.cpp
         include/gui_core/sdl_app.h
@@ -210,6 +218,8 @@ target_include_directories(coast SYSTEM PRIVATE
 
 # Project includes (warnings enabled)
 target_include_directories(coast PRIVATE
+        include
+        include/core
         include/gui_core
         include/gui_vis
         include/hd_ngm2
