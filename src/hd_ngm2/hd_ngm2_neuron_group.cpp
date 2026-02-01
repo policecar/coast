@@ -55,6 +55,9 @@ neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim
     inp_ids.resize(tmp.size());
     std::ranges::copy(tmp,inp_ids.begin());
     */
+
+    // Initialize entity element structure for probe system
+    init_structure();
 }
 
 void neuron_group_t::init_io(const std::unordered_map<std::string,output_channel_t> &input_map){
@@ -133,6 +136,13 @@ void neuron_group_t::process()
     // simulate local inhibition within the neuron group
     // (defined in hd_ngm2_tools.h)
     local_inhibition(out,local_inhibition_strength);
+
+    // Probe total activity after local inhibition
+    const float total_act = std::reduce(out.begin(), out.end());
+    probe("total_activity", total_act);
+    probe("neuron_count", static_cast<double>(neurons.size()));
+    probe("avg_mismatch", get_avg_mismatch());
+    probe("max_mismatch", get_max_mismatch());
 
     /*
      * Simulate the adaption of the neurons in the neuron group to the current input signal.

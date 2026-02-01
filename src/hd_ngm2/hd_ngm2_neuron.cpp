@@ -111,6 +111,12 @@ float neuron_t::get_response()
         0.0f,
         1.0f//sigmoid(energy,{0.66,0.33})
     );
+
+    // Probe neuron state
+    probe("activity", neuron_activity);
+    probe("dendrite_count", static_cast<double>(dendrites.size()));
+    probe("representation_count", static_cast<double>(get_representation_count()));
+
     /*
     const float drain = 0.1f;
     energy = energy * (1.0f - drain) + (1.0f - neuron_activity) * drain;

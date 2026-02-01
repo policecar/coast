@@ -15,13 +15,15 @@
 #include "io_buffer.h"
 #include "hd_ngm2_cfg.h"
 #include "io_entity.h"
+#include "core/entity_element.h"
+#include "core/entity_element_macros.h"
 
 namespace ngm2 {
 
 /*
  * Main model of a dendritic branch used by the neuron model.
  */
-class dendrite_t {
+class dendrite_t : public core::entity_element {
 
 public:
 
@@ -84,6 +86,10 @@ private:
     // helper functions
     static constexpr seg_id_t calc_max_segment_idx(seg_id_t max_branch_level);
 public:
+    // Entity element interface
+    ELEMENT_TYPE(dendrite_t, "dendrite")
+    ELEMENT_PROBES("segment_activity", "synapse_count", "representation_count")
+
     dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
 
     // input initialization

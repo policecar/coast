@@ -300,6 +300,11 @@ float dendrite_t::get_response()
         max_activity = std::max(max_activity, segment_activity[si]);
     }
 
+    // Probe dendrite state
+    probe("segment_activity", max_activity);
+    probe("synapse_count", static_cast<double>(synapses.size()));
+    probe("representation_count", static_cast<double>(get_representation_count()));
+
     return max_activity;
 }
 
