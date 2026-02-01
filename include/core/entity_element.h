@@ -5,6 +5,7 @@
 #ifndef COAST_ENTITY_ELEMENT_H
 #define COAST_ENTITY_ELEMENT_H
 
+#include <atomic>
 #include <vector>
 #include <string_view>
 #include <typeinfo>
@@ -12,6 +13,11 @@
 
 namespace sim {
 struct io_entity;  // Forward declaration
+}
+
+namespace probe {
+class entity_probe_set;
+struct probe_instance;
 }
 
 namespace core {
@@ -24,10 +30,40 @@ class entity_element {
 protected:
     sim::io_entity* root_entity_{nullptr};
 
+    // Probe fast-path: count of active probes on this element.
+    // Mutable because it's probe infrastructure, not simulation state.
+    mutable std::atomic<std::uint32_t> active_probe_count_{0};
+
     friend class structure_registry;  // Sets root_entity_ during structure building
+    friend class probe::entity_probe_set;  // Manages active_probe_count_
+    friend struct probe::probe_instance;  // Decrements active_probe_count_ on deactivate
 
 public:
+    entity_element() = default;
     virtual ~entity_element() = default;
+
+    // Non-copyable
+    entity_element(const entity_element&) = delete;
+    entity_element& operator=(const entity_element&) = delete;
+
+    // Movable (atomic counter is copied, which is fine for probe metadata)
+    entity_element(entity_element&& other) noexcept
+        : root_entity_(other.root_entity_)
+        , active_probe_count_(other.active_probe_count_.load(std::memory_order_relaxed))
+    {
+        other.root_entity_ = nullptr;
+    }
+
+    entity_element& operator=(entity_element&& other) noexcept {
+        if (this != &other) {
+            root_entity_ = other.root_entity_;
+            active_probe_count_.store(
+                other.active_probe_count_.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+            other.root_entity_ = nullptr;
+        }
+        return *this;
+    }
 
     // -- Type identification --
 
@@ -71,8 +107,12 @@ public:
     /// Returns the list of available probe point names on this element.
     [[nodiscard]] virtual std::vector<std::string_view> probe_points() const { return {}; }
 
-    /// Record a probe value. Only records if the probe is active.
-    void probe(std::string_view name, double value);
+    /// Record a probe value. Only records if any probe on this element is active.
+    /// Inline fast-path: single atomic load when no probes are active.
+    void probe(std::string_view name, double value) {
+        if (active_probe_count_.load(std::memory_order_relaxed) == 0) return;
+        probe_slow_path(name, value);
+    }
 
     // -- Root entity access --
 
@@ -81,6 +121,8 @@ public:
     [[nodiscard]] const sim::io_entity* root_entity() const { return root_entity_; }
 
 protected:
+    /// Slow path for probe recording (hash map lookup).
+    void probe_slow_path(std::string_view name, double value);
     /// Implementation hook for type-erased child access.
     [[nodiscard]] virtual entity_element* child_impl(const std::type_info& type, std::size_t index) {
         (void)type; (void)index;

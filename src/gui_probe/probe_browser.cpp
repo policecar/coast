@@ -131,7 +131,7 @@ void probe_browser::render_probe_point(core::structure_entry* entry,
     bool checkbox_value = is_active;
     if (ImGui::Checkbox("##active", &checkbox_value)) {
         if (checkbox_value && !is_active) {
-            instance->active.store(true, std::memory_order_release);
+            instance->activate();
         } else if (!checkbox_value && is_active) {
             instance->deactivate();
             // Remove observer windows for this probe

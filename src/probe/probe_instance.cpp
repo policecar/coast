@@ -3,6 +3,7 @@
 //
 
 #include "probe/probe_instance.h"
+#include "core/entity_element.h"
 #include "core/structure_registry.h"
 
 namespace probe {
@@ -36,8 +37,20 @@ void probe_instance::update_observers() {
     });
 }
 
+void probe_instance::activate() {
+    // Only increment counter if transitioning from inactive to active
+    bool was_active = active.exchange(true, std::memory_order_release);
+    if (!was_active && element) {
+        element->active_probe_count_.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 void probe_instance::deactivate() {
-    active.store(false, std::memory_order_relaxed);
+    // Only decrement counter if transitioning from active to inactive
+    bool was_active = active.exchange(false, std::memory_order_relaxed);
+    if (was_active && element) {
+        element->active_probe_count_.fetch_sub(1, std::memory_order_relaxed);
+    }
     observers.clear();
     values.clear();
     call_count.store(0, std::memory_order_relaxed);

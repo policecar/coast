@@ -52,6 +52,9 @@ struct probe_instance {
     /// Drain values to observers (called from GUI thread).
     void update_observers();
 
+    /// Activate this probe (increments element's active counter).
+    void activate();
+
     /// Deactivate and destroy all observers.
     void deactivate();
 

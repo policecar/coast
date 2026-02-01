@@ -7,7 +7,7 @@
 
 namespace core {
 
-void entity_element::probe(std::string_view name, double value) {
+void entity_element::probe_slow_path(std::string_view name, double value) {
     if (!root_entity_) return;
     root_entity_->probes().record(this, name, value);
 }

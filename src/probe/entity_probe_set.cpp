@@ -98,7 +98,7 @@ probe_instance* entity_probe_set::activate(const core::entity_element* element,
     auto* instance = get_or_create(element, name);
     instance->decimation.store(decimation, std::memory_order_relaxed);
     instance->call_count.store(0, std::memory_order_relaxed);
-    instance->active.store(true, std::memory_order_release);
+    instance->activate();
     return instance;
 }
 
