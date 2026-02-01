@@ -149,9 +149,6 @@ void gui_manager::render_menu_bar()
                 if (ImGui::MenuItem("Probe Browser...", nullptr, probe_browser_window.is_visible())) {
                     probe_browser_window.toggle();
                 }
-                if (ImGui::MenuItem("Probe Observers...", nullptr, observer_panel_window.is_visible())) {
-                    observer_panel_window.toggle();
-                }
                 ImGui::EndMenu();
             }
         }
@@ -242,10 +239,9 @@ void gui_manager::render_dialogs()
         }
         render_performance_window();
 
-        // Probe system windows
-        observer_panel_window.update();  // Drain probe values to observers
-        probe_browser_window.render();
-        observer_panel_window.render();
+        // Probe system - browser handles both update and observer windows
+        probe_browser_window.update();  // Drain probe values to observers
+        probe_browser_window.render();  // Render browser and observer windows
     }
 
     // Logging window doesn't require a simulation

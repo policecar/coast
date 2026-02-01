@@ -54,6 +54,10 @@ public:
     /// Get all registered probe instances (for GUI discovery).
     [[nodiscard]] std::vector<probe_instance*> all_instances();
 
+    /// Discover a probe (create instance if needed, but don't activate).
+    /// Used by GUI for browsing available probes.
+    probe_instance* discover(const core::entity_element* element, std::string_view name);
+
     /// Activate a probe with optional decimation (GUI thread).
     probe_instance* activate(const core::entity_element* element,
                              std::string_view name,

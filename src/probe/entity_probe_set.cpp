@@ -87,6 +87,11 @@ probe_instance* entity_probe_set::get_or_create(const core::entity_element* elem
     return writer->second.get();
 }
 
+probe_instance* entity_probe_set::discover(const core::entity_element* element,
+                                            std::string_view name) {
+    return get_or_create(element, name);
+}
+
 probe_instance* entity_probe_set::activate(const core::entity_element* element,
                                             std::string_view name,
                                             std::uint32_t decimation) {
