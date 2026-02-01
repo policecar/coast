@@ -52,16 +52,17 @@ struct io_entity : public core::entity_element {
     [[nodiscard]] probe::entity_probe_set& probes() { return probes_; }
     [[nodiscard]] const probe::entity_probe_set& probes() const { return probes_; }
 
-protected:
-    core::structure_registry structure_;
-    probe::entity_probe_set probes_;
-
     /// Initialize the structure registry and probe set.
-    /// Call this at the end of subclass constructors after all child elements have been created.
+    /// Call this after all child elements have been created, and after the entity
+    /// is in its final memory location (not subject to vector reallocation).
     void init_structure() {
         structure_.build(this);
         probes_.init(this, &structure_);
     }
+
+protected:
+    core::structure_registry structure_;
+    probe::entity_probe_set probes_;
 };
 
 

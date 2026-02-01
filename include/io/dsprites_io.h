@@ -13,10 +13,16 @@
 
 #include "io_entity.h"
 #include "dsprites_cfg.h"
+#include "core/entity_element_macros.h"
 
 namespace dsprites {
 
 class dsprites_io : public sim::io_entity {
+public:
+    // Entity element interface
+    ELEMENT_TYPE(dsprites_io, "dsprites_input")
+
+private:
     static constexpr std::size_t image_dim = 64;
     static constexpr std::size_t image_pixels = image_dim * image_dim;
 

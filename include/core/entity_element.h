@@ -11,7 +11,7 @@
 #include "element_type.h"
 
 namespace sim {
-class io_entity;  // Forward declaration
+struct io_entity;  // Forward declaration
 }
 
 namespace core {

@@ -51,9 +51,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for mnist datasets
     sb.register_init_func( sim::io_entity_type_t::mnist_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for mnist
+            entity.init_structure();
         }
     );
 
@@ -70,9 +70,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for dsprites datasets
     sb.register_init_func( sim::io_entity_type_t::dsprites_input,
-        [](io_entity&, sim::output_id_t,   const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for dsprites
+            entity.init_structure();
         }
     );
 
@@ -89,9 +89,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for emnist datasets
     sb.register_init_func( sim::io_entity_type_t::emnist_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for emnist
+            entity.init_structure();
         }
     );
 
@@ -108,9 +108,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for kmnist datasets
     sb.register_init_func( sim::io_entity_type_t::kmnist_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for kmnist
+            entity.init_structure();
         }
     );
 
@@ -127,9 +127,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for cifar10 datasets
     sb.register_init_func( sim::io_entity_type_t::cifar10_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for cifar10
+            entity.init_structure();
         }
     );
 
@@ -146,9 +146,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for cifar100 datasets
     sb.register_init_func( sim::io_entity_type_t::cifar100_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for cifar100
+            entity.init_structure();
         }
     );
 
@@ -165,9 +165,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for chairs3d datasets
     sb.register_init_func( sim::io_entity_type_t::chairs3d_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for chairs3d
+            entity.init_structure();
         }
     );
 
@@ -184,9 +184,9 @@ inline void register_entity_handlers(sim_builder &sb, loader::json_loader &jl)
     );
     // init function for color_mnist datasets
     sb.register_init_func( sim::io_entity_type_t::color_mnist_input,
-        [](io_entity&, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
+        [](io_entity& entity, sim::output_id_t, const std::unordered_map<std::string, output_channel_t>&)
         {
-            // nothing to init for color_mnist
+            entity.init_structure();
         }
     );
 

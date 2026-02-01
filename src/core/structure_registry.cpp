@@ -10,19 +10,14 @@ namespace core {
 
 // -- structure_entry --
 
-const std::string& structure_entry::path() const {
-    if (!path_valid) {
-        if (parent == nullptr) {
-            // Root element: just the type name
-            cached_path = type.name();
-        } else {
-            // Build path: parent_path/type[index]
-            const std::string& parent_path = parent->path();
-            cached_path = parent_path + "/" + type.name() + "[" + std::to_string(index) + "]";
-        }
-        path_valid = true;
+void structure_entry::compute_path() {
+    if (parent == nullptr) {
+        // Root element: just the type name
+        cached_path = type.name();
+    } else {
+        // Build path: parent_path/type[index]
+        cached_path = parent->cached_path + "/" + type.name() + "[" + std::to_string(index) + "]";
     }
-    return cached_path;
 }
 
 std::string structure_entry::full_probe_path(std::string_view probe_name) const {
@@ -58,6 +53,9 @@ void structure_registry::build(sim::io_entity* root) {
         root_->probe_names.emplace_back(pname);
     }
 
+    // Compute path for root (must be done before recursing)
+    root_->compute_path();
+
     // Build recursively for all children
     build_recursive(root_.get(), root_element, root);
 }
@@ -90,6 +88,9 @@ void structure_registry::build_recursive(structure_entry* parent_entry,
             for (auto pname : child->probe_points()) {
                 child_entry->probe_names.emplace_back(pname);
             }
+
+            // Compute path (must be done before recursing so children can use parent's path)
+            child_entry->compute_path();
 
             // Recurse into grandchildren
             build_recursive(child_entry.get(), child, root_entity);

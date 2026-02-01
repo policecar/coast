@@ -13,10 +13,16 @@
 
 #include "io_entity.h"
 #include "cifar10_cfg.h"
+#include "core/entity_element_macros.h"
 
 namespace cifar10 {
 
 class cifar10_io : public sim::io_entity {
+public:
+    // Entity element interface
+    ELEMENT_TYPE(cifar10_io, "cifar10_input")
+
+private:
     static constexpr std::size_t image_dim = 32;
     static constexpr std::size_t image_channels = 3;
     static constexpr std::size_t image_pixels = image_dim * image_dim * image_channels;

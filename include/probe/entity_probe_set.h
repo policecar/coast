@@ -13,7 +13,7 @@
 #include "probe_instance.h"
 
 namespace sim {
-class io_entity;
+struct io_entity;
 }
 
 namespace core {

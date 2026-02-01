@@ -12,7 +12,7 @@
 #include "element_type.h"
 
 namespace sim {
-class io_entity;
+struct io_entity;
 }
 
 namespace core {
@@ -28,15 +28,18 @@ struct structure_entry {
     std::vector<std::string> probe_names;        // Cached from probe_points()
     std::vector<std::unique_ptr<structure_entry>> children;
 
-    // Lazily computed full path (e.g., "neuron[42]/dendrite[3]")
-    mutable std::string cached_path;
-    mutable bool path_valid{false};
+    // Pre-computed full path (e.g., "neuron[42]/dendrite[3]")
+    // Computed once during build(), thread-safe to read afterwards.
+    std::string cached_path;
 
     structure_entry(element_type t, std::size_t idx, entity_element* elem, structure_entry* par)
         : type(t), index(idx), element(elem), parent(par) {}
 
-    /// Get the full path string for this entry (lazily computed and cached).
-    [[nodiscard]] const std::string& path() const;
+    /// Get the full path string for this entry.
+    [[nodiscard]] const std::string& path() const { return cached_path; }
+
+    /// Compute and set the path (called during structure building).
+    void compute_path();
 
     /// Get the full path including a probe name (e.g., "neuron[42]/dendrite[3]/activation").
     [[nodiscard]] std::string full_probe_path(std::string_view probe_name) const;

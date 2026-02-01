@@ -56,11 +56,17 @@ neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim
     std::ranges::copy(tmp,inp_ids.begin());
     */
 
-    // Initialize entity element structure for probe system
-    init_structure();
+    // NOTE: init_structure() is called in init_io(), not here.
+    // This is because the entity vector may reallocate when more entities are added,
+    // which would invalidate the root_entity_ pointers set by init_structure().
 }
 
 void neuron_group_t::init_io(const std::unordered_map<std::string,output_channel_t> &input_map){
+    // Initialize entity element structure for probe system.
+    // This must be called after all entities are created to avoid pointer invalidation
+    // from vector reallocation.
+    init_structure();
+
     // init inp_ids array
     inp_ids.clear();
     for (output_channel_t oc : input_map | std::views::values) {

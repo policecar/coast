@@ -9,7 +9,7 @@
 
 namespace sim {
 class env;
-class io_entity;
+struct io_entity;
 }
 
 namespace core {
@@ -17,7 +17,7 @@ struct structure_entry;
 }
 
 namespace probe {
-class probe_instance;
+struct probe_instance;
 class entity_probe_set;
 }
 
