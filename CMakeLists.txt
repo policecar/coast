@@ -54,6 +54,14 @@ add_executable(coast
         src/core/entity_element.cpp
         src/core/structure_registry.cpp
 
+        # Probe system
+        include/probe/spsc_queue.h
+        include/probe/probe_observer.h
+        include/probe/probe_instance.h
+        include/probe/entity_probe_set.h
+        src/probe/probe_instance.cpp
+        src/probe/entity_probe_set.cpp
+
         # SDL2 application framework
         src/gui_core/sdl_app.cpp
         include/gui_core/sdl_app.h
@@ -220,6 +228,7 @@ target_include_directories(coast SYSTEM PRIVATE
 target_include_directories(coast PRIVATE
         include
         include/core
+        include/probe
         include/gui_core
         include/gui_vis
         include/hd_ngm2

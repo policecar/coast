@@ -11,6 +11,7 @@
 #include "io_buffer.h"
 #include "core/entity_element.h"
 #include "core/structure_registry.h"
+#include "probe/entity_probe_set.h"
 
 namespace sim {
 
@@ -47,13 +48,19 @@ struct io_entity : public core::entity_element {
     [[nodiscard]] core::structure_registry& structure() { return structure_; }
     [[nodiscard]] const core::structure_registry& structure() const { return structure_; }
 
+    /// Access the probe set for this entity.
+    [[nodiscard]] probe::entity_probe_set& probes() { return probes_; }
+    [[nodiscard]] const probe::entity_probe_set& probes() const { return probes_; }
+
 protected:
     core::structure_registry structure_;
+    probe::entity_probe_set probes_;
 
-    /// Initialize the structure registry. Call this at the end of subclass constructors
-    /// after all child elements have been created.
+    /// Initialize the structure registry and probe set.
+    /// Call this at the end of subclass constructors after all child elements have been created.
     void init_structure() {
         structure_.build(this);
+        probes_.init(this, &structure_);
     }
 };
 
