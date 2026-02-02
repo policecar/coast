@@ -10,8 +10,8 @@
 #include <string>
 #include <functional>
 #include <span>
-#include <random>
 
+#include "core/rng/fast_rng.h"
 #include "io_entity.h"
 #include "io_buffer.h"
 #include "hd_ngm2_neuron.h"
@@ -44,7 +44,7 @@ class neuron_group_t : public sim::io_entity {
     sigmoid_shape_t weight_filter;
     float           stochastic_win_thres;
 
-    std::mt19937 rgen;
+    fast_rng_t rgen;
 
 public:
     // Entity element interface

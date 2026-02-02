@@ -8,9 +8,9 @@
 #include <functional>
 #include <span>
 #include <string>
-#include <random>
 #include <vector>
 
+#include "core/rng/fast_rng.h"
 #include "io_entity.h"
 #include "chairs3d_cfg.h"
 #include "core/entity_element_macros.h"
@@ -42,7 +42,7 @@ private:
     std::size_t ci_cnt;
     int change_interval;
 
-    std::mt19937 rgen;
+    fast_rng_t rgen;
     std::uniform_real_distribution<float> dis;
 
 public:
