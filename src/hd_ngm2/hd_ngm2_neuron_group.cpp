@@ -143,12 +143,6 @@ void neuron_group_t::process()
     // (defined in hd_ngm2_tools.h)
     local_inhibition(out,local_inhibition_strength);
 
-    // Probe total activity after local inhibition
-    const float total_act = std::reduce(out.begin(), out.end());
-    probe("total_activity", total_act);
-    probe("neuron_count", static_cast<double>(neurons.size()));
-    probe("avg_mismatch", get_avg_mismatch());
-    probe("max_mismatch", get_max_mismatch());
 
     /*
      * Simulate the adaption of the neurons in the neuron group to the current input signal.
@@ -167,17 +161,22 @@ void neuron_group_t::process()
 
     // 1)
     const float mx_act = std::reduce(out.begin(),out.end(),0.0f,[](const float a, const float b){ return std::max(a,b); });
+    PROBE("max activity",mx_act);
 
     // 2)
     std::uniform_real_distribution<float> dis ( mx_act * stochastic_win_thres, mx_act );
     float win_act = dis(rgen);
+    PROBE("winning thres",win_act);
 
     // 3)
+    double winner_weight = 0.0;
     for (std::size_t idx = 0; idx < out.size(); ++idx)
         if (out[idx] + std::numeric_limits<float>::epsilon() >= win_act) {
-            neurons[idx].adapt( sigmoid(1.0f - out[idx], weight_filter) );
+            winner_weight = sigmoid(1.0f - out[idx], weight_filter);
+            neurons[idx].adapt( (float)winner_weight );
             break;
         }
+    PROBE("winner weight",winner_weight);
 
     // 4)
     const float act_sum = std::reduce(out.begin(),out.end());
@@ -189,6 +188,12 @@ void neuron_group_t::process()
             neuron.adapt(sec_weight * common_learning_rate);
         }
     );
+
+    // calculate average secondary weight for probe
+    const float avg_sec = std::reduce(out.begin(),out.end(),0.0f,[&](const float a, const float b) {
+        return a + sigmoid(1.0f - (b / act_sum), weight_filter);
+    }) / (float)out.size();
+    PROBE("average sec. weight",avg_sec);
 
 
 }

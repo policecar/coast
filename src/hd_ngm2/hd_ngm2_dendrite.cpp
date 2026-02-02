@@ -301,9 +301,9 @@ float dendrite_t::get_response()
     }
 
     // Probe dendrite state
-    probe("segment_activity", max_activity);
-    probe("synapse_count", static_cast<double>(synapses.size()));
-    probe("representation_count", static_cast<double>(get_representation_count()));
+    PROBE("segment_activity", max_activity);
+    PROBE("synapse_count", static_cast<double>(synapses.size()));
+    PROBE("representation_count", static_cast<double>(get_representation_count()));
 
     return max_activity;
 }

@@ -51,8 +51,10 @@ add_executable(coast
         include/core/entity_element.h
         include/core/entity_element_macros.h
         include/core/structure_registry.h
+        include/core/probe_name_registry.h
         src/core/entity_element.cpp
         src/core/structure_registry.cpp
+        src/core/probe_name_registry.cpp
 
         # Probe system
         include/probe/spsc_queue.h

@@ -50,7 +50,6 @@ public:
     // Entity element interface
     ELEMENT_TYPE(neuron_group_t, "neuron_group")
     ELEMENT_CHILDREN_1(neurons, neuron_t)
-    ELEMENT_PROBES("total_activity", "neuron_count", "avg_mismatch", "max_mismatch")
 
     // main constructor the sets up the neuron group
     explicit neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id);

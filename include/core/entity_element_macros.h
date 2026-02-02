@@ -8,6 +8,7 @@
 #define COAST_ENTITY_ELEMENT_MACROS_H
 
 #include "entity_element.h"
+#include "probe_name_registry.h"
 
 /// Implement type_id() for an entity_element subclass.
 /// Usage: ELEMENT_TYPE(my_class, "display_name")
@@ -64,9 +65,21 @@
 
 /// Implement probe_points() returning a list of probe names.
 /// Usage: ELEMENT_PROBES("activation", "threshold", "spike")
+/// NOTE: Prefer using PROBE() macro instead, which auto-registers probe names.
 #define ELEMENT_PROBES(...) \
     [[nodiscard]] std::vector<std::string_view> probe_points() const override { \
         return {__VA_ARGS__}; \
     }
+
+/// Record a probe value and auto-register the probe name on first call.
+/// Usage: PROBE("activity", activity_value);
+/// The probe name is registered once per call site via static initialization,
+/// making it visible in the probe browser without manual ELEMENT_PROBES declaration.
+#define PROBE(name, value) \
+    do { \
+        static const bool registered_ = (::core::probe_name_registry::register_probe(typeid(*this), name), true); \
+        (void)registered_; \
+        probe(name, value); \
+    } while(0)
 
 #endif // COAST_ENTITY_ELEMENT_MACROS_H

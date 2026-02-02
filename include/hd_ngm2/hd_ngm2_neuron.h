@@ -43,7 +43,6 @@ public:
     // Entity element interface
     ELEMENT_TYPE(neuron_t, "neuron")
     ELEMENT_CHILDREN_1(dendrites, dendrite_t)
-    ELEMENT_PROBES("activity", "dendrite_count", "representation_count")
 
     explicit neuron_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
 

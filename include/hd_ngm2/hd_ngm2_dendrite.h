@@ -88,7 +88,6 @@ private:
 public:
     // Entity element interface
     ELEMENT_TYPE(dendrite_t, "dendrite")
-    ELEMENT_PROBES("segment_activity", "synapse_count", "representation_count")
 
     dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
 

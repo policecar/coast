@@ -7,6 +7,7 @@
 #include "sim_core/sim_env.h"
 #include "sim_core/io_entity.h"
 #include "core/structure_registry.h"
+#include "core/probe_name_registry.h"
 #include "probe/entity_probe_set.h"
 #include "probe/probe_instance.h"
 #include "probe/observers/scalar_observer.h"
@@ -14,6 +15,7 @@
 #include "probe/observers/histogram_observer.h"
 #include <imgui.h>
 #include <algorithm>
+#include <set>
 
 using coast::scaled;
 
@@ -94,8 +96,24 @@ void probe_browser::render_structure_tree(core::structure_entry* entry,
                                            probe::entity_probe_set& probes) {
     if (!entry) return;
 
+    // Collect probe names from both sources:
+    // 1. Static declarations (ELEMENT_PROBES macro) - stored in entry->probe_names
+    // 2. Runtime registrations (PROBE macro) - stored in probe_name_registry
+    std::set<std::string> all_probe_names;
+
+    // Add statically declared probes
+    for (const auto& name : entry->probe_names) {
+        all_probe_names.insert(name);
+    }
+
+    // Add dynamically registered probes from the registry
+    if (entry->element) {
+        auto registered = core::probe_name_registry::get_probes(entry->element->type_id().info());
+        all_probe_names.merge(registered);
+    }
+
     // Render probe points for this entry
-    for (const auto& probe_name : entry->probe_names) {
+    for (const auto& probe_name : all_probe_names) {
         render_probe_point(entry, probe_name, probes);
     }
 

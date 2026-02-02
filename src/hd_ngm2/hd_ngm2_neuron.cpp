@@ -113,9 +113,9 @@ float neuron_t::get_response()
     );
 
     // Probe neuron state
-    probe("activity", neuron_activity);
-    probe("dendrite_count", static_cast<double>(dendrites.size()));
-    probe("representation_count", static_cast<double>(get_representation_count()));
+    PROBE("activity", neuron_activity);
+    PROBE("dendrite_count", static_cast<double>(dendrites.size()));
+    PROBE("representation_count", static_cast<double>(get_representation_count()));
 
     /*
     const float drain = 0.1f;
