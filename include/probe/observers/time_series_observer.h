@@ -27,7 +27,7 @@ class time_series_observer : public probe_observer {
 public:
     explicit time_series_observer(std::size_t capacity = 1000);
 
-    void push(double value) override;
+    void push(std::uint64_t step, double value) override;
     void render() override;
     [[nodiscard]] std::string_view name() const override { return "Time Series"; }
 

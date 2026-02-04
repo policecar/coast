@@ -73,7 +73,7 @@ public:
     [[nodiscard]] const std::filesystem::path& output_path() const { return config_.output_path; }
 
     // Internal: called by file_observer to record values
-    void record_value(const std::string& probe_path, double value);
+    void record_value(const std::string& probe_path, std::uint64_t step, double value);
 
 private:
     probe_logger_config config_;
@@ -87,6 +87,7 @@ private:
     // Per-probe data buffers
     struct probe_buffer {
         std::string path;
+        std::vector<std::uint64_t> steps;
         std::vector<double> values;
         std::uint64_t total_samples = 0;
     };
@@ -97,7 +98,8 @@ private:
     hdf5::group probes_group_;
     struct hdf5_probe_dataset {
         std::string path;
-        hdf5::dataset values;
+        hdf5::dataset steps;   // Dataset for step numbers
+        hdf5::dataset values;  // Dataset for values
         std::size_t current_rows = 0;
     };
     std::vector<hdf5_probe_dataset> hdf5_datasets_;

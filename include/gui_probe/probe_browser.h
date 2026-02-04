@@ -10,6 +10,7 @@
 #include <memory>
 #include <functional>
 #include <imgui.h>
+#include <imfilebrowser.h>
 
 namespace sim {
 class env;
@@ -55,8 +56,12 @@ class probe_browser {
     std::vector<observer_window> observer_windows_;
     int next_window_id_{0};
 
-    // Callback for logging probes to file
+    // Callback for logging probes to file (legacy, can be removed)
     probe_log_callback_t log_probe_callback_;
+
+    // File browser for CSV file observer
+    ImGui::FileBrowser csv_file_browser_{ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir};
+    probe::probe_instance* csv_pending_probe_{nullptr};
 
 public:
     probe_browser() = default;

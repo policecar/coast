@@ -8,7 +8,8 @@
 
 namespace probe {
 
-void scalar_observer::push(double value) {
+void scalar_observer::push(std::uint64_t step, double value) {
+    last_step_ = step;
     current_ = value;
     min_ = std::min(min_, value);
     max_ = std::max(max_, value);

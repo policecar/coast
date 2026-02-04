@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <cmath>
 
 namespace logging {
 
@@ -215,6 +216,22 @@ log_result buffer_logger::write_metadata()
         ds.write(H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL, edges.data());
     }
 
+    // Write visualization hints (width, height, num_channels per buffer)
+    if (!topology.buffers.empty()) {
+        std::vector<std::int32_t> vis_hints_data;
+        vis_hints_data.reserve(topology.buffers.size() * 3);
+        for (const auto& buf : topology.buffers) {
+            vis_hints_data.push_back(buf.vis_hint.width);
+            vis_hints_data.push_back(buf.vis_hint.height);
+            vis_hints_data.push_back(buf.vis_hint.num_channels);
+        }
+
+        hsize_t dims[2] = {topology.buffers.size(), 3};
+        auto space = hdf5::dataspace::simple(std::span(dims));
+        auto ds = hdf5::dataset::create(topo_group.id(), "vis_hints", H5T_NATIVE_INT32, space.id());
+        ds.write(H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, vis_hints_data.data());
+    }
+
     return log_result::ok();
 }
 
@@ -321,6 +338,56 @@ network_topology buffer_logger::extract_topology()
 {
     network_topology topology;
 
+    // Helper to look up vis hints from config by entity name
+    auto lookup_vis_hint = [this](const std::string& name) -> std::optional<buffer_vis_hint> {
+        if (!config_.vis_hints) {
+            return std::nullopt;
+        }
+        const auto& vh = *config_.vis_hints;
+
+        // Try all dataset types
+        if (auto it = vh.datasets.mnist.find(name); it != vh.datasets.mnist.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.dsprites.find(name); it != vh.datasets.dsprites.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.emnist.find(name); it != vh.datasets.emnist.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.kmnist.find(name); it != vh.datasets.kmnist.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.cifar10.find(name); it != vh.datasets.cifar10.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.cifar100.find(name); it != vh.datasets.cifar100.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.chairs3d.find(name); it != vh.datasets.chairs3d.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+        if (auto it = vh.datasets.color_mnist.find(name); it != vh.datasets.color_mnist.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+
+        // Try neuron groups
+        if (auto it = vh.ngm2.neuron_groups.find(name); it != vh.ngm2.neuron_groups.end()) {
+            const auto& h = it->second.ngm_flat_vis;
+            return buffer_vis_hint{h.width, h.height, h.num_channels};
+        }
+
+        return std::nullopt;
+    };
+
     for (auto& entity : env_.iterate_entities()) {
         buffer_info info;
         info.id = entity.get_outp_id();
@@ -340,6 +407,70 @@ network_topology buffer_logger::extract_topology()
         // Get input IDs
         auto inp_ids = entity.get_inp_ids();
         info.input_ids.assign(inp_ids.begin(), inp_ids.end());
+
+        // Try to get vis_hint from simulation config first
+        if (auto hint = lookup_vis_hint(info.entity_name)) {
+            info.vis_hint = *hint;
+        } else {
+            // Fall back to auto-detection based on buffer size
+            auto size = info.size;
+            bool detected = false;
+
+            // First, try to detect RGB images (size divisible by 3, and size/3 is a perfect square)
+            if (size % 3 == 0) {
+                auto rgb_pixels = size / 3;
+                auto sqrt_rgb = static_cast<std::size_t>(std::sqrt(static_cast<double>(rgb_pixels)));
+                if (sqrt_rgb * sqrt_rgb == rgb_pixels && sqrt_rgb >= 16) {
+                    // Likely an RGB image (e.g., 32x32x3 = 3072)
+                    info.vis_hint.width = static_cast<int>(sqrt_rgb);
+                    info.vis_hint.height = static_cast<int>(sqrt_rgb);
+                    info.vis_hint.num_channels = 3;
+                    detected = true;
+                } else {
+                    // Try common RGB image sizes
+                    for (int w : {32, 64, 96, 128, 256}) {
+                        if (rgb_pixels % w == 0) {
+                            int h = static_cast<int>(rgb_pixels / w);
+                            if (h >= 16 && h <= 256) {
+                                info.vis_hint.width = w;
+                                info.vis_hint.height = h;
+                                info.vis_hint.num_channels = 3;
+                                detected = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If not detected as RGB, try grayscale detection
+            if (!detected) {
+                auto sqrt_size = static_cast<std::size_t>(std::sqrt(static_cast<double>(size)));
+                if (sqrt_size * sqrt_size == size) {
+                    // Perfect square - grayscale
+                    info.vis_hint.width = static_cast<int>(sqrt_size);
+                    info.vis_hint.height = static_cast<int>(sqrt_size);
+                    info.vis_hint.num_channels = 1;
+                } else {
+                    // Try common widths for grayscale
+                    info.vis_hint.width = 0;
+                    info.vis_hint.height = 0;
+                    for (int w : {28, 32, 64, 96, 128, 256}) {
+                        if (size % w == 0) {
+                            info.vis_hint.width = w;
+                            info.vis_hint.height = static_cast<int>(size / w);
+                            break;
+                        }
+                    }
+                    // Fallback: single row
+                    if (info.vis_hint.width == 0) {
+                        info.vis_hint.width = static_cast<int>(size);
+                        info.vis_hint.height = 1;
+                    }
+                    info.vis_hint.num_channels = 1;
+                }
+            }
+        }
 
         topology.buffers.push_back(std::move(info));
     }

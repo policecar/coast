@@ -7,12 +7,14 @@
 
 #include "logging_common.h"
 #include "hdf5_utils.h"
+#include "gui_vis/core/vis_hints.h"
 
 #include <filesystem>
 #include <string>
 #include <vector>
 #include <array>
 #include <cstdint>
+#include <optional>
 
 namespace sim {
     class env;
@@ -28,6 +30,14 @@ struct buffer_logger_config {
     compression_config compression;
     bool include_stats = true;               // Log buffer statistics
     std::string config_json;                 // Simulation config for metadata
+    std::optional<coast::vis_hints_t> vis_hints;  // Visualization hints from sim config
+};
+
+/// Visualization hints for a buffer (stored in HDF5 for replay)
+struct buffer_vis_hint {
+    int width = 0;           // 0 = auto-detect from size
+    int height = 0;
+    int num_channels = 1;    // 1 = grayscale, 3 = RGB
 };
 
 /// Topology information for a single buffer
@@ -36,6 +46,7 @@ struct buffer_info {
     std::string entity_name;
     std::size_t size;
     std::vector<std::size_t> input_ids;      // Which buffers feed into the entity
+    buffer_vis_hint vis_hint;                // Visualization hints for replay
 };
 
 /// Network topology (connectivity graph)

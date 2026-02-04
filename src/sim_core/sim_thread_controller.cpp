@@ -1,5 +1,6 @@
 #include "sim_thread_controller.h"
 #include "sim_env.h"
+#include "probe/probe_instance.h"
 
 #include <chrono>
 
@@ -84,6 +85,10 @@ void sim_thread_controller::set_step_limit(std::uint64_t limit)
 
 void sim_thread_controller::do_step()
 {
+    // Set the current step for probe recording before processing
+    std::uint64_t current_step = step_count_.load(std::memory_order_relaxed);
+    probe::set_current_step(current_step);
+
     sim_env_.process();
     sim_env_.swap_io();
     step_count_.fetch_add(1, std::memory_order_relaxed);

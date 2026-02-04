@@ -102,9 +102,11 @@ bool probe_logger::add_probe(probe::probe_instance* probe)
     std::size_t index = probe_buffers_.size();
     probe_buffers_.push_back({
         .path = probe->full_path,
+        .steps = {},
         .values = {},
         .total_samples = 0
     });
+    probe_buffers_.back().steps.reserve(config_.buffer_size);
     probe_buffers_.back().values.reserve(config_.buffer_size);
 
     probe_to_index_[probe] = index;
@@ -154,11 +156,12 @@ std::vector<probe::probe_instance*> probe_logger::active_probes() const
     return result;
 }
 
-void probe_logger::record_value(const std::string& probe_path, double value)
+void probe_logger::record_value(const std::string& probe_path, std::uint64_t step, double value)
 {
     // Find the buffer for this probe
     for (auto& buf : probe_buffers_) {
         if (buf.path == probe_path) {
+            buf.steps.push_back(step);
             buf.values.push_back(value);
             buf.total_samples++;
             stats_.samples_written++;
@@ -230,7 +233,7 @@ void probe_logger::ensure_hdf5_dataset(std::size_t probe_index)
     // Store the original path as an attribute
     hdf5::write_attr(probe_group.id(), "probe_path", std::string_view(path));
 
-    // Create extensible dataset for values
+    // Create extensible datasets for steps and values
     hsize_t initial_dims[1] = {0};
     hsize_t chunk_dims[1] = {config_.buffer_size};
 
@@ -242,12 +245,20 @@ void probe_logger::ensure_hdf5_dataset(std::size_t probe_index)
     }
 
     auto space = hdf5::dataspace::extensible(std::span(initial_dims));
-    auto dataset = hdf5::dataset::create(probe_group.id(), "values",
-                                          H5T_NATIVE_DOUBLE, space.id(), dcpl.id());
+
+    // Create steps dataset (uint64)
+    auto steps_dataset = hdf5::dataset::create(probe_group.id(), "steps",
+                                                H5T_NATIVE_UINT64, space.id(), dcpl.id());
+
+    // Create values dataset (double)
+    auto space2 = hdf5::dataspace::extensible(std::span(initial_dims));
+    auto values_dataset = hdf5::dataset::create(probe_group.id(), "values",
+                                                 H5T_NATIVE_DOUBLE, space2.id(), dcpl.id());
 
     hdf5_datasets_.push_back({
         .path = path,
-        .values = std::move(dataset),
+        .steps = std::move(steps_dataset),
+        .values = std::move(values_dataset),
         .current_rows = 0
     });
 }
@@ -267,26 +278,33 @@ void probe_logger::flush_hdf5()
             }
         }
 
-        if (!ds || !ds->values) continue;
+        if (!ds || !ds->values || !ds->steps) continue;
 
         std::size_t num_values = buf.values.size();
         std::size_t new_rows = ds->current_rows + num_values;
 
-        // Extend dataset
+        // Extend both datasets
         hsize_t new_dims[1] = {new_rows};
+        ds->steps.extend(std::span(new_dims));
         ds->values.extend(std::span(new_dims));
 
-        // Write data
+        // Write steps data
         hsize_t offset[1] = {ds->current_rows};
         hsize_t count[1] = {num_values};
-        auto file_space = hdf5::dataspace::from_dataset(ds->values.id());
-        file_space.select_hyperslab(std::span(offset), std::span(count));
-
+        auto steps_file_space = hdf5::dataspace::from_dataset(ds->steps.id());
+        steps_file_space.select_hyperslab(std::span(offset), std::span(count));
         auto mem_space = hdf5::dataspace::simple(std::span(count));
-        ds->values.write(H5T_NATIVE_DOUBLE, mem_space.id(), file_space.id(), buf.values.data());
+        ds->steps.write(H5T_NATIVE_UINT64, mem_space.id(), steps_file_space.id(), buf.steps.data());
+
+        // Write values data
+        auto values_file_space = hdf5::dataspace::from_dataset(ds->values.id());
+        values_file_space.select_hyperslab(std::span(offset), std::span(count));
+        auto values_mem_space = hdf5::dataspace::simple(std::span(count));
+        ds->values.write(H5T_NATIVE_DOUBLE, values_mem_space.id(), values_file_space.id(), buf.values.data());
 
         ds->current_rows = new_rows;
-        stats_.bytes_written += num_values * sizeof(double);
+        stats_.bytes_written += num_values * (sizeof(double) + sizeof(std::uint64_t));
+        buf.steps.clear();
         buf.values.clear();
     }
 
@@ -321,7 +339,7 @@ void probe_logger::flush_csv()
 
     // Write header if needed
     if (!csv_header_written_ && !probe_buffers_.empty()) {
-        csv_file_ << "sample";
+        csv_file_ << "step";
         for (const auto& buf : probe_buffers_) {
             csv_file_ << "," << buf.path;
         }
@@ -337,14 +355,20 @@ void probe_logger::flush_csv()
 
     if (max_samples == 0) return;
 
-    // Write rows
-    // Note: This is a simple approach - all probes should have same sample rate
-    // For mismatched rates, we use NaN for missing values
-    std::uint64_t base_sample = probe_buffers_.empty() ? 0 :
-                                 (probe_buffers_[0].total_samples - probe_buffers_[0].values.size());
-
+    // Write rows using actual step values from first buffer
+    // Note: This is a simple approach - all probes should have same step values
+    // For mismatched steps, this may produce incorrect output
     for (std::size_t i = 0; i < max_samples; ++i) {
-        csv_file_ << (base_sample + i);
+        // Use step from first buffer that has this index
+        std::uint64_t step = 0;
+        for (const auto& buf : probe_buffers_) {
+            if (i < buf.steps.size()) {
+                step = buf.steps[i];
+                break;
+            }
+        }
+        csv_file_ << step;
+
         for (const auto& buf : probe_buffers_) {
             csv_file_ << ",";
             if (i < buf.values.size()) {
@@ -358,6 +382,7 @@ void probe_logger::flush_csv()
     // Clear buffers
     for (auto& buf : probe_buffers_) {
         stats_.bytes_written += buf.values.size() * 20;  // Rough estimate for CSV
+        buf.steps.clear();
         buf.values.clear();
     }
 

@@ -24,8 +24,8 @@ public:
     file_observer(const file_observer&) = delete;
     file_observer& operator=(const file_observer&) = delete;
 
-    /// Receive a new value (called during update_observers from GUI thread).
-    void push(double value) override;
+    /// Receive a new timestamped value (called during update_observers from GUI thread).
+    void push(std::uint64_t step, double value) override;
 
     /// No-op for file observer - nothing to render.
     void render() override {}

@@ -32,6 +32,11 @@ public:
     void render();
 
     /**
+     * Update auto-checkpoint (call from GUI loop).
+     */
+    void update();
+
+    /**
      * Access visibility state for menu toggle.
      */
     bool& visible() { return is_visible; }
@@ -68,11 +73,13 @@ private:
     // Buffer logging state
     std::string buffer_log_path = "buffer_log.h5";
     bool buffer_logging_active = false;
+    bool buffer_confirm_overwrite = false;  // Show overwrite confirmation popup
 
     // Probe logging state
     std::string probe_log_path = "probe_log.h5";
     int probe_format_idx = 0;  // 0 = HDF5, 1 = CSV
     bool probe_logging_active = false;
+    bool probe_confirm_overwrite = false;  // Show overwrite confirmation popup
 
     // State save/load
     std::string state_path = "state.h5";
@@ -80,6 +87,12 @@ private:
     std::uint64_t loaded_step_count = 0;
     std::string last_error;
     std::string last_success;
+
+    // Auto-checkpoint settings
+    bool auto_checkpoint_enabled = false;
+    int auto_checkpoint_interval = 10000;  // Steps between checkpoints
+    std::uint64_t last_checkpoint_step = 0;
+    std::string last_checkpoint_path;
 
     // File browsers
     ImGui::FileBrowser buffer_file_browser;
@@ -92,6 +105,9 @@ private:
     void render_probe_logging_section();
     void render_state_section();
     void render_status_section();
+
+    // Auto-checkpoint helper
+    void save_auto_checkpoint(std::uint64_t step);
 };
 
 } // namespace coast

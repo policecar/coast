@@ -8,6 +8,17 @@
 
 namespace probe {
 
+// Global step counter for the probe system
+static std::atomic<std::uint64_t> g_current_step{0};
+
+void set_current_step(std::uint64_t step) {
+    g_current_step.store(step, std::memory_order_release);
+}
+
+std::uint64_t get_current_step() {
+    return g_current_step.load(std::memory_order_acquire);
+}
+
 probe_instance::probe_instance(const core::entity_element* elem,
                                const core::structure_entry* entry,
                                std::string_view name)
@@ -26,13 +37,15 @@ void probe_instance::record(double value) {
             return;
         }
     }
-    values.try_push(value);
+    // Record value with current step
+    probe_sample sample{get_current_step(), value};
+    samples.try_push(sample);
 }
 
 void probe_instance::update_observers() {
-    values.drain([this](double value) {
+    samples.drain([this](const probe_sample& sample) {
         for (auto& obs : observers) {
-            obs->push(value);
+            obs->push(sample.step, sample.value);
         }
     });
 }
@@ -52,7 +65,7 @@ void probe_instance::deactivate() {
         element->active_probe_count_.fetch_sub(1, std::memory_order_relaxed);
     }
     observers.clear();
-    values.clear();
+    samples.clear();
     call_count.store(0, std::memory_order_relaxed);
 }
 

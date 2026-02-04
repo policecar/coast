@@ -197,6 +197,14 @@ void gui_manager::render_menu_bar()
             }
         }
 
+        // Analysis menu - always available (replay works without simulation)
+        if (ImGui::BeginMenu("Analysis")) {
+            if (ImGui::MenuItem("Buffer Replay...", nullptr, show_buffer_replay_)) {
+                show_buffer_replay_ = !show_buffer_replay_;
+            }
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMainMenuBar();
     }
 }
@@ -289,7 +297,13 @@ void gui_manager::render_dialogs()
     }
 
     // Logging window doesn't require a simulation
+    logging_window_instance.update();  // Check for auto-checkpoints
     logging_window_instance.render();
+
+    // Buffer replay dialog (available even without sim)
+    if (show_buffer_replay_) {
+        buffer_replay_dialog_.render(&show_buffer_replay_);
+    }
 
     // Render snapshot resume dialog
     render_snapshot_resume_dialog();

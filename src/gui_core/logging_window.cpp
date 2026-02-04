@@ -6,6 +6,9 @@
 
 #include <filesystem>
 #include <cstdio>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 namespace coast {
 
@@ -43,6 +46,11 @@ void logging_window::set_sim_instance(sim_instance* instance)
     sim = instance;
     last_error.clear();
     last_success.clear();
+
+    // Reset auto-checkpoint state
+    auto_checkpoint_enabled = false;
+    last_checkpoint_step = 0;
+    last_checkpoint_path.clear();
 }
 
 void logging_window::render()
@@ -136,8 +144,6 @@ void logging_window::render()
 
         render_buffer_logging_section();
         ImGui::Separator();
-        render_probe_logging_section();
-        ImGui::Separator();
         render_state_section();
         ImGui::Separator();
         render_status_section();
@@ -163,25 +169,42 @@ void logging_window::render_buffer_logging_section()
         buffer_file_browser.Open();
     }
 
+    // Helper lambda to start buffer logging
+    auto start_buffer_logging = [this]() {
+        // Remove existing file if it exists
+        if (std::filesystem::exists(buffer_log_path)) {
+            std::filesystem::remove(buffer_log_path);
+        }
+
+        logging::buffer_logger_config cfg;
+        cfg.output_path = buffer_log_path;
+        cfg.chunk_size = 1000;
+        cfg.compression.algorithm = logging::compression_config::type::gzip;
+        cfg.compression.level = 4;
+        cfg.include_stats = true;
+        cfg.vis_hints = sim->get_config().vis_hints;
+
+        auto result = sim->get_logging_manager().start_buffer_logging(cfg);
+        if (result) {
+            buffer_logging_active = true;
+            last_success = "Buffer logging started: " + buffer_log_path;
+            last_error.clear();
+        } else {
+            last_error = result.error_message;
+            last_success.clear();
+        }
+    };
+
     // Start/Stop button
     ImGui::BeginDisabled(buffer_log_path.empty());
     if (!buffer_logging_active) {
         if (ImGui::Button("Start Buffer Logging", ImVec2(scaled(150), 0))) {
-            logging::buffer_logger_config cfg;
-            cfg.output_path = buffer_log_path;
-            cfg.chunk_size = 1000;
-            cfg.compression.algorithm = logging::compression_config::type::gzip;
-            cfg.compression.level = 4;
-            cfg.include_stats = true;
-
-            auto result = sim->get_logging_manager().start_buffer_logging(cfg);
-            if (result) {
-                buffer_logging_active = true;
-                last_success = "Buffer logging started: " + buffer_log_path;
-                last_error.clear();
+            // Check if file exists
+            if (std::filesystem::exists(buffer_log_path)) {
+                buffer_confirm_overwrite = true;
+                ImGui::OpenPopup("Overwrite Buffer Log?");
             } else {
-                last_error = result.error_message;
-                last_success.clear();
+                start_buffer_logging();
             }
         }
     } else {
@@ -197,6 +220,25 @@ void logging_window::render_buffer_logging_section()
         }
     }
     ImGui::EndDisabled();
+
+    // Overwrite confirmation popup
+    if (ImGui::BeginPopupModal("Overwrite Buffer Log?", &buffer_confirm_overwrite,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("File already exists:\n%s\n\nOverwrite?", buffer_log_path.c_str());
+        ImGui::Separator();
+
+        if (ImGui::Button("Yes", ImVec2(120, 0))) {
+            start_buffer_logging();
+            buffer_confirm_overwrite = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No", ImVec2(120, 0))) {
+            buffer_confirm_overwrite = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 
     // Status
     ImGui::SameLine();
@@ -238,28 +280,44 @@ void logging_window::render_probe_logging_section()
     ImGui::SetNextItemWidth(scaled(80));
     ImGui::Combo("Format", &probe_format_idx, formats, 2);
 
+    // Helper lambda to start probe logging
+    auto start_probe_logging = [this]() {
+        // Remove existing file if it exists
+        if (std::filesystem::exists(probe_log_path)) {
+            std::filesystem::remove(probe_log_path);
+        }
+
+        logging::probe_logger_config cfg;
+        cfg.output_path = probe_log_path;
+        cfg.format = (probe_format_idx == 0) ?
+                     logging::probe_log_format::hdf5 :
+                     logging::probe_log_format::csv;
+        cfg.buffer_size = 10000;
+        cfg.compression.algorithm = logging::compression_config::type::gzip;
+        cfg.compression.level = 4;
+
+        auto result = sim->get_logging_manager().start_probe_logging(cfg);
+        if (result) {
+            probe_logging_active = true;
+            last_success = "Probe logging started: " + probe_log_path;
+            last_error.clear();
+        } else {
+            last_error = result.error_message;
+            last_success.clear();
+        }
+    };
+
     // Start/Stop button
     ImGui::SameLine();
     ImGui::BeginDisabled(probe_log_path.empty());
     if (!probe_logging_active) {
         if (ImGui::Button("Start Probe Logging", ImVec2(scaled(150), 0))) {
-            logging::probe_logger_config cfg;
-            cfg.output_path = probe_log_path;
-            cfg.format = (probe_format_idx == 0) ?
-                         logging::probe_log_format::hdf5 :
-                         logging::probe_log_format::csv;
-            cfg.buffer_size = 10000;
-            cfg.compression.algorithm = logging::compression_config::type::gzip;
-            cfg.compression.level = 4;
-
-            auto result = sim->get_logging_manager().start_probe_logging(cfg);
-            if (result) {
-                probe_logging_active = true;
-                last_success = "Probe logging started: " + probe_log_path;
-                last_error.clear();
+            // Check if file exists
+            if (std::filesystem::exists(probe_log_path)) {
+                probe_confirm_overwrite = true;
+                ImGui::OpenPopup("Overwrite Probe Log?");
             } else {
-                last_error = result.error_message;
-                last_success.clear();
+                start_probe_logging();
             }
         }
     } else {
@@ -275,6 +333,25 @@ void logging_window::render_probe_logging_section()
         }
     }
     ImGui::EndDisabled();
+
+    // Overwrite confirmation popup
+    if (ImGui::BeginPopupModal("Overwrite Probe Log?", &probe_confirm_overwrite,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("File already exists:\n%s\n\nOverwrite?", probe_log_path.c_str());
+        ImGui::Separator();
+
+        if (ImGui::Button("Yes##probe", ImVec2(120, 0))) {
+            start_probe_logging();
+            probe_confirm_overwrite = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No##probe", ImVec2(120, 0))) {
+            probe_confirm_overwrite = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 
     // Status and instructions
     if (probe_logging_active) {
@@ -322,6 +399,35 @@ void logging_window::render_state_section()
         ImGui::Text("Current step: %lu", controller->get_step_count());
     }
 
+    // Auto-checkpoint settings
+    ImGui::Spacing();
+    if (ImGui::Checkbox("Auto-checkpoint", &auto_checkpoint_enabled)) {
+        if (auto_checkpoint_enabled) {
+            // Initialize last checkpoint step to current step
+            if (auto* controller = sim->get_thread_controller()) {
+                last_checkpoint_step = controller->get_step_count();
+            }
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Automatically save checkpoints at regular intervals\nto the snapshot directory");
+    }
+
+    if (auto_checkpoint_enabled) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(scaled(100));
+        if (ImGui::InputInt("steps##checkpoint", &auto_checkpoint_interval, 1000, 10000)) {
+            if (auto_checkpoint_interval < 100) auto_checkpoint_interval = 100;
+        }
+
+        // Show last checkpoint info
+        if (!last_checkpoint_path.empty()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("Last: %s",
+                std::filesystem::path(last_checkpoint_path).filename().string().c_str());
+        }
+    }
+
     ImGui::Unindent();
 }
 
@@ -356,6 +462,74 @@ void logging_window::open_load_state_dialog()
 {
     if (sim) {
         state_load_browser.Open();
+    }
+}
+
+void logging_window::update()
+{
+    if (!sim || !auto_checkpoint_enabled) return;
+
+    auto* controller = sim->get_thread_controller();
+    if (!controller) return;
+
+    std::uint64_t current_step = controller->get_step_count();
+
+    // Check if we've passed the next checkpoint interval
+    if (current_step >= last_checkpoint_step + static_cast<std::uint64_t>(auto_checkpoint_interval)) {
+        save_auto_checkpoint(current_step);
+        last_checkpoint_step = current_step;
+    }
+}
+
+void logging_window::save_auto_checkpoint(std::uint64_t step)
+{
+    if (!sim) return;
+
+    // Get snapshot directory from config
+    std::string snapshot_dir = sim->get_config().snapshot_dir;
+    std::filesystem::path dir_path(snapshot_dir);
+
+    // If relative path, make it relative to the config file's directory
+    if (dir_path.is_relative()) {
+        std::filesystem::path cfg_path(sim->get_config_path());
+        dir_path = cfg_path.parent_path() / dir_path;
+    }
+
+    // Create directory if needed
+    std::error_code ec;
+    std::filesystem::create_directories(dir_path, ec);
+    if (ec) {
+        last_error = "Could not create snapshot directory: " + dir_path.string();
+        return;
+    }
+
+    // Generate filename: config_name_YYYYMMDD_HHMMSS_stepcount.h5
+    std::string config_name = std::filesystem::path(sim->get_config_path()).stem().string();
+
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm = *std::localtime(&time_t);
+
+    std::ostringstream filename;
+    filename << config_name << "_"
+             << std::put_time(&tm, "%Y%m%d_%H%M%S") << "_"
+             << step << ".h5";
+
+    std::filesystem::path full_path = dir_path / filename.str();
+
+    // Save the checkpoint
+    logging::state_save_config cfg;
+    cfg.output_path = full_path;
+    cfg.compression.algorithm = logging::compression_config::type::gzip;
+    cfg.compression.level = 4;
+
+    auto result = sim->get_logging_manager().save_state(step, cfg);
+    if (result) {
+        last_checkpoint_path = full_path.string();
+        last_success = "Checkpoint saved: " + full_path.filename().string();
+        last_error.clear();
+    } else {
+        last_error = "Checkpoint failed: " + result.error_message;
     }
 }
 
