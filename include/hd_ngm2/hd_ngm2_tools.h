@@ -48,9 +48,9 @@ inline float sigmoid(
     float x,
     sigmoid_shape_t shape = {0.5f, 0.5f}
 ){
-    const float step_size      = 1.0f - std::pow(shape.steepness, 0.1f);
-    const float starting_point = -shape.transition_point / step_size;
-    return 1.0f / ( 1.0f + std::exp( -(x / step_size + starting_point) ) );
+    const float inv_step_size  = 1.0f / (1.0f - std::pow(shape.steepness, 0.1f));
+    const float starting_point = -shape.transition_point * inv_step_size;
+    return 1.0f / ( 1.0f + std::exp( -(x * inv_step_size + starting_point) ) );
 }
 
 void normalize(auto &vec)

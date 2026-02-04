@@ -61,6 +61,7 @@ private:
 
     // derived params
     const seg_id_t    max_segment_idx;
+    const float       inv_perm_range_;  // precomputed 1.0f / (1.0f - permanence_threshold)
 
     // state
     synapses_t         synapses;
