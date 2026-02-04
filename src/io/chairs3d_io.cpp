@@ -14,6 +14,7 @@
 #include "stb_image_resize2.h"
 
 #include "chairs3d_io.h"
+#include "logging/state_io.h"
 
 namespace chairs3d {
 
@@ -150,6 +151,20 @@ std::string chairs3d_io::status_str() const
     status += " | idx: " + std::to_string(cur_idx);
     status += " / " + std::to_string(image_count);
     return status;
+}
+
+void chairs3d_io::save_state(logging::state_writer& writer) const
+{
+    writer.write("cur_epoch", static_cast<std::uint64_t>(cur_epoch));
+    writer.write("cur_idx", static_cast<std::uint64_t>(cur_idx));
+    writer.write("ci_cnt", static_cast<std::uint64_t>(ci_cnt));
+}
+
+void chairs3d_io::load_state(logging::state_reader& reader)
+{
+    cur_epoch = static_cast<std::size_t>(reader.read_uint64("cur_epoch", cur_epoch));
+    cur_idx = static_cast<std::size_t>(reader.read_uint64("cur_idx", cur_idx));
+    ci_cnt = static_cast<std::size_t>(reader.read_uint64("ci_cnt", ci_cnt));
 }
 
 } // namespace chairs3d

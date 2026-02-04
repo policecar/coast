@@ -967,6 +967,7 @@ void config_editor::render(bool* p_open)
         render_dataset_configs();
         render_ngm2_configs();
         render_simulation_graph();
+        render_logging_settings();
         render_visualization_hints();
     }
     ImGui::End();
@@ -1970,6 +1971,18 @@ static bool render_neuron_group_hint(const std::string& name, neuron_group_hints
         ImGui::TreePop();
     }
     return modified;
+}
+
+void config_editor::render_logging_settings()
+{
+    if (ImGui::CollapsingHeader("Logging Settings")) {
+        if (InputTextString("Snapshot Directory", config.snapshot_dir)) {
+            mark_dirty();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Directory for auto-save snapshots (relative to config file or absolute)");
+        }
+    }
 }
 
 void config_editor::render_visualization_hints()

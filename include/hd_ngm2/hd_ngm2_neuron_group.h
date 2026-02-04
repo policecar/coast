@@ -93,6 +93,9 @@ public:
     [[nodiscard]] float                get_max_acc_theta()            const;
     [[nodiscard]] float                get_avg_acc_theta()            const;
 
+    // State persistence (implements io_entity interface)
+    void save_state(logging::state_writer& writer) const override;
+    void load_state(logging::state_reader& reader) override;
 };
 
 }

@@ -87,6 +87,18 @@ public:
     [[nodiscard]] std::uint64_t get_step_count() const;
 
     /**
+     * Set the step count (for restoring from checkpoint).
+     * Should only be called when simulation is paused.
+     */
+    void set_step_count(std::uint64_t count);
+
+    /**
+     * Set a step limit - simulation will auto-pause when reaching this step.
+     * Set to 0 to disable (default).
+     */
+    void set_step_limit(std::uint64_t limit);
+
+    /**
      * Get measured steps per second (smoothed).
      */
     [[nodiscard]] double get_actual_sps() const;
@@ -106,6 +118,7 @@ private:
     std::atomic<std::uint64_t> step_count_{0};
     std::atomic<double> actual_sps_{0.0};
     std::atomic<bool> single_step_pending_{false};
+    std::atomic<std::uint64_t> step_limit_{0};  // 0 = no limit
 
     // For waking thread when paused
     std::mutex wake_mutex_;

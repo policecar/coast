@@ -59,6 +59,10 @@ public:
 
     [[nodiscard]] std::string status_str() const override;
 
+    // State persistence
+    void save_state(logging::state_writer& writer) const override;
+    void load_state(logging::state_reader& reader) override;
+
     [[nodiscard]] int& get_change_interval() { return change_interval; }
 
     // dataset_io interface

@@ -72,6 +72,16 @@ double sim_thread_controller::get_target_sps() const
     return target_sps_.load(std::memory_order_acquire);
 }
 
+void sim_thread_controller::set_step_count(std::uint64_t count)
+{
+    step_count_.store(count, std::memory_order_release);
+}
+
+void sim_thread_controller::set_step_limit(std::uint64_t limit)
+{
+    step_limit_.store(limit, std::memory_order_release);
+}
+
 void sim_thread_controller::do_step()
 {
     sim_env_.process();
@@ -93,6 +103,12 @@ void sim_thread_controller::thread_main(std::stop_token st)
     auto last_step_time = clock::now();
 
     while (!st.stop_requested()) {
+        // Check step limit and auto-pause if reached
+        const std::uint64_t limit = step_limit_.load(std::memory_order_acquire);
+        if (limit > 0 && step_count_.load(std::memory_order_acquire) >= limit) {
+            mode_.store(sim_mode::paused, std::memory_order_release);
+        }
+
         const sim_mode current_mode = mode_.load(std::memory_order_acquire);
 
         switch (current_mode) {

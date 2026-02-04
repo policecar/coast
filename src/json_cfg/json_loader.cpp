@@ -27,6 +27,10 @@ json_loader::json_loader(const std::string &filename)
 
     global_cfg = j;
 
+    // Handle optional fields that aren't in the NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE macro
+    if (j.contains("snapshot_dir")) {
+        global_cfg.snapshot_dir = j.at("snapshot_dir").get<std::string>();
+    }
 }
 
 

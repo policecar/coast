@@ -10,6 +10,7 @@
 #include "sim_builder.h"
 #include "sim_thread_controller.h"
 #include "hd_ngm2_neuron_group.h"
+#include "logging/logging_manager.h"
 
 namespace coast {
 
@@ -61,6 +62,12 @@ public:
     [[nodiscard]] sim::sim_thread_controller* get_thread_controller() { return thread_controller.get(); }
     [[nodiscard]] const sim::sim_thread_controller* get_thread_controller() const { return thread_controller.get(); }
 
+    /**
+     * Get the logging manager for this simulation.
+     */
+    [[nodiscard]] logging::logging_manager& get_logging_manager() { return *logging_manager; }
+    [[nodiscard]] const logging::logging_manager& get_logging_manager() const { return *logging_manager; }
+
 private:
     std::string config_path;
 
@@ -74,6 +81,9 @@ private:
 
     // Simulation thread controller - created after sim_env is ready
     std::unique_ptr<sim::sim_thread_controller> thread_controller;
+
+    // Logging manager - created after sim_env is ready
+    std::unique_ptr<logging::logging_manager> logging_manager;
 };
 
 } // namespace coast

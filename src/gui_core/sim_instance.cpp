@@ -30,6 +30,9 @@ sim_instance::sim_instance(const std::string& config_path)
 
     // Create simulation thread controller (starts in paused mode)
     thread_controller = std::make_unique<sim::sim_thread_controller>(*sim_env);
+
+    // Create logging manager
+    logging_manager = std::make_unique<logging::logging_manager>(*sim_env);
 }
 
 sim_instance::~sim_instance() = default;
@@ -41,6 +44,7 @@ sim_instance::sim_instance(sim_instance&& other) noexcept
     , sim_builder(std::move(other.sim_builder))
     , groups(other.groups)
     , thread_controller(std::move(other.thread_controller))
+    , logging_manager(std::move(other.logging_manager))
 {
     other.groups = nullptr;
 }
@@ -48,7 +52,8 @@ sim_instance::sim_instance(sim_instance&& other) noexcept
 sim_instance& sim_instance::operator=(sim_instance&& other) noexcept
 {
     if (this != &other) {
-        // Stop thread controller first before moving resources
+        // Stop logging and thread controller first before moving resources
+        logging_manager.reset();
         thread_controller.reset();
 
         config_path = std::move(other.config_path);
@@ -57,6 +62,7 @@ sim_instance& sim_instance::operator=(sim_instance&& other) noexcept
         sim_builder = std::move(other.sim_builder);
         groups = other.groups;
         thread_controller = std::move(other.thread_controller);
+        logging_manager = std::move(other.logging_manager);
 
         other.groups = nullptr;
     }

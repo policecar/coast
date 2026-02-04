@@ -230,6 +230,23 @@ add_executable(coast
         src/tools/sim_builder.cpp
         include/tools/sim_builder_interface.h
         include/json_cfg/gui_vis_json.h
+
+        # Logging system
+        include/logging/logging.h
+        include/logging/logging_common.h
+        include/logging/hdf5_utils.h
+        src/logging/hdf5_utils.cpp
+        include/logging/buffer_logger.h
+        src/logging/buffer_logger.cpp
+        include/logging/file_observer.h
+        src/logging/file_observer.cpp
+        include/logging/probe_logger.h
+        src/logging/probe_logger.cpp
+        include/logging/state_io.h
+        include/logging/state_logger.h
+        src/logging/state_logger.cpp
+        include/logging/logging_manager.h
+        src/logging/logging_manager.cpp
 )
 
 # 3rd-party includes (marked as SYSTEM to suppress warnings)
@@ -261,6 +278,7 @@ target_include_directories(coast PRIVATE
         include/tools
         include/io
         include/json_cfg
+        include/logging
 )
 
 # Enable warnings for our own code

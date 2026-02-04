@@ -9,6 +9,7 @@
 #include <ranges>
 
 #include "cifar100_io.h"
+#include "logging/state_io.h"
 
 namespace cifar100 {
 
@@ -147,6 +148,20 @@ std::string cifar100_io::status_str() const
     status += " | idx: " + std::to_string(cur_idx);
     status += " / " + std::to_string(image_count);
     return status;
+}
+
+void cifar100_io::save_state(logging::state_writer& writer) const
+{
+    writer.write("cur_epoch", static_cast<std::uint64_t>(cur_epoch));
+    writer.write("cur_idx", static_cast<std::uint64_t>(cur_idx));
+    writer.write("ci_cnt", static_cast<std::uint64_t>(ci_cnt));
+}
+
+void cifar100_io::load_state(logging::state_reader& reader)
+{
+    cur_epoch = static_cast<std::size_t>(reader.read_uint64("cur_epoch", cur_epoch));
+    cur_idx = static_cast<std::size_t>(reader.read_uint64("cur_idx", cur_idx));
+    ci_cnt = static_cast<std::size_t>(reader.read_uint64("ci_cnt", ci_cnt));
 }
 
 } // namespace cifar100

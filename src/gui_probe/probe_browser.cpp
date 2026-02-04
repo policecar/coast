@@ -242,6 +242,19 @@ void probe_browser::render_observer_popup() {
             ImGui::CloseCurrentPopup();
         }
 
+        // Log to File option (only shown if callback is set)
+        if (log_probe_callback_) {
+            ImGui::Separator();
+            if (ImGui::Selectable("Log to File")) {
+                log_probe_callback_(pending_probe_);
+                pending_probe_ = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Add this probe to the active file logger.\nEnable logging in Introspection > Logging...");
+            }
+        }
+
         ImGui::EndPopup();
     }
 }
