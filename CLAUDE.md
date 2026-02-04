@@ -8,6 +8,8 @@ COAST (Coherent Active State Dynamics in Self-Organizing Systems) is a C++23 neu
 
 ## Build Commands
 
+**IMPORTANT:** Always use `-DCMAKE_BUILD_TYPE=Release` to enable `-O3` optimization. Debug builds are ~10x slower.
+
 ```bash
 # Linux
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -21,6 +23,9 @@ cmake --build build -j
 
 # Run (use System > Open Configuration menu to load a config)
 ./build/coast
+
+# Headless benchmark (500k steps)
+./build/coast -n 500000 configs/mnist.json
 ```
 
 ## Architecture
