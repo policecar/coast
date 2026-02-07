@@ -17,8 +17,8 @@ compile_commands.json
 # Data files
 data/
 
-# Local docs/plans
-docs/
+# Local plans
+docs/public/
 
 # imgui state
 imgui.ini

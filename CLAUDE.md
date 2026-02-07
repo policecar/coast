@@ -102,6 +102,12 @@ probe("activity", activity_value);  // Records value if probe is active
 - Use forward declarations in headers to reduce compile times
 - Mark intentionally unused members/params with `[[maybe_unused]]`
 
+## Documentation
+
+The `docs/` directory contains a Hugo static site (Relearn theme) that documents the project's architecture, data flow, threading model, key abstractions, and a full file reference. Its purpose is to support the formation of a detailed mental model of the project and its code structure in the reader's mind.
+
+**When making changes to the codebase, keep the documentation in sync.** If you add, rename, or remove modules, classes, data flows, or threading patterns, update the corresponding pages under `docs/content/`. Build with `cd docs && hugo` and verify zero warnings.
+
 ## Datasets
 
 Download datasets using `scripts/download_datasets.sh` or manually into `data/`.

@@ -1,0 +1,28 @@
+baseURL: ''
+languageCode: en-us
+title: COAST — Internal Documentation
+theme: hugo-theme-relearn
+
+params:
+  themeVariant:
+    - auto
+    - relearn-light
+    - relearn-dark
+  showVisitedLinks: true
+  disableLandingPageButton: true
+  breadcrumbSeparator: ">"
+  highlightWrap: true
+
+outputs:
+  home:
+    - html
+    - rss
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    style: monokai
+    lineNos: false
+    guessSyntax: true
