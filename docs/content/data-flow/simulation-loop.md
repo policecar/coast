@@ -11,7 +11,7 @@ What happens every simulation step and every GUI frame.
 
 Each step executes on the **simulation thread** inside `sim_thread_controller::do_step()`:
 
-{{< mermaid >}}
+```mermaid
 sequenceDiagram
     participant TC as thread_controller
     participant Env as sim_env
@@ -59,7 +59,7 @@ sequenceDiagram
     deactivate Env
 
     TC->>TC: step_count++
-{{< /mermaid >}}
+```
 
 ## What Happens Inside Entity process()
 

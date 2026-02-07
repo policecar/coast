@@ -9,52 +9,52 @@ COAST is organized into **13 modules**, each in its own `include/<module>/` and 
 
 ## Module Map
 
-{{< mermaid >}}
+```mermaid
 graph TD
-    main[main.cpp] --> gui_core
+    main["main.cpp"] --> gui_core
     main --> sim_core
 
-    gui_core[gui_core<br/><i>SDL2 app, GUI manager,<br/>browsers, windows</i>] --> gui_vis
+    gui_core["gui_core"] --> gui_vis
     gui_core --> gui_probe
     gui_core --> gui_replay
     gui_core --> gui_layout
     gui_core --> sim_core
     gui_core --> logging
 
-    gui_vis[gui_vis<br/><i>Vis registry, renderers,<br/>colormaps, textures</i>] --> sim_core
+    gui_vis["gui_vis"] --> sim_core
     gui_vis --> hd_ngm2
 
-    gui_probe[gui_probe<br/><i>Probe browser,<br/>observer panel</i>] --> probe
+    gui_probe["gui_probe"] --> probe
     gui_probe --> sim_core
 
-    gui_replay[gui_replay<br/><i>Buffer replay dialog,<br/>HDF5 reader</i>] --> gui_layout
+    gui_replay["gui_replay"] --> gui_layout
     gui_replay --> logging
 
-    gui_layout[gui_layout<br/><i>Force-directed layout,<br/>graph canvas</i>]
+    gui_layout["gui_layout"]
 
-    probe[probe<br/><i>SPSC queues, instances,<br/>observers</i>] --> core
+    probe["probe"] --> core
 
-    logging[logging<br/><i>Buffer/probe/state loggers,<br/>HDF5 utilities</i>] --> sim_core
+    logging["logging"] --> sim_core
     logging --> probe
 
-    sim_core[sim_core<br/><i>env, io_entity, io_buffer,<br/>thread controller</i>] --> core
+    sim_core["sim_core"] --> core
 
-    hd_ngm2[hd_ngm2<br/><i>Neuron groups, neurons,<br/>dendrites</i>] --> sim_core
+    hd_ngm2["hd_ngm2"] --> sim_core
     hd_ngm2 --> core
 
-    io[io<br/><i>Dataset loaders:<br/>MNIST, CIFAR, etc.</i>] --> sim_core
+    io["io"] --> sim_core
     io --> core
 
-    json_cfg[json_cfg<br/><i>JSON config parsing</i>] --> sim_core
+    json_cfg["json_cfg"] --> sim_core
     json_cfg --> hd_ngm2
     json_cfg --> io
 
-    tools[tools<br/><i>sim_builder,<br/>entity wiring</i>] --> sim_core
+    tools["tools"] --> sim_core
     tools --> json_cfg
     tools --> hd_ngm2
     tools --> io
 
-    core[core<br/><i>entity_element, structure_registry,<br/>RNG, element types</i>]
+    core["core"]
 
     style main fill:#444,color:#fff
     style gui_core fill:#2d5a27,color:#fff
@@ -70,7 +70,7 @@ graph TD
     style json_cfg fill:#5c4a1a,color:#fff
     style tools fill:#5c4a1a,color:#fff
     style core fill:#1a3a5c,color:#fff
-{{< /mermaid >}}
+```
 
 ## Module Categories
 

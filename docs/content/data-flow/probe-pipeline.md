@@ -9,7 +9,7 @@ How values flow from simulation code to GUI observers.
 
 ## End-to-End Flow
 
-{{< mermaid >}}
+```mermaid
 sequenceDiagram
     participant SimCode as Simulation Code<br/>(sim thread)
     participant EE as entity_element<br/>(sim thread)
@@ -38,7 +38,7 @@ sequenceDiagram
         PI-->>Obs: push(step, value)
         Obs-->>Obs: render()
     end
-{{< /mermaid >}}
+```
 
 ## Zero-Cost Fast Path
 

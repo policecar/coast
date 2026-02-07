@@ -9,7 +9,7 @@ How simulation data gets rendered on screen.
 
 ## Registry-Driven Creation
 
-{{< mermaid >}}
+```mermaid
 sequenceDiagram
     participant User
     participant EB as Entity Browser
@@ -35,7 +35,7 @@ sequenceDiagram
     User->>EB: Uncheck visualization
     EB->>VI: free_resources()
     Note over VI: Remove hook, release GL texture
-{{< /mermaid >}}
+```
 
 ## Thread-Safe Update Pattern
 

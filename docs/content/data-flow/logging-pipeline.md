@@ -9,26 +9,26 @@ How simulation data is persisted to disk.
 
 ## Three Logging Paths
 
-{{< mermaid >}}
+```mermaid
 graph TD
-    SimThread[Simulation Thread] --> |post_swap hook| BL[Buffer Logger]
-    SimThread --> |SPSC queue| ProbeInst[Probe Instances]
-    ProbeInst --> |update_observers| FO[File Observer]
-    FO --> PL[Probe Logger]
+    SimThread["Simulation Thread"] --> |post_swap hook| BL["Buffer Logger"]
+    SimThread --> |SPSC queue| ProbeInst["Probe Instances"]
+    ProbeInst --> |update_observers| FO["File Observer"]
+    FO --> PL["Probe Logger"]
 
-    BL --> |chunked writes| HDF5_BL[buffer_log.h5]
-    PL --> |buffered writes| HDF5_PL[probe_log.h5]
-    PL --> |streaming| CSV[probe_log.csv]
+    BL --> |chunked writes| HDF5_BL["buffer_log.h5"]
+    PL --> |buffered writes| HDF5_PL["probe_log.h5"]
+    PL --> |streaming| CSV["probe_log.csv"]
 
-    GUIThread[GUI Thread<br/>on demand] --> SL[State Logger]
-    SL --> |full snapshot| HDF5_ST[state.h5]
+    GUIThread["GUI Thread - on demand"] --> SL["State Logger"]
+    SL --> |full snapshot| HDF5_ST["state.h5"]
 
     style SimThread fill:#1a3a5c,color:#fff
     style GUIThread fill:#2d5a27,color:#fff
     style BL fill:#3a1a5c,color:#fff
     style PL fill:#3a1a5c,color:#fff
     style SL fill:#3a1a5c,color:#fff
-{{< /mermaid >}}
+```
 
 ## Buffer Logging
 

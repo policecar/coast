@@ -9,23 +9,23 @@ COAST uses **two threads** with lock-free communication. Understanding the threa
 
 ## Thread Map
 
-{{< mermaid >}}
+```mermaid
 graph LR
     subgraph MainThread["Main Thread (GUI)"]
-        SDL[SDL Event Loop]
-        ImGui[ImGui Rendering]
-        Browsers[Browsers & Editors]
-        ProbeUpdate[Probe Observer Update<br/><i>drain SPSC queues</i>]
-        VisUpdate[Visualization Update<br/><i>copy sim data</i>]
-        LoggingWin[Logging Window<br/><i>auto-checkpoint</i>]
+        SDL["SDL Event Loop"]
+        ImGui["ImGui Rendering"]
+        Browsers["Browsers & Editors"]
+        ProbeUpdate["Probe Observer Update"]
+        VisUpdate["Visualization Update"]
+        LoggingWin["Logging Window"]
     end
 
     subgraph SimThread["Simulation Thread"]
-        Process[entity.process()]
-        SwapIO[buffer.swap_buffer()]
-        Hooks[Hook callbacks]
-        ProbeRecord[probe() recording]
-        BufCapture[Buffer logger capture]
+        Process["entity.process()"]
+        SwapIO["buffer.swap_buffer()"]
+        Hooks["Hook callbacks"]
+        ProbeRecord["probe() recording"]
+        BufCapture["Buffer logger capture"]
     end
 
     ProbeRecord -.->|SPSC queue| ProbeUpdate
@@ -34,7 +34,7 @@ graph LR
 
     style MainThread fill:#2d5a27,color:#fff
     style SimThread fill:#1a3a5c,color:#fff
-{{< /mermaid >}}
+```
 
 ## What Runs Where
 

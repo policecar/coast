@@ -27,7 +27,7 @@ What happens from program start to the first frame.
 
 ## GUI Mode Flow
 
-{{< mermaid >}}
+```mermaid
 sequenceDiagram
     participant main
     participant sdl_app
@@ -59,7 +59,7 @@ sequenceDiagram
     main->>sdl_app: register callbacks
     main->>sdl_app: run()
     Note over sdl_app: Enters main event loop<br/>(blocks until window close)
-{{< /mermaid >}}
+```
 
 ## Simulation Construction Detail
 
