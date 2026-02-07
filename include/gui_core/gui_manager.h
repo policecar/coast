@@ -18,6 +18,7 @@
 #include "logging_window.h"
 #include "gui_probe/probe_browser.h"
 #include "gui_probe/observer_panel.h"
+#include "gui_replay/buffer_replay_dialog.h"
 
 namespace coast {
 
@@ -157,6 +158,9 @@ private:
     gui_probe::probe_browser probe_browser_window;
     gui_probe::observer_panel observer_panel_window;
 
+    // Analysis windows
+    replay::buffer_replay_dialog buffer_replay_dialog_;
+    bool show_buffer_replay_ = false;
 
     // Render individual dialogs
     void render_control_dialog();
