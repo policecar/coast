@@ -13,6 +13,8 @@
 #include "hd_ngm2_dendrite.h"
 #include "io_buffer.h"
 #include "hd_ngm2_cfg.h"
+#include "core/entity_element.h"
+#include "core/entity_element_macros.h"
 
 
 namespace ngm2 {
@@ -21,7 +23,7 @@ namespace ngm2 {
 /*
  * The main neuron model is defined within this class. It is used by the neuron group model.
  */
-class neuron_t {
+class neuron_t : public core::entity_element {
 
     using dendrite_type_array = std::array<float,static_cast<int>(dendrite_type_t::TYPE_COUNT)>;
 
@@ -38,6 +40,10 @@ class neuron_t {
     std::mt19937            rgen;
 
 public:
+    // Entity element interface
+    ELEMENT_TYPE(neuron_t, "neuron")
+    ELEMENT_CHILDREN_1(dendrites, dendrite_t)
+
     explicit neuron_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
 
     // input initialization

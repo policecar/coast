@@ -12,6 +12,7 @@ CLAUDE_SESSION.md
 build*/
 cmake-build-*
 compile_commands.json
+.cache
 
 # Data files
 data/

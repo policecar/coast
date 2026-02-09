@@ -13,11 +13,16 @@
 #include "io_entity.h"
 #include "mnist_db.h"
 #include "color_mnist_cfg.h"
+#include "core/entity_element_macros.h"
 
 namespace color_mnist {
 
 class color_mnist_io : public sim::io_entity, public mnist::mnist_db {
+public:
+    // Entity element interface
+    ELEMENT_TYPE(color_mnist_io, "color_mnist_input")
 
+private:
     const color_mnist_param_t params;
 
     std::function<std::span<float>()> output_mem {};

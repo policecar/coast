@@ -13,12 +13,17 @@
 #include "io_entity.h"
 #include "mnist_db.h"
 #include "mnist_cfg.h"
+#include "core/entity_element_macros.h"
 
 namespace mnist {
 
 class mnist_io : public sim::io_entity, public mnist_db {
 
     const mnist_param_t params;
+
+public:
+    // Entity element interface
+    ELEMENT_TYPE(mnist_io, "mnist_input")
 
     std::function<std::span<float>()> output_mem {};
 

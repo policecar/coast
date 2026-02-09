@@ -13,10 +13,16 @@
 
 #include "io_entity.h"
 #include "chairs3d_cfg.h"
+#include "core/entity_element_macros.h"
 
 namespace chairs3d {
 
 class chairs3d_io : public sim::io_entity {
+public:
+    // Entity element interface
+    ELEMENT_TYPE(chairs3d_io, "chairs3d_input")
+
+private:
     std::vector<float> images;
     std::vector<std::string> image_paths;  // For lazy loading if needed
     std::size_t image_count = 0;

@@ -46,6 +46,36 @@ add_executable(coast
         # Main
         src/main.cpp
 
+        # Core infrastructure (entity element hierarchy)
+        include/core/element_type.h
+        include/core/entity_element.h
+        include/core/entity_element_macros.h
+        include/core/structure_registry.h
+        include/core/probe_name_registry.h
+        src/core/entity_element.cpp
+        src/core/structure_registry.cpp
+        src/core/probe_name_registry.cpp
+
+        # Probe system
+        include/probe/spsc_queue.h
+        include/probe/probe_observer.h
+        include/probe/probe_instance.h
+        include/probe/entity_probe_set.h
+        src/probe/probe_instance.cpp
+        src/probe/entity_probe_set.cpp
+        # Probe observers
+        include/probe/observers/scalar_observer.h
+        include/probe/observers/time_series_observer.h
+        include/probe/observers/histogram_observer.h
+        src/probe/observers/scalar_observer.cpp
+        src/probe/observers/time_series_observer.cpp
+        src/probe/observers/histogram_observer.cpp
+        # Probe GUI
+        include/gui_probe/probe_browser.h
+        include/gui_probe/observer_panel.h
+        src/gui_probe/probe_browser.cpp
+        src/gui_probe/observer_panel.cpp
+
         # SDL2 application framework
         src/gui_core/sdl_app.cpp
         include/gui_core/sdl_app.h
@@ -210,6 +240,11 @@ target_include_directories(coast SYSTEM PRIVATE
 
 # Project includes (warnings enabled)
 target_include_directories(coast PRIVATE
+        include
+        include/core
+        include/probe
+        include/probe/observers
+        include/gui_probe
         include/gui_core
         include/gui_vis
         include/hd_ngm2
