@@ -8,9 +8,10 @@
 #include <cstdint>
 #include <array>
 #include <vector>
-#include <random>
 #include <functional>
 #include <any>
+
+#include "core/rng/fast_rng.h"
 
 namespace coast {
 
@@ -52,7 +53,7 @@ public:
     };
 
 private:
-    std::mt19937 rgen {0};
+    fast_rng_t rgen {0};
     std::uniform_real_distribution<float> rnd_dis {0.0f, 1.0f};  // Will be scaled by region_size_
 
     node_id_t next_node_id = 0;

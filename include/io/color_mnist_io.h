@@ -8,8 +8,8 @@
 #include <functional>
 #include <span>
 #include <string>
-#include <random>
 
+#include "core/rng/fast_rng.h"
 #include "io_entity.h"
 #include "mnist_db.h"
 #include "color_mnist_cfg.h"
@@ -35,7 +35,7 @@ private:
     std::size_t ci_cnt;
     int change_interval;
 
-    std::mt19937 rgen;
+    fast_rng_t rgen;
     std::uniform_real_distribution<float> noise_dis;
     std::uniform_int_distribution<int> color_dis;  // 0=red, 1=green, 2=blue
 

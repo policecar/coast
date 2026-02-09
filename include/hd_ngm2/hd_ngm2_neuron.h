@@ -8,8 +8,8 @@
 #include <vector>
 #include <array>
 #include <functional>
-#include <random>
 
+#include "core/rng/fast_rng.h"
 #include "hd_ngm2_dendrite.h"
 #include "io_buffer.h"
 #include "hd_ngm2_cfg.h"
@@ -37,7 +37,7 @@ class neuron_t : public core::entity_element {
     std::size_t             branch_interval;
     learning_window_t       activity_learning_window;
     [[maybe_unused]] float  energy;
-    std::mt19937            rgen;
+    fast_rng_t              rgen;
 
 public:
     // Entity element interface

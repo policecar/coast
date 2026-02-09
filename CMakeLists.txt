@@ -17,8 +17,12 @@ set(CMAKE_CXX_STANDARD 23)
 
 # Architecture-specific optimizations (applied globally)
 if (APPLE)
+    # Apple Silicon (M1/M2/M3): -march=native enables ARM NEON SIMD automatically
+    # NEON is always available on ARM64 (not optional like AVX on x86)
+    # The __ARM_NEON and __aarch64__ macros are defined automatically by the compiler
     add_compile_options(-march=native -stdlib=libstdc++)
 else()
+    # x86-64: Enable AVX512 for SIMD-optimized RNG (falls back to AVX2/scalar if unavailable)
     add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl)
 endif()
 
@@ -52,6 +56,10 @@ add_executable(coast
         include/core/entity_element_macros.h
         include/core/structure_registry.h
         include/core/probe_name_registry.h
+        # RNG utilities
+        include/core/rng/rng_wrapper.h
+        include/core/rng/mt19937_simd.h
+        include/core/rng/fast_rng.h
         src/core/entity_element.cpp
         src/core/structure_registry.cpp
         src/core/probe_name_registry.cpp
@@ -242,6 +250,7 @@ target_include_directories(coast SYSTEM PRIVATE
 target_include_directories(coast PRIVATE
         include
         include/core
+        include/core/rng
         include/probe
         include/probe/observers
         include/gui_probe

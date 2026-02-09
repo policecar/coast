@@ -8,10 +8,10 @@
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
-#include <random>
 #include <tuple>
 #include <functional>
 
+#include "core/rng/fast_rng.h"
 #include "io_buffer.h"
 #include "hd_ngm2_cfg.h"
 #include "io_entity.h"
@@ -81,7 +81,7 @@ private:
         std::function<sim::io_buffer::inp_buf_t()>
     > input_mem;
 
-    std::mt19937 rgen;
+    fast_rng_t rgen;
 
     // helper functions
     static constexpr seg_id_t calc_max_segment_idx(seg_id_t max_branch_level);

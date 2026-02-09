@@ -6,8 +6,9 @@
 #define NGM_TREE_VIS_H
 
 #include <vector>
-#include <random>
 #include <cstdint>
+
+#include "core/rng/fast_rng.h"
 #include "hd_ngm2.h"
 #include "../../layout/fbgd.h"
 #include "../../core/color_types.h"
@@ -92,7 +93,7 @@ private:
         uint32_t synapse_count = 0;
     };
 
-    std::mt19937 rgen {0};
+    fast_rng_t rgen {0};
     std::uniform_real_distribution<float> rdis { -1.0, 1.0 };
 
     std::vector<node_info_t> nodes;
