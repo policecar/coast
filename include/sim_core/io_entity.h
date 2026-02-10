@@ -13,6 +13,11 @@
 #include "core/structure_registry.h"
 #include "probe/entity_probe_set.h"
 
+namespace logging {
+class state_writer;
+class state_reader;
+}
+
 namespace sim {
 
 using output_id_t = std::size_t;
@@ -41,6 +46,18 @@ struct io_entity : public core::entity_element {
     [[nodiscard]] virtual std::span<const std::size_t> get_inp_ids() const = 0;
 
     [[nodiscard]] virtual std::string status_str() const { return ""; }
+
+    // -- State persistence support --
+
+    /// Save entity state for later restoration.
+    /// Override in derived classes to save entity-specific state.
+    /// Default implementation does nothing.
+    virtual void save_state([[maybe_unused]] logging::state_writer& writer) const {}
+
+    /// Load entity state from previously saved data.
+    /// Override in derived classes to restore entity-specific state.
+    /// Default implementation does nothing.
+    virtual void load_state([[maybe_unused]] logging::state_reader& reader) {}
 
     // -- Entity element hierarchy support --
 

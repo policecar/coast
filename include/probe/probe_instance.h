@@ -20,6 +20,19 @@ struct structure_entry;
 
 namespace probe {
 
+/// A timestamped probe sample
+struct probe_sample {
+    std::uint64_t step;
+    double value;
+};
+
+/// Set the current simulation step (call before each simulation step).
+/// This step number will be recorded with probe values.
+void set_current_step(std::uint64_t step);
+
+/// Get the current simulation step (for probe recording).
+std::uint64_t get_current_step();
+
 /// Represents a registered probe at a specific (element, probe_name) location.
 /// Each instance has exactly one producer thread (SPSC model).
 struct probe_instance {
@@ -35,8 +48,9 @@ struct probe_instance {
     std::atomic<std::uint32_t> decimation{1};
     std::atomic<std::uint32_t> call_count{0};
 
-    // Value queue: SPSC (one sim thread produces, GUI thread consumes)
-    spsc_queue<double> values;
+    // Sample queue: SPSC (one sim thread produces, GUI thread consumes)
+    // Each sample includes the step number when it was recorded
+    spsc_queue<probe_sample> samples;
 
     // Observers - only accessed from GUI thread
     std::vector<std::unique_ptr<probe_observer>> observers;

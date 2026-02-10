@@ -6,6 +6,7 @@
 #define COAST_PROBE_OBSERVER_H
 
 #include <string_view>
+#include <cstdint>
 
 namespace probe {
 
@@ -14,8 +15,10 @@ class probe_observer {
 public:
     virtual ~probe_observer() = default;
 
-    /// Receive a new value (called during update_observers from GUI thread).
-    virtual void push(double value) = 0;
+    /// Receive a new timestamped value (called during update_observers from GUI thread).
+    /// @param step The simulation step when this value was recorded
+    /// @param value The probe value
+    virtual void push(std::uint64_t step, double value) = 0;
 
     /// Render the observer UI (called during GUI rendering).
     virtual void render() = 0;

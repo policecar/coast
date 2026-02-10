@@ -18,6 +18,11 @@
 #include "core/entity_element.h"
 #include "core/entity_element_macros.h"
 
+namespace logging {
+class state_writer;
+class state_reader;
+}
+
 namespace ngm2 {
 
 /*
@@ -129,6 +134,9 @@ public:
     [[nodiscard]] seg_id_t             get_max_segment_idx()            const;
     [[nodiscard]] std::size_t          get_input_size()                 const;
 
+    // State persistence
+    void save_state(logging::state_writer& writer) const;
+    void load_state(logging::state_reader& reader);
 };
 
 }

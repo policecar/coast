@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <functional>
 #include <imgui.h>
+#include <imfilebrowser.h>
 
 namespace sim {
 class env;
@@ -37,6 +39,9 @@ struct observer_window {
     ImVec2 initial_size{300, 200};
 };
 
+/// Callback type for logging a probe to file.
+using probe_log_callback_t = std::function<bool(probe::probe_instance*)>;
+
 /// Tree view browser for discovering and activating probes.
 /// Also manages individual observer windows.
 class probe_browser {
@@ -51,11 +56,24 @@ class probe_browser {
     std::vector<observer_window> observer_windows_;
     int next_window_id_{0};
 
+    // Callback for logging probes to file (legacy, can be removed)
+    probe_log_callback_t log_probe_callback_;
+
+    // File browser for CSV file observer
+    ImGui::FileBrowser csv_file_browser_{ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir};
+    probe::probe_instance* csv_pending_probe_{nullptr};
+
 public:
     probe_browser() = default;
     explicit probe_browser(sim::env* env);
 
     void set_env(sim::env* env);
+
+    /// Set callback for adding probes to file logging.
+    /// The callback should return true if logging was started successfully.
+    void set_log_probe_callback(probe_log_callback_t callback) {
+        log_probe_callback_ = std::move(callback);
+    }
 
     /// Render the probe browser and all observer windows.
     void render();

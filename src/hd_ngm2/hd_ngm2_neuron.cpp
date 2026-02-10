@@ -6,6 +6,7 @@
 #include "hd_ngm2_neuron.h"
 
 #include "hd_ngm2_tools.h"
+#include "logging/state_io.h"
 
 namespace ngm2 {
 
@@ -179,6 +180,37 @@ std::size_t neuron_t::get_synapse_count() const
     for (const auto &dendrite : dendrites)
         result += dendrite.get_synapse_count();
     return result;
+}
+
+void neuron_t::save_state(logging::state_writer& writer) const
+{
+    writer.write("dendrite_count", static_cast<std::uint64_t>(dendrites.size()));
+
+    writer.begin_group("dendrites");
+    for (std::size_t di = 0; di < dendrites.size(); ++di) {
+        writer.begin_group(std::to_string(di));
+        dendrites[di].save_state(writer);
+        writer.end_group();
+    }
+    writer.end_group();
+}
+
+void neuron_t::load_state(logging::state_reader& reader)
+{
+    auto saved_dc = reader.read_uint64("dendrite_count", 0);
+    if (saved_dc != dendrites.size()) {
+        return;  // Structure mismatch
+    }
+
+    if (!reader.enter_group("dendrites")) return;
+
+    for (std::size_t di = 0; di < dendrites.size(); ++di) {
+        if (reader.enter_group(std::to_string(di))) {
+            dendrites[di].load_state(reader);
+            reader.leave_group();
+        }
+    }
+    reader.leave_group();
 }
 
 }

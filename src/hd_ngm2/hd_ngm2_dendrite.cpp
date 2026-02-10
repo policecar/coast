@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "hd_ngm2_tools.h"
+#include "logging/state_io.h"
 
 namespace ngm2 {
 
@@ -641,5 +642,59 @@ dendrite_t::seg_id_t dendrite_t::get_max_segment_idx() const
 std::size_t dendrite_t::get_input_size() const
 {
     return input_size;
+}
+
+void dendrite_t::save_state(logging::state_writer& writer) const
+{
+    // Save learning parameters
+    writer.write("primary_learning_rate", primary_learning_rate);
+    writer.write("secondary_learning_rate", secondary_learning_rate);
+    writer.write("mismatch_smoothing", mismatch_smoothing);
+    writer.write("accumulated_theta_thres", accumulated_theta_thres);
+
+    // Save synapse data
+    writer.write("permanence", synapses.permanence);
+    writer.write("mismatch", synapses.mismatch);
+    writer.write("adapt_history", synapses.adapt_history);
+    writer.write("segment_idx", synapses.segment_idx);
+    writer.write("input_inc", synapses.input_inc);
+}
+
+void dendrite_t::load_state(logging::state_reader& reader)
+{
+    // Load learning parameters
+    primary_learning_rate = reader.read_float("primary_learning_rate", primary_learning_rate);
+    secondary_learning_rate = reader.read_float("secondary_learning_rate", secondary_learning_rate);
+    mismatch_smoothing = reader.read_float("mismatch_smoothing", mismatch_smoothing);
+    accumulated_theta_thres = reader.read_float("accumulated_theta_thres", accumulated_theta_thres);
+
+    // Load synapse data - resize arrays to match saved state since dendrites may have branched
+    auto perm = reader.read_float_vec("permanence");
+    if (!perm.empty()) {
+        // Resize all synapse arrays to match the saved state size
+        // This is necessary because dendrites grow via branching during training
+        synapses.resize(perm.size());
+        synapses.permanence = std::move(perm);
+    }
+
+    auto mism = reader.read_float_vec("mismatch");
+    if (mism.size() == synapses.mismatch.size()) {
+        synapses.mismatch = std::move(mism);
+    }
+
+    auto adapt = reader.read_float_vec("adapt_history");
+    if (adapt.size() == synapses.adapt_history.size()) {
+        synapses.adapt_history = std::move(adapt);
+    }
+
+    auto seg_idx = reader.read_uint16_vec("segment_idx");
+    if (seg_idx.size() == synapses.segment_idx.size()) {
+        synapses.segment_idx = std::move(seg_idx);
+    }
+
+    auto inp_inc = reader.read_uint8_vec("input_inc");
+    if (inp_inc.size() == synapses.input_inc.size()) {
+        synapses.input_inc = std::move(inp_inc);
+    }
 }
 }

@@ -1,5 +1,6 @@
 #include "sim_thread_controller.h"
 #include "sim_env.h"
+#include "probe/probe_instance.h"
 
 #include <chrono>
 
@@ -72,8 +73,22 @@ double sim_thread_controller::get_target_sps() const
     return target_sps_.load(std::memory_order_acquire);
 }
 
+void sim_thread_controller::set_step_count(std::uint64_t count)
+{
+    step_count_.store(count, std::memory_order_release);
+}
+
+void sim_thread_controller::set_step_limit(std::uint64_t limit)
+{
+    step_limit_.store(limit, std::memory_order_release);
+}
+
 void sim_thread_controller::do_step()
 {
+    // Set the current step for probe recording before processing
+    std::uint64_t current_step = step_count_.load(std::memory_order_relaxed);
+    probe::set_current_step(current_step);
+
     sim_env_.process();
     sim_env_.swap_io();
     step_count_.fetch_add(1, std::memory_order_relaxed);
@@ -93,6 +108,12 @@ void sim_thread_controller::thread_main(std::stop_token st)
     auto last_step_time = clock::now();
 
     while (!st.stop_requested()) {
+        // Check step limit and auto-pause if reached
+        const std::uint64_t limit = step_limit_.load(std::memory_order_acquire);
+        if (limit > 0 && step_count_.load(std::memory_order_acquire) >= limit) {
+            mode_.store(sim_mode::paused, std::memory_order_release);
+        }
+
         const sim_mode current_mode = mode_.load(std::memory_order_acquire);
 
         switch (current_mode) {

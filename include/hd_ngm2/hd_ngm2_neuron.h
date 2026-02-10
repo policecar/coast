@@ -74,6 +74,9 @@ public:
     [[nodiscard]] std::size_t          get_dendrite_count() const;
     [[nodiscard]] std::size_t          get_synapse_count() const;
 
+    // State persistence
+    void save_state(logging::state_writer& writer) const;
+    void load_state(logging::state_reader& reader);
 };
 
 }

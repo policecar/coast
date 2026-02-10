@@ -29,7 +29,7 @@ public:
     explicit histogram_observer(std::size_t num_bins = 50);
     histogram_observer(std::size_t num_bins, double min_val, double max_val);
 
-    void push(double value) override;
+    void push(std::uint64_t step, double value) override;
     void render() override;
     [[nodiscard]] std::string_view name() const override { return "Histogram"; }
 

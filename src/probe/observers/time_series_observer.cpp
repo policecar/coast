@@ -14,7 +14,7 @@ time_series_observer::time_series_observer(std::size_t capacity)
     , ema_buffer_(capacity, 0.0)
 {}
 
-void time_series_observer::push(double value) {
+void time_series_observer::push(std::uint64_t /*step*/, double value) {
     buffer_[head_] = value;
 
     if (use_ema_) {

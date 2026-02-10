@@ -22,6 +22,9 @@ struct global_cfg_t
     ngm2::cfg_store    ngm2;
     sim::sim_cfg_t     sim;
     coast::vis_hints_t vis_hints;
+
+    // Logging and snapshot settings (optional in JSON, loaded separately)
+    std::string snapshot_dir = "snapshots";  // Directory for auto-save snapshots
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(global_cfg_t,

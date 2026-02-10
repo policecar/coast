@@ -13,9 +13,11 @@
 #include "probe/observers/scalar_observer.h"
 #include "probe/observers/time_series_observer.h"
 #include "probe/observers/histogram_observer.h"
+#include "probe/observers/csv_file_observer.h"
 #include <imgui.h>
 #include <algorithm>
 #include <set>
+#include <filesystem>
 
 using coast::scaled;
 
@@ -23,13 +25,21 @@ namespace gui_probe {
 
 probe_browser::probe_browser(sim::env* env)
     : env_(env)
-{}
+{
+    csv_file_browser_.SetTitle("Save Probe Data to CSV");
+    csv_file_browser_.SetTypeFilters({".csv"});
+}
 
 void probe_browser::set_env(sim::env* env) {
     env_ = env;
     // Clear observer windows when environment changes
     observer_windows_.clear();
     pending_probe_ = nullptr;
+    csv_pending_probe_ = nullptr;
+
+    // Initialize file browser settings
+    csv_file_browser_.SetTitle("Save Probe Data to CSV");
+    csv_file_browser_.SetTypeFilters({".csv"});
 }
 
 void probe_browser::update() {
@@ -45,6 +55,29 @@ void probe_browser::render() {
     // Always render observer windows, even if browser is hidden
     render_observer_windows();
     cleanup_closed_windows();
+
+    // Handle CSV file browser (always render, even if browser window is hidden)
+    csv_file_browser_.Display();
+    if (csv_file_browser_.HasSelected()) {
+        std::string selected_path = csv_file_browser_.GetSelected().string();
+        csv_file_browser_.ClearSelected();
+
+        if (csv_pending_probe_) {
+            // Check if file exists and ask for confirmation
+            bool should_create = true;
+            if (std::filesystem::exists(selected_path)) {
+                // File exists - for now just overwrite (user selected it knowingly)
+                // Could add confirmation popup here if desired
+            }
+
+            if (should_create) {
+                csv_pending_probe_->add_observer(
+                    std::make_unique<probe::csv_file_observer>(selected_path));
+                add_observer_window(csv_pending_probe_, csv_pending_probe_->observers.size() - 1);
+            }
+            csv_pending_probe_ = nullptr;
+        }
+    }
 
     if (!visible_ || !env_) return;
 
@@ -240,6 +273,43 @@ void probe_browser::render_observer_popup() {
             add_observer_window(pending_probe_, pending_probe_->observers.size() - 1);
             pending_probe_ = nullptr;
             ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::Separator();
+
+        // CSV File option - opens file browser
+        if (ImGui::Selectable("CSV File...")) {
+            csv_pending_probe_ = pending_probe_;
+            // Generate default filename from probe path (e.g., "entity/neuron[0]/activity" -> "entity.neuron.0.activity.csv")
+            std::string default_name = pending_probe_->full_path;
+            // Replace path separators and brackets with dots, remove other invalid chars
+            for (char& c : default_name) {
+                if (c == '/' || c == '\\' || c == '[' || c == ']') {
+                    c = '.';
+                } else if (c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+                    c = '_';
+                }
+            }
+            // Clean up consecutive dots
+            std::string cleaned;
+            char prev = 0;
+            for (char c : default_name) {
+                if (c != '.' || prev != '.') {
+                    cleaned += c;
+                }
+                prev = c;
+            }
+            // Remove leading/trailing dots
+            while (!cleaned.empty() && cleaned.front() == '.') cleaned.erase(0, 1);
+            while (!cleaned.empty() && cleaned.back() == '.') cleaned.pop_back();
+            cleaned += ".csv";
+            csv_file_browser_.SetInputName(cleaned);
+            csv_file_browser_.Open();
+            pending_probe_ = nullptr;
+            ImGui::CloseCurrentPopup();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Save probe values to a CSV file.\nThe file will be written as data arrives.");
         }
 
         ImGui::EndPopup();

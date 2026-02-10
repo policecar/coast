@@ -27,7 +27,7 @@ histogram_observer::histogram_observer(std::size_t num_bins, double min_val, dou
     , auto_range_(false)
 {}
 
-void histogram_observer::push(double value) {
+void histogram_observer::push(std::uint64_t /*step*/, double value) {
     if (auto_range_) {
         pending_values_.push_back(value);
         if (pending_values_.size() >= AUTO_RANGE_SAMPLES) {

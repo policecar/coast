@@ -75,9 +75,11 @@ add_executable(coast
         include/probe/observers/scalar_observer.h
         include/probe/observers/time_series_observer.h
         include/probe/observers/histogram_observer.h
+        include/probe/observers/csv_file_observer.h
         src/probe/observers/scalar_observer.cpp
         src/probe/observers/time_series_observer.cpp
         src/probe/observers/histogram_observer.cpp
+        src/probe/observers/csv_file_observer.cpp
         # Probe GUI
         include/gui_probe/probe_browser.h
         include/gui_probe/observer_panel.h
@@ -148,9 +150,27 @@ add_executable(coast
         src/gui_vis/io_buffer/vec_ring_buffer.cpp
         include/gui_vis/io_buffer/vec_ring_buffer.h
 
-        # Visualization layout
+        # Visualization layout (old)
         src/gui_vis/layout/fbgd.cpp
         include/gui_vis/layout/fbgd.h
+
+        # Force-directed layout engine (new)
+        include/gui_layout/layout_graph.h
+        src/gui_layout/layout_graph.cpp
+        include/gui_layout/force_layout.h
+        src/gui_layout/force_layout.cpp
+        include/gui_layout/render/node_renderer.h
+        src/gui_layout/render/node_renderer.cpp
+        include/gui_layout/render/graph_canvas.h
+        src/gui_layout/render/graph_canvas.cpp
+
+        # Buffer replay system
+        include/gui_replay/buffer_log_reader.h
+        src/gui_replay/buffer_log_reader.cpp
+        include/gui_replay/replay_node_renderer.h
+        src/gui_replay/replay_node_renderer.cpp
+        include/gui_replay/buffer_replay_dialog.h
+        src/gui_replay/buffer_replay_dialog.cpp
 
         # Sim entity visualizations
         src/gui_vis/sim_entity/neuron_group/ngm_flat_vis.cpp
@@ -230,6 +250,23 @@ add_executable(coast
         src/tools/sim_builder.cpp
         include/tools/sim_builder_interface.h
         include/json_cfg/gui_vis_json.h
+
+        # Logging system
+        include/logging/logging.h
+        include/logging/logging_common.h
+        include/logging/hdf5_utils.h
+        src/logging/hdf5_utils.cpp
+        include/logging/buffer_logger.h
+        src/logging/buffer_logger.cpp
+        include/logging/file_observer.h
+        src/logging/file_observer.cpp
+        include/logging/probe_logger.h
+        src/logging/probe_logger.cpp
+        include/logging/state_io.h
+        include/logging/state_logger.h
+        src/logging/state_logger.cpp
+        include/logging/logging_manager.h
+        src/logging/logging_manager.cpp
 )
 
 # 3rd-party includes (marked as SYSTEM to suppress warnings)
@@ -256,11 +293,14 @@ target_include_directories(coast PRIVATE
         include/gui_probe
         include/gui_core
         include/gui_vis
+        include/gui_layout
+        include/gui_replay
         include/hd_ngm2
         include/sim_core
         include/tools
         include/io
         include/json_cfg
+        include/logging
 )
 
 # Enable warnings for our own code

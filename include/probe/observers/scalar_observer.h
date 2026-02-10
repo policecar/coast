@@ -18,11 +18,13 @@ class scalar_observer : public probe_observer {
     double max_{std::numeric_limits<double>::lowest()};
     double sum_{0.0};
     std::size_t count_{0};
+    std::uint64_t last_step_{0};
 
 public:
-    void push(double value) override;
+    void push(std::uint64_t step, double value) override;
     void render() override;
     [[nodiscard]] std::string_view name() const override { return "Scalar"; }
+    [[nodiscard]] std::uint64_t last_step() const { return last_step_; }
 
     void reset();
 

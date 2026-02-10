@@ -3,8 +3,10 @@
 
 #include <string>
 #include <memory>
+#include <optional>
 
 #include "imgui.h"
+#include "sim_thread_controller.h"
 #include "imfilebrowser.h"
 
 #include "sdl_app.h"
@@ -16,6 +18,7 @@
 #include "logging_window.h"
 #include "gui_probe/probe_browser.h"
 #include "gui_probe/observer_panel.h"
+#include "gui_replay/buffer_replay_dialog.h"
 
 namespace coast {
 
@@ -135,6 +138,16 @@ private:
     // Simulation speed slider value (1-250 = steps/sec, 251 = unlimited)
     int sim_speed_value = 100;
 
+    // Auto-save state
+    bool auto_save_enabled = false;
+    sim::sim_mode previous_sim_mode = sim::sim_mode::paused;
+    std::string last_auto_save_path;
+
+    // Snapshot resume dialog state
+    bool show_snapshot_resume_dialog = false;
+    std::string pending_snapshot_path;
+    std::string pending_snapshot_info;
+
     // Introspection browser windows (created when sim is set)
     std::unique_ptr<entity_browser> entity_browser_window;
     std::unique_ptr<buffer_browser> buffer_browser_window;
@@ -145,11 +158,21 @@ private:
     gui_probe::probe_browser probe_browser_window;
     gui_probe::observer_panel observer_panel_window;
 
+    // Analysis windows
+    replay::buffer_replay_dialog buffer_replay_dialog_;
+    bool show_buffer_replay_ = false;
 
     // Render individual dialogs
     void render_control_dialog();
     void render_status_dialog();
     void render_performance_window();
+    void render_snapshot_resume_dialog();
+
+    // Auto-save helpers
+    void check_auto_save();
+    void perform_auto_save();
+    std::optional<std::pair<std::string, std::string>> find_latest_snapshot();
+    std::string get_snapshot_dir() const;
 };
 
 } // namespace coast

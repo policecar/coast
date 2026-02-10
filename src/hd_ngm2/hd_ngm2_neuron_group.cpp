@@ -2,6 +2,7 @@
 // Created by jk on 26.08.25.
 //
 #include <hd_ngm2_neuron_group.h>
+#include <logging/state_io.h>
 
 #include <utility>
 #include <algorithm>
@@ -327,4 +328,60 @@ float neuron_group_t::get_avg_acc_theta() const
     assert(std::isnormal(cnt));
     return result / cnt;
 }
+
+// State persistence implementation
+
+void neuron_group_t::save_state(logging::state_writer& writer) const
+{
+    // Save group-level state
+    writer.write("local_inhibition_strength", local_inhibition_strength);
+    writer.write("common_learning_rate", common_learning_rate);
+    writer.write("stochastic_win_thres", stochastic_win_thres);
+    writer.write("weight_filter_steepness", static_cast<float>(weight_filter.steepness));
+    writer.write("weight_filter_transition_point", static_cast<float>(weight_filter.transition_point));
+
+    // Save neuron count for validation on load
+    writer.write("neuron_count", static_cast<std::uint64_t>(neurons.size()));
+
+    // Save each neuron's state - delegate to neuron_t::save_state for consistency with load path
+    writer.begin_group("neurons");
+    for (std::size_t ni = 0; ni < neurons.size(); ++ni) {
+        writer.begin_group(std::to_string(ni));
+        neurons[ni].save_state(writer);
+        writer.end_group();
+    }
+    writer.end_group();
+}
+
+void neuron_group_t::load_state(logging::state_reader& reader)
+{
+    // Load group-level state
+    local_inhibition_strength = reader.read_float("local_inhibition_strength", local_inhibition_strength);
+    common_learning_rate = reader.read_float("common_learning_rate", common_learning_rate);
+    stochastic_win_thres = reader.read_float("stochastic_win_thres", stochastic_win_thres);
+    weight_filter.steepness = reader.read_float("weight_filter_steepness", static_cast<float>(weight_filter.steepness));
+    weight_filter.transition_point = reader.read_float("weight_filter_transition_point", static_cast<float>(weight_filter.transition_point));
+
+    // Validate neuron count
+    auto saved_neuron_count = reader.read_uint64("neuron_count", 0);
+    if (saved_neuron_count != neurons.size()) {
+        return;  // Structure mismatch - cannot safely load
+    }
+
+    // Load each neuron's state
+    if (!reader.enter_group("neurons")) {
+        return;
+    }
+
+    for (std::size_t ni = 0; ni < neurons.size(); ++ni) {
+        if (!reader.enter_group(std::to_string(ni))) {
+            continue;
+        }
+        neurons[ni].load_state(reader);
+        reader.leave_group();
+    }
+
+    reader.leave_group();
+}
+
 }
