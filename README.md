@@ -7,6 +7,7 @@ Coherent active state dynamics in self-organizing systems
 - SDL2
 - Intel TBB
 - HDF5
+- [Hugo](https://gohugo.io/) (extended edition, for building documentation)
 
 On macOS, GCC 15 is required for C++23 features (default clang lacks some):
 ```bash
@@ -69,4 +70,11 @@ gunzip *.gz
 ```bash
 mkdir -p data/dsprites && cd data/dsprites
 curl -LO https://github.com/google-deepmind/dsprites-dataset/raw/master/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5
+```
+
+### Documentation
+```bash
+cd docs
+hugo 
+hugo server
 ```

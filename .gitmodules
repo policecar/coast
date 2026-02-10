@@ -10,3 +10,6 @@
 [submodule "3rd_party/ImNodeFlow"]
 	path = 3rd_party/ImNodeFlow
 	url = https://github.com/Fattorino/ImNodeFlow.git
+[submodule "docs/themes/hugo-theme-relearn"]
+	path = docs/themes/hugo-theme-relearn
+	url = https://github.com/McShelby/hugo-theme-relearn.git
