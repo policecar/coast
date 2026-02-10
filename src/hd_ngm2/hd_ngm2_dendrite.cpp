@@ -76,6 +76,7 @@ dendrite_t::dendrite_t(const cfg_store &cs, const std::string &type, int seed_de
                               }()                                           ),
     input_size              (0                                              ),
     max_segment_idx         ( calc_max_segment_idx(params.max_branch_level) ),
+    inv_perm_range_         ( 1.0f / (1.0f - params.permanence_threshold)   ),
     primary_learning_rate   ( params.default_primary_learning_rate          ),
     secondary_learning_rate ( params.default_secondary_learning_rate        ),
     mismatch_smoothing      ( params.default_mismatch_smoothing             ),
@@ -230,6 +231,9 @@ float dendrite_t::get_response()
     // getting the normalized shannon entropy statistic for first partial input
     float nse = cur_stats.nse;
 
+    // precompute reciprocal for sum (used in penalty calculation)
+    float inv_sum = 1.0f / cur_stats.sum;
+
     // setting up a uniform random distribution that will be used to stochastically determine if an input is "low"
     std::uniform_real_distribution<float> dis1 { 0.0f, cur_stats.max_val / 2.0f };
 
@@ -245,6 +249,7 @@ float dendrite_t::get_response()
             cur_inp_it  = cur_input.begin();
             cur_inp_end = cur_input.end();
             nse = std::min(cur_stats.nse,nse);
+            inv_sum = 1.0f / cur_stats.sum;
             dis1 = std::uniform_real_distribution<float> {0.0f, cur_stats.max_val / 2.0f};
         }
 
@@ -266,8 +271,8 @@ float dendrite_t::get_response()
 
             // 1.2
             if (dis1(rgen) > *cur_inp_it) {
-                const float inp_contrib   = *cur_inp_it / cur_stats.sum;
-                const float perm_strength = (synapses.permanence[i] - params.permanence_threshold) / (1.0f - params.permanence_threshold);
+                const float inp_contrib   = *cur_inp_it * inv_sum;
+                const float perm_strength = (synapses.permanence[i] - params.permanence_threshold) * inv_perm_range_;
                 segment_activity[synapses.segment_idx[i]] -= perm_strength * (1.0f - inp_contrib);
                 if (segment_activity[synapses.segment_idx[i]] < 0.0f)
                     segment_activity[synapses.segment_idx[i]] = 0.0f;
@@ -294,9 +299,10 @@ float dendrite_t::get_response()
     // Please note that the segment_activity is used below in the adapt_synapses function. Hence the attenuation needs
     // to be applied to every element and not just the max_activity
     float attenuation = 1.0f - sigmoid((nse - 0.8f) / 0.2f, {0.25f,0.5f});
+    const float inv_inp_sum = 1.0f / inp_sum;
     float max_activity = 0.0f;
     for (std::size_t si = leaf_begin; si <= max_segment_idx; ++si) {
-        segment_activity[si] = std::clamp( segment_activity[si] * attenuation / inp_sum , 0.0f, 1.0f );
+        segment_activity[si] = std::clamp( segment_activity[si] * attenuation * inv_inp_sum , 0.0f, 1.0f );
         max_activity = std::max(max_activity, segment_activity[si]);
     }
 
@@ -338,12 +344,13 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
     bool max_response_seen       = false;
     constexpr float eps          = std::numeric_limits<float>::epsilon();
     const std::size_t leaf_begin = (max_segment_idx + 1) / 2;
+    const float inv_max_activity = 1.0f / max_activity;
     for (std::size_t si = leaf_begin; si <= max_segment_idx; ++si) {
         if ((!max_response_seen) && (segment_activity[si] + eps >= max_activity)) {
             max_response_seen = true;
             segment_weights[si] = weight * primary_learning_rate;
         } else {
-            segment_weights[si] = segment_activity[si] * weight * secondary_learning_rate / max_activity;
+            segment_weights[si] = segment_activity[si] * weight * secondary_learning_rate * inv_max_activity;
         }
     }
 
@@ -379,6 +386,14 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
     // (see also description of the attenuation in the get_response method)
     float attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f);
 
+    // precompute reciprocals for theta calculation (per partial input)
+    float high_thres     = (cur_stats.avg / 2.0f) + std::numeric_limits<float>::epsilon();
+    float inv_high_range = 1.0f / (1.0f - high_thres);
+    float inv_high_thres = 1.0f / high_thres;
+
+    // precompute reciprocal for mismatch calculation
+    const float inv_last_max_inp = 1.0f / last_max_inp;
+
     // linear sweep through all synapses
     for (std::size_t i = 0; i < syn_cnt; ++i) {
 
@@ -391,14 +406,16 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
             cur_inp_it    = cur_input.begin();
             cur_inp_end   = cur_input.end();
             attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f);
+            high_thres     = (cur_stats.avg / 2.0f) + std::numeric_limits<float>::epsilon();
+            inv_high_range = 1.0f / (1.0f - high_thres);
+            inv_high_thres = 1.0f / high_thres;
         }
 
         // 3 we want to learn strongly when the particular input is either near 1 or near 0 and
         // if the partial input is not noise
-        const float high_thres = ((cur_stats.avg) / 2.0f) + std::numeric_limits<float>::epsilon();
         const float theta = std::clamp( segment_weights[ synapses.segment_idx[i] ] * ( *cur_inp_it > high_thres ?
-                                (*cur_inp_it - high_thres) / (1.0f - high_thres) :
-                                (high_thres - *cur_inp_it) / high_thres
+                                (*cur_inp_it - high_thres) * inv_high_range :
+                                (high_thres - *cur_inp_it) * inv_high_thres
                             ) * attenuation, 0.0f, 1.0f);
 
         synapses.permanence[i] = std::clamp(synapses.permanence[i] * (1.0f - theta) + (*cur_inp_it > high_thres ? theta : 0.0f), 0.0f, 1.0f);
@@ -411,9 +428,9 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
         // mismatch heuristic that describes how well the permanence value of the synapse agrees with the activity of
         // the input. However, we only collect this information if the corresponding segment activity is reasonably high.
         // Furthermore, the mismatch value is implemented as IIR-Filter that emphasizes more recent mismatches.
-        const float act_ratio = segment_activity[ synapses.segment_idx[i] ] / max_activity;
+        const float act_ratio = segment_activity[ synapses.segment_idx[i] ] * inv_max_activity;
         if (act_ratio >= mismatch_act_thres) {
-            const float inp_ratio = *cur_inp_it / last_max_inp;
+            const float inp_ratio = *cur_inp_it * inv_last_max_inp;
             float mismatch = synapses.permanence[i] > params.permanence_threshold ? 1.0f - inp_ratio : inp_ratio;
             mismatch *= act_ratio;
             synapses.mismatch[i] = synapses.mismatch[i] * (1.0f - mismatch_smoothing) + mismatch * mismatch_smoothing;
