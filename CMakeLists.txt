@@ -150,11 +150,7 @@ add_executable(coast
         src/gui_vis/io_buffer/vec_ring_buffer.cpp
         include/gui_vis/io_buffer/vec_ring_buffer.h
 
-        # Visualization layout (old)
-        src/gui_vis/layout/fbgd.cpp
-        include/gui_vis/layout/fbgd.h
-
-        # Force-directed layout engine (new)
+        # Force-directed layout engine
         include/gui_layout/layout_graph.h
         src/gui_layout/layout_graph.cpp
         include/gui_layout/force_layout.h
@@ -175,8 +171,8 @@ add_executable(coast
         # Sim entity visualizations
         src/gui_vis/sim_entity/neuron_group/ngm_flat_vis.cpp
         include/gui_vis/sim_entity/neuron_group/ngm_flat_vis.h
-        src/gui_vis/sim_entity/neuron_group/ngm_tree_vis.cpp
-        include/gui_vis/sim_entity/neuron_group/ngm_tree_vis.h
+        src/gui_vis/sim_entity/neuron_group/ngm_tree_vis_v2.cpp
+        include/gui_vis/sim_entity/neuron_group/ngm_tree_vis_v2.h
 
         # Visualization registry
         src/gui_vis/vis_registry.cpp
