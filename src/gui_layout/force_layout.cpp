@@ -247,9 +247,20 @@ void force_layout::compute_repulsion_for_node(node_t& n, const quad_node* qn) {
     if (qn->node_count == 1 || ratio < params_.theta) {
         // Use approximation or this is a single node
         if (qn->single_node != n.id) {
+            // Calculate effective distance accounting for radii
+            // For single nodes, use surface-to-surface distance
+            float effective_dist = dist;
+            if (qn->node_count == 1 && qn->single_node != invalid_node_id) {
+                float other_radius = graph_.node(qn->single_node).radius;
+                effective_dist = dist - n.radius - other_radius;
+                // Clamp to ensure strong repulsion when nodes overlap
+                effective_dist = std::max(effective_dist, params_.min_distance);
+            }
+            float effective_dist_sq = effective_dist * effective_dist;
+
             // Apply repulsive force (inverse square law)
-            float force = -params_.repulsion * n.mass * qn->total_mass / (dist_sq + params_.min_distance);
-            float inv_dist = 1.0f / dist;
+            float force = -params_.repulsion * n.mass * qn->total_mass / (effective_dist_sq + params_.min_distance);
+            float inv_dist = 1.0f / dist;  // Use original dist for direction
             n.vx += force * dx * inv_dist;
             n.vy += force * dy * inv_dist;
         }

@@ -9,6 +9,8 @@
 
 #include "imgui.h"
 #include "json_loader.h"
+#include "gui_layout/layout_graph.h"
+#include "gui_layout/force_layout.h"
 
 namespace ImFlow {
     class ImNodeFlow;
@@ -144,6 +146,20 @@ private:
 
     // Detect and handle newly created links, returns true if any were added
     bool handle_new_links();
+
+    // Auto-layout state
+    bool auto_layout_active_ = false;
+    std::unique_ptr<layout::layout_graph> layout_graph_;
+    std::unique_ptr<layout::force_layout> force_layout_;
+    std::unordered_map<sim::sim_node_id_t, layout::node_id_t> sim_to_layout_id_;
+
+    // Auto-layout helper methods
+    void init_auto_layout();
+    void step_auto_layout();
+    void stop_auto_layout();
+
+    // View reset helper
+    void reset_view();
 };
 
 } // namespace coast
