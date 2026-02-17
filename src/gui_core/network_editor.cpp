@@ -2,6 +2,8 @@
 #include "ImNodeFlow.h"
 
 #include <algorithm>
+#include <limits>
+#include <random>
 
 namespace coast {
 
@@ -116,7 +118,9 @@ network_editor::network_editor(loader::global_cfg_t& config)
 {
 }
 
-network_editor::~network_editor() = default;
+network_editor::~network_editor() {
+    stop_auto_layout();
+}
 
 void network_editor::set_dirty_callback(dirty_callback_t callback) {
     dirty_callback = std::move(callback);
@@ -203,6 +207,32 @@ void network_editor::render(bool* p_open) {
                 }
                 ImGui::EndTooltip();
             }
+        }
+
+        // Auto Pos button (hold to run force layout)
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        ImGui::Button("Auto Pos");
+        if (ImGui::IsItemActive()) {
+            if (!auto_layout_active_) {
+                init_auto_layout();
+            }
+            step_auto_layout();
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "(layouting...)");
+        } else if (auto_layout_active_) {
+            stop_auto_layout();
+        }
+
+        // Reset View button - centers all nodes in viewport
+        ImGui::SameLine();
+        if (ImGui::Button("Reset View")) {
+            reset_view();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Center all nodes in viewport");
         }
 
         ImGui::Separator();
@@ -486,6 +516,142 @@ void network_editor::rebuild_from_config() {
 
             if (out_pin && in_pin) {
                 out_pin->createLink(in_pin);
+            }
+        }
+    }
+}
+
+void network_editor::init_auto_layout() {
+    auto_layout_active_ = true;
+    sim_to_layout_id_.clear();
+
+    // Create fresh layout graph
+    layout_graph_ = std::make_unique<layout::layout_graph>();
+
+    // Random generator for breaking symmetry
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> noise(-5.0f, 5.0f);
+
+    // Add nodes from ImNodeFlow at their current positions
+    for (auto& [uid, node] : editor->getNodes()) {
+        auto* sim_node = dynamic_cast<SimNode*>(node.get());
+        if (sim_node) {
+            ImVec2 pos = node->getPos();
+            ImVec2 size = node->getSize();
+            // Use half the larger dimension as collision radius
+            float radius = std::max(size.x, size.y) * 0.5f;
+            // Add small random perturbation to break symmetry
+            float x = pos.x + noise(gen);
+            float y = pos.y + noise(gen);
+            layout::node_id_t layout_id = layout_graph_->add_node(x, y, radius);
+            sim_to_layout_id_[sim_node->getNodeId()] = layout_id;
+        }
+    }
+
+    // Add edges from link_states
+    for (const auto& link : link_states) {
+        auto src_it = sim_to_layout_id_.find(link.src_id);
+        auto dst_it = sim_to_layout_id_.find(link.dst_id);
+        if (src_it != sim_to_layout_id_.end() && dst_it != sim_to_layout_id_.end()) {
+            layout_graph_->add_edge(src_it->second, dst_it->second, 1.0f, 200.0f);
+        }
+    }
+
+    // Configure force layout parameters tuned for editor scale
+    layout::force_params params;
+    params.repulsion = 8000.0f;       // Strong repulsion to keep nodes well separated
+    params.attraction = 0.005f;       // Gentle edge pull
+    params.damping = 0.85f;           // Smooth settling
+    params.max_velocity = 30.0f;      // Smoother animation
+    params.gravity = 0.001f;          // Light pull to keep graph centered
+
+    // Set gravity center to current graph center
+    auto [cx, cy] = layout_graph_->center();
+    params.gravity_center_x = cx;
+    params.gravity_center_y = cy;
+
+    force_layout_ = std::make_unique<layout::force_layout>(*layout_graph_);
+    force_layout_->set_params(params);
+}
+
+void network_editor::step_auto_layout() {
+    if (!force_layout_ || !layout_graph_) return;
+
+    // Run one simulation step
+    force_layout_->step();
+
+    // Update ImNodeFlow node positions from layout graph
+    for (auto& [uid, node] : editor->getNodes()) {
+        auto* sim_node = dynamic_cast<SimNode*>(node.get());
+        if (!sim_node) continue;
+
+        auto it = sim_to_layout_id_.find(sim_node->getNodeId());
+        if (it == sim_to_layout_id_.end()) continue;
+
+        const auto& layout_node = layout_graph_->node(it->second);
+        ImVec2 new_pos(layout_node.x, layout_node.y);
+
+        // Update ImNodeFlow position
+        node->setPos(new_pos);
+
+        // Also update our shadow state so positions persist after rebuild
+        auto state_it = node_states.find(sim_node->getNodeId());
+        if (state_it != node_states.end()) {
+            state_it->second.position = new_pos;
+            state_it->second.position_initialized = true;
+        }
+    }
+}
+
+void network_editor::stop_auto_layout() {
+    auto_layout_active_ = false;
+    force_layout_.reset();
+    layout_graph_.reset();
+    sim_to_layout_id_.clear();
+}
+
+void network_editor::reset_view() {
+    // Reset viewport to default scroll and zoom
+    editor->getGrid().setScroll(ImVec2(0.0f, 0.0f));
+    editor->getGrid().setZoom(1.0f);
+
+    auto& nodes = editor->getNodes();
+    if (nodes.empty()) return;
+
+    // Calculate current bounding box of all nodes
+    float min_x = std::numeric_limits<float>::max();
+    float min_y = std::numeric_limits<float>::max();
+    float max_x = std::numeric_limits<float>::lowest();
+    float max_y = std::numeric_limits<float>::lowest();
+
+    for (auto& [uid, node] : nodes) {
+        ImVec2 pos = node->getPos();
+        ImVec2 size = node->getSize();
+        min_x = std::min(min_x, pos.x);
+        min_y = std::min(min_y, pos.y);
+        max_x = std::max(max_x, pos.x + size.x);
+        max_y = std::max(max_y, pos.y + size.y);
+    }
+
+    // Calculate offset to center nodes at (400, 300) - a reasonable viewport position
+    float center_x = (min_x + max_x) * 0.5f;
+    float center_y = (min_y + max_y) * 0.5f;
+    float offset_x = 400.0f - center_x;
+    float offset_y = 300.0f - center_y;
+
+    // Move all nodes by offset
+    for (auto& [uid, node] : nodes) {
+        ImVec2 pos = node->getPos();
+        ImVec2 new_pos(pos.x + offset_x, pos.y + offset_y);
+        node->setPos(new_pos);
+
+        // Also update shadow state
+        auto* sim_node = dynamic_cast<SimNode*>(node.get());
+        if (sim_node) {
+            auto it = node_states.find(sim_node->getNodeId());
+            if (it != node_states.end()) {
+                it->second.position = new_pos;
             }
         }
     }
