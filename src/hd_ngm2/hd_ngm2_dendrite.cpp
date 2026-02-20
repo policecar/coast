@@ -251,7 +251,7 @@ float dendrite_t::get_response()
             cur_inp_it  = cur_input.begin();
             cur_inp_end = cur_input.end();
             nse = std::min(cur_stats.nse,nse);
-            inp_avg = cur_stats.avg;
+            inp_avg = std::min(cur_stats.avg,inp_avg);
             inv_sum = 1.0f / cur_stats.sum;
             dis1 = std::uniform_real_distribution<float> {0.0f, cur_stats.max_val / 2.0f};
         }
