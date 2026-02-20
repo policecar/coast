@@ -7,8 +7,10 @@
 #include <utility>
 #include <algorithm>
 #include <cassert>
-#include <execution>
 #include <ranges>
+#include <oneapi/tbb/parallel_for.h>
+#include <oneapi/tbb/blocked_range.h>
+#include <oneapi/tbb/partitioner.h>
 
 namespace ngm2 {
 
@@ -128,16 +130,16 @@ void neuron_group_t::process()
     assert(out.size() == neurons.size());
 
     // get the current activity of all neurons in parallel
-    // (parallel processing might in the future move up to the level of the simulation)
-    std::for_each(
-        std::execution::par,
-        neurons.begin(),neurons.end(),
-        [&](auto &neuron) {
-            out[neuron.id] = neuron.get_response(); // writing into out from different threads is a performance
-                                                    // problem as it is very cache unfriendly. This problem will go
-                                                    // away as soon as the parallelization moves up to the level
-                                                    // of the simulation.
-        }
+    // Static partitioner pins each index range to the same thread across calls,
+    // improving L3 cache reuse for synapse data compared to TBB's default
+    // work-stealing partitioner.
+    tbb::parallel_for(
+        tbb::blocked_range<std::size_t>(0, neurons.size()),
+        [&](const tbb::blocked_range<std::size_t>& r) {
+            for (std::size_t i = r.begin(); i != r.end(); ++i)
+                out[i] = neurons[i].get_response();
+        },
+        tbb::static_partitioner{}
     );
 
     // simulate local inhibition within the neuron group
@@ -181,13 +183,15 @@ void neuron_group_t::process()
 
     // 4)
     const float act_sum = std::reduce(out.begin(),out.end());
-    std::for_each(
-        std::execution::par, // parallelization might move up to the simulation layer at some point
-        neurons.begin(), neurons.end(),
-        [&](auto &neuron) {
-            const float sec_weight = sigmoid(1.0f - (out[neuron.id] / act_sum), weight_filter);
-            neuron.adapt(sec_weight * common_learning_rate);
-        }
+    tbb::parallel_for(
+        tbb::blocked_range<std::size_t>(0, neurons.size()),
+        [&](const tbb::blocked_range<std::size_t>& r) {
+            for (std::size_t i = r.begin(); i != r.end(); ++i) {
+                const float sec_weight = sigmoid(1.0f - (out[i] / act_sum), weight_filter);
+                neurons[i].adapt(sec_weight * common_learning_rate);
+            }
+        },
+        tbb::static_partitioner{}
     );
 
     // calculate average secondary weight for probe
