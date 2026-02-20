@@ -68,7 +68,7 @@ constexpr dendrite_t::seg_id_t dendrite_t::calc_max_segment_idx(const seg_id_t m
 /*
  * main initialization of our dendritic branch model
  */
-dendrite_t::dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta) :
+dendrite_t::dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta, int seed_offset) :
     params                  ( [&cs,&type]() -> dendrite_params_t
                               {
                                   if (const auto it = cs.dendrites.find(type); it != cs.dendrites.cend())
@@ -86,13 +86,14 @@ dendrite_t::dendrite_t(const cfg_store &cs, const std::string &type, int seed_de
     min_mismatch_percentage ( params.default_min_mismatch_percentage        ),
     mismatch_act_thres      ( params.default_mismatch_act_thres             ),
     last_max_inp            ( 0.0f                                          ),
-    rgen                    ( params.rnd_seed + seed_delta                  )
+    rgen                    ( params.rnd_seed + seed_delta + seed_offset     )
 {
     // initializing random synapses moved to init_input function
 
     // Internally we represent the binary tree structure of the dendritic branch as linear arrays of appropriate size
     segment_activity.resize(max_segment_idx + 1, 0.0f);
     segment_weights.resize(max_segment_idx + 1,  0.0f);
+
 }
 
 void dendrite_t::init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map)
@@ -226,11 +227,11 @@ float dendrite_t::get_response()
     auto [cur_input,cur_stats] = pi->second();
 
     // set up start and end of current input
-    auto cur_inp_it    = cur_input.begin();
-    auto cur_inp_end   = cur_input.end();
+    auto cur_inp_it  = cur_input.begin();
+    auto cur_inp_end = cur_input.end();
 
     // getting the normalized shannon entropy statistic for first partial input
-    float nse = cur_stats.nse;
+    float nse     = cur_stats.nse;
     float inp_avg = cur_stats.avg;
 
     // precompute reciprocal for sum (used in penalty calculation)
@@ -239,54 +240,39 @@ float dendrite_t::get_response()
     // setting up a uniform random distribution that will be used to stochastically determine if an input is "low"
     std::uniform_real_distribution<float> dis1 { 0.0f, cur_stats.max_val / 2.0f };
 
-    // linear sweep through all synapses
     for (std::size_t i = 0; i < syn_cnt; ++i) {
 
-        // if the current partial input has ended, we continue with the next one and update our variables accordingly
+        // if the current partial input has ended, advance to the next one
         if (cur_inp_it == cur_inp_end) {
             ++pi;
             auto [new_input,new_stats] = pi->second();
-            cur_input = new_input;
-            cur_stats = new_stats;
-            cur_inp_it  = cur_input.begin();
-            cur_inp_end = cur_input.end();
-            nse = std::min(cur_stats.nse,nse);
-            inp_avg = std::min(cur_stats.avg,inp_avg);
-            inv_sum = 1.0f / cur_stats.sum;
-            dis1 = std::uniform_real_distribution<float> {0.0f, cur_stats.max_val / 2.0f};
+            cur_input    = new_input;
+            cur_stats    = new_stats;
+            cur_inp_it   = cur_input.begin();
+            cur_inp_end  = cur_input.end();
+            nse          = std::min(cur_stats.nse, nse);
+            inp_avg      = std::min(cur_stats.avg, inp_avg);
+            inv_sum      = 1.0f / cur_stats.sum;
+            dis1         = std::uniform_real_distribution<float>{0.0f, cur_stats.max_val / 2.0f};
         }
 
-        /* we only process an input if the "permanence" [0..1] of the corresponding synapse is above a given
-        *  permanence threshold (e.g., 0.3). The concept of "permanence" stems from Hawkins et al. (Numenta) and
-        *  represents if and how well an axon has made contact with a synapse. It does NOT represent a connection
-        *  weight as it would be used, e.g., in a perceptron. Instead, it is binary. If a connection is made (i.e.,
-        *  the permanence is above threshold) the input is taken in "as is" (see 1.1).
-        *  However, we also need to encode the information that a synaptic connection might be present / strong while
-        *  there is no input. In this case, we need to "punish" this connection. From a biological perspective this
-        *  idea resembles that of a "leaky synapse" that will reduce the cell membrane potential if no corresponding
-        *  strong input is present. Another perspective would be: there has to be a metabolical cost to having a synapse
-        *  that is not used properly. As it is diffcult to state when an input is actually "low", we follow a stochastic
-        *  approach and decide if the input was low via a uniform distribution between 0 and max_input_value / 2. (see 1.2)
-        */
-        if (synapses.permanence[i] > params.permanence_threshold) {
-            // 1.1
-            segment_activity[synapses.segment_idx[i]] += *cur_inp_it;
+        const float inp         = *cur_inp_it;
+        const float inp_contrib = inp * inv_sum;
 
-            // 1.2
-            if (dis1(rgen) > *cur_inp_it) {
-                const float inp_contrib   = *cur_inp_it * inv_sum;
-                const float perm_strength = (synapses.permanence[i] - params.permanence_threshold) * inv_perm_range_;
+        if (synapses.permanence[i] > params.permanence_threshold) {
+            segment_activity[synapses.segment_idx[i]] += inp;
+            if (dis1(rgen) > inp) {
+                const float perm_strength =
+                    (synapses.permanence[i] - params.permanence_threshold) * inv_perm_range_;
                 segment_activity[synapses.segment_idx[i]] -= perm_strength * (1.0f - inp_contrib);
                 if (segment_activity[synapses.segment_idx[i]] < 0.0f)
                     segment_activity[synapses.segment_idx[i]] = 0.0f;
             }
-
         }
-        // we advance the current input iterator only if the respective input signal is not needed by further
-        // synapses, i.e., the values in input_inc are either 0 or 1. For a group of synapses that all receive input
-        // from a given input dimension, all input_inc values are 0 except from the last synapse of the group.
+
         cur_inp_it += synapses.input_inc[i];
     }
+
 
     // 2) push activities to the leafs
     const std::size_t leaf_begin = (max_segment_idx + 1) / 2;
@@ -448,10 +434,10 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
             synapses.mismatch[i] = synapses.mismatch[i] * (1.0f - mismatch_smoothing) + mismatch * mismatch_smoothing;
         }
 
-        // we advance the current input iterator only if the respective input signal is not needed by further
-        // synapses, i.e., the values in input_inc are either 0 or 1. For a group of synapses that all receive input
-        // from a given input dimension, all input_inc values are 0 except from the last synapse of the group.
-        cur_inp_it += synapses.input_inc[i];
+        // advance the iterator only at the trailing synapse of each pack (low bit set).
+        // The high bits of input_inc at the pack start hold the pack_size for get_response();
+        // masking them out here keeps adapt_synapses() oblivious to that encoding.
+        cur_inp_it += synapses.input_inc[i] & 1u;
     }
 }
 
@@ -551,7 +537,7 @@ void dendrite_t::adapt_branches()
                                                0.0f, 1.0f
                                            );
 
-        // disable input advancement of "lower" synapse
+        // disable input advancement of "lower" synapse (lower == lower index)
         synapses.input_inc[cur_idx + 0] = 0;
 
         // advance to next synapse
@@ -707,5 +693,6 @@ void dendrite_t::load_state(logging::state_reader& reader)
     if (inp_inc.size() == synapses.input_inc.size()) {
         synapses.input_inc = std::move(inp_inc);
     }
+
 }
 }

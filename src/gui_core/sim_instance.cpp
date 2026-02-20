@@ -5,7 +5,7 @@
 
 namespace coast {
 
-sim_instance::sim_instance(const std::string& config_path)
+sim_instance::sim_instance(const std::string& config_path, int seed_offset)
     : config_path(config_path)
 {
     // Load configuration
@@ -16,7 +16,7 @@ sim_instance::sim_instance(const std::string& config_path)
 
     // Create simulation builder and register entity handlers
     sim_builder = std::make_unique<sim::sim_builder>(*sim_env);
-    sim::register_entity_handlers(*sim_builder, *json_loader);
+    sim::register_entity_handlers(*sim_builder, *json_loader, seed_offset);
 
     // Build the simulation from config
     sim_builder->build_local(json_loader->get_sim_cfg());

@@ -29,7 +29,7 @@ public:
      * @param config_path Path to JSON configuration file
      * @throws std::runtime_error if loading or initialization fails
      */
-    explicit sim_instance(const std::string& config_path);
+    explicit sim_instance(const std::string& config_path, int seed_offset = 0);
 
     ~sim_instance();
 

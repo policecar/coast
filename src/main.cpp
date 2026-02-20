@@ -30,6 +30,9 @@ struct cli_options {
     std::string state_load_path;      // Path to load initial state
     bool resume_latest = false;       // Auto-resume from latest snapshot
     std::uint64_t checkpoint_interval = 0;  // Auto-save every N steps (0 = disabled)
+
+    // RNG options
+    int seed_offset = 0;              // Additive offset applied to all random seeds
 };
 
 void print_usage(const char* program_name) {
@@ -46,6 +49,8 @@ void print_usage(const char* program_name) {
     std::cout << "  --load-state <path>   Load initial state from specific HDF5 file\n";
     std::cout << "  --save-state <path>   Save final state to HDF5 file (headless only)\n";
     std::cout << "  --checkpoint <steps>  Auto-save checkpoint every N steps (headless only)\n";
+    std::cout << "\nRNG options:\n";
+    std::cout << "  --seed-offset <int>   Additive offset applied to all random seeds\n";
     std::cout << "\nLogging options:\n";
     std::cout << "  --log-buffers <path>  Log IO buffers to HDF5 file\n";
     std::cout << "\nExamples:\n";
@@ -139,6 +144,8 @@ cli_options parse_args(int argc, char** argv) {
             opts.resume_latest = true;
         } else if ((arg == "--checkpoint") && i + 1 < argc) {
             opts.checkpoint_interval = std::stoull(argv[++i]);
+        } else if (arg == "--seed-offset" && i + 1 < argc) {
+            opts.seed_offset = std::stoi(argv[++i]);
         } else if (arg[0] != '-' && opts.config_path.empty()) {
             // Positional argument: treat as config path
             opts.config_path = arg;
@@ -158,7 +165,7 @@ int run_headless(const cli_options& opts) {
     std::cout << "Loading configuration: " << opts.config_path << "\n";
 
     try {
-        auto sim = std::make_unique<sim_instance>(opts.config_path);
+        auto sim = std::make_unique<sim_instance>(opts.config_path, opts.seed_offset);
         std::cout << "Configuration loaded successfully.\n";
 
         auto* controller = sim->get_thread_controller();

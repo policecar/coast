@@ -13,7 +13,7 @@ namespace ngm2 {
 /*
  * main initialization of a neuron
  */
-neuron_t::neuron_t(const cfg_store &cs, const std::string &type, int seed_delta) :
+neuron_t::neuron_t(const cfg_store &cs, const std::string &type, int seed_delta, int seed_offset) :
     params( [&cs,&type]() -> neuron_params_t
             {
                   if (const auto it = cs.neurons.find(type); it != cs.neurons.cend())
@@ -27,7 +27,7 @@ neuron_t::neuron_t(const cfg_store &cs, const std::string &type, int seed_delta)
     branch_interval(params.default_branch_interval),
     activity_learning_window(params.default_activity_learning_window),
     energy(1.0f),
-    rgen(params.random_seed + seed_delta),
+    rgen(params.random_seed + seed_delta + seed_offset),
     id(-1)
 {
     // create dendrites
@@ -38,7 +38,7 @@ neuron_t::neuron_t(const cfg_store &cs, const std::string &type, int seed_delta)
     int rnd_delta = (params.random_seed + seed_delta) * 1000;
     for (const auto &d : params.dendrites)
         for (std::size_t n = 0; n < d.dendrite_count; ++n)
-            dendrites.emplace_back(cs,d.dendrite_cfg,rnd_delta++);
+            dendrites.emplace_back(cs,d.dendrite_cfg,rnd_delta++,seed_offset);
 }
 
 void neuron_t::init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map)

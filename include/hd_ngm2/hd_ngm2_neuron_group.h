@@ -52,7 +52,7 @@ public:
     ELEMENT_CHILDREN_1(neurons, neuron_t)
 
     // main constructor the sets up the neuron group
-    explicit neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id);
+    explicit neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id, int seed_offset = 0);
 
     // io initialization
     void init_io(const std::unordered_map<std::string,output_channel_t> &input_map);

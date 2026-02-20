@@ -17,7 +17,7 @@ namespace ngm2 {
 /*
  * Main initialization of the neuron group
  */
-neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id) :
+neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim::output_id_t output_id, int seed_offset) :
     params                    ( [&cs,&type]() -> neuron_group_params_t
                                 {
                                       if (const auto it = cs.neuron_groups.find(type); it != cs.neuron_groups.cend())
@@ -29,7 +29,7 @@ neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim
     common_learning_rate      ( params.default_common_learning_rate      ),
     weight_filter             ( params.default_weight_filter             ),
     stochastic_win_thres      ( params.default_stochastic_win_thres      ),
-    rgen                      ( params.random_seed                       )
+    rgen                      ( params.random_seed + seed_offset         )
 {
     // temporary set to gather all input IDs from the dendrites of all
     // neurons in this group
@@ -44,7 +44,7 @@ neuron_group_t::neuron_group_t(const cfg_store &cs, const std::string &type, sim
     int seed_delta = 0;
     for (const auto &n : params.neurons)
         for (std::size_t k = 0; k < n.neuron_count; ++k) {
-            auto &new_neuron = neurons.emplace_back(cs,n.neuron_cfg,seed_delta++);
+            auto &new_neuron = neurons.emplace_back(cs,n.neuron_cfg,seed_delta++,seed_offset);
             new_neuron.id    = neurons.size()-1;
             /*
             for (const auto &d : new_neuron.get_dendrites()) {
