@@ -21,6 +21,7 @@ neuron_t::neuron_t(const cfg_store &cs, const std::string &type, int seed_delta)
                   return neuron_params_t {};
             }() ),
     neuron_activity(0.0f),
+    max_activity(0.0f),
     dendrite_type_activity(),
     input_count(0),
     branch_interval(params.default_branch_interval),
@@ -118,6 +119,9 @@ float neuron_t::get_response()
     PROBE("dendrite_count", static_cast<double>(dendrites.size()));
     PROBE("representation_count", static_cast<double>(get_representation_count()));
 
+    max_activity *= 0.99999f;
+    max_activity  = std::max(max_activity,neuron_activity);
+
     /*
     const float drain = 0.1f;
     energy = energy * (1.0f - drain) + (1.0f - neuron_activity) * drain;
@@ -132,8 +136,13 @@ void neuron_t::adapt(float weight)
 {
     // we only want to learn if our neuron activity was somewhere in the middle. If the neurons response was very low
     // or very high, we reduce the weight towards 0
-    const float synapse_weight = weight * std::min(       sigmoid(neuron_activity,activity_learning_window.first),
-                                                   1.0f - sigmoid(neuron_activity,activity_learning_window.second));
+    // remark: this poses a problem in the beginning, where no neuron has learned anything and activations
+    // might be low overall. Since the filtering of low activity is to prevent unlearning, this filtering should
+    // only occur if the neuron has already learned something.
+    const float synapse_weight = weight * std::min(
+        std::max(1.0f - sigmoid(max_activity),sigmoid(neuron_activity,activity_learning_window.first)),
+        1.0f - sigmoid(neuron_activity,activity_learning_window.second)
+    );
 
     // we adapt all dendrites and provide each dendrite with the information about the maximum activity among their
     // dendrite type. With that information the dendrite can determine, if it was "the winning" dendrite among all

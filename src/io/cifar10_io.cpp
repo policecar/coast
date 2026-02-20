@@ -11,6 +11,8 @@
 #include "cifar10_io.h"
 #include "logging/state_io.h"
 
+#include "hd_ngm2_tools.h"
+
 namespace cifar10 {
 
 namespace {
@@ -124,6 +126,15 @@ void cifar10_io::process()
         ov = std::clamp(ov + dis(rgen), 0.0f, 1.0f);
     }
 
+    float nse = ngm2::normalized_shannon_entropy(outp);
+    PROBE("NSE",nse);
+
+    float max_val = std::reduce(outp.begin(),outp.end(),0.0f,[](const float a, const float b){ return std::max(a,b); });
+    PROBE("MAX_VAL",max_val);
+
+    float avg = std::reduce(outp.begin(),outp.end()) / (float)outp.size();
+    PROBE("AVG",avg);
+
     if (change_interval > 0 && ++ci_cnt >= static_cast<std::size_t>(change_interval)) {
         ci_cnt = 0;
         if (++cur_idx >= image_count) {
@@ -131,6 +142,8 @@ void cifar10_io::process()
             ++cur_epoch;
         }
     }
+
+
 }
 
 sim::output_id_t cifar10_io::get_outp_id() const
