@@ -45,6 +45,16 @@ struct sigmoid_shape_t {
 };
 
 
+// Precomputed sigmoid parameters — eliminates pow() from repeated calls with the same shape.
+struct sigmoid_params_t {
+    float inv_step_size;
+    float starting_point;
+    explicit sigmoid_params_t(sigmoid_shape_t shape)
+        : inv_step_size  ( 1.0f / (1.0f - std::pow((float)shape.steepness, 0.1f)) )
+        , starting_point ( -(float)shape.transition_point * inv_step_size           )
+    {}
+};
+
 // Sigmoid with configurable steepness and transition point.
 inline float sigmoid(
     float x,
@@ -54,6 +64,11 @@ inline float sigmoid(
     const float starting_point = -shape.transition_point * inv_step_size;
     const float z = -(x * inv_step_size + starting_point);
     return 1.0f / (1.0f + std::exp(z));
+}
+
+// Fast overload: uses precomputed params, no pow() call.
+inline float sigmoid(float x, sigmoid_params_t p) {
+    return 1.0f / (1.0f + std::exp(-(x * p.inv_step_size + p.starting_point)));
 }
 
 void normalize(auto &vec)

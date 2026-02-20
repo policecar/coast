@@ -171,11 +171,14 @@ void neuron_group_t::process()
     float win_act = dis(rgen);
     PROBE("winning thres",win_act);
 
+    // Precompute sigmoid params once — eliminates pow() from every per-neuron sigmoid call below.
+    const sigmoid_params_t wf_params(weight_filter);
+
     // 3)
     double winner_weight = 0.0;
     for (std::size_t idx = 0; idx < out.size(); ++idx)
         if (out[idx] + std::numeric_limits<float>::epsilon() >= win_act) {
-            winner_weight = sigmoid(1.0f - out[idx], weight_filter);
+            winner_weight = sigmoid(1.0f - out[idx], wf_params);
             neurons[idx].adapt( (float)winner_weight );
             break;
         }
@@ -187,7 +190,7 @@ void neuron_group_t::process()
         tbb::blocked_range<std::size_t>(0, neurons.size()),
         [&](const tbb::blocked_range<std::size_t>& r) {
             for (std::size_t i = r.begin(); i != r.end(); ++i) {
-                const float sec_weight = sigmoid(1.0f - (out[i] / act_sum), weight_filter);
+                const float sec_weight = sigmoid(1.0f - (out[i] / act_sum), wf_params);
                 neurons[i].adapt(sec_weight * common_learning_rate);
             }
         },
@@ -196,7 +199,7 @@ void neuron_group_t::process()
 
     // calculate average secondary weight for probe
     const float avg_sec = std::reduce(out.begin(),out.end(),0.0f,[&](const float a, const float b) {
-        return a + sigmoid(1.0f - (b / act_sum), weight_filter);
+        return a + sigmoid(1.0f - (b / act_sum), wf_params);
     }) / (float)out.size();
     PROBE("average sec. weight",avg_sec);
 
