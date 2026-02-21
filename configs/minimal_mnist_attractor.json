@@ -22,10 +22,101 @@
                 "random_seed": 0
             }
         },
-        "dsprites": {}
+        "dsprites": {},
+        "emnist": {
+            "default": {
+                "image_file": "",
+                "label_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "kmnist": {
+            "default": {
+                "image_file": "",
+                "label_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "cifar10": {
+            "default": {
+                "data_dir": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0,
+                "use_test_set": false
+            }
+        },
+        "cifar100": {
+            "default": {
+                "data_dir": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0,
+                "use_test_set": false,
+                "use_coarse_labels": false
+            }
+        },
+        "chairs3d": {
+            "default": {
+                "data_dir": "",
+                "image_width": 64,
+                "image_height": 64,
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "color_mnist": {
+            "default": {
+                "image_file": "",
+                "label_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        }
     },
     "ngm2": {
         "dendrites": {
+            "double_input": {
+                "type": "proximal",
+                "input_channels": [
+                    "da",
+                    "db"
+                ],
+                "permanence_threshold": 0.3,
+                "max_branch_level": 3,
+                "rnd_seed": 0,
+                "default_primary_learning_rate": 0.01,
+                "default_secondary_learning_rate": 0.0001,
+                "default_mismatch_act_thres": 0.8,
+                "default_mismatch_smoothing": 0.001,
+                "default_accumulated_theta_thres": 2.0,
+                "default_min_mismatch_deviation": 1.0,
+                "default_min_mismatch_percentage": 0.002
+            },
             "default": {
                 "type": "proximal",
                 "input_channels": [
@@ -44,6 +135,43 @@
             }
         },
         "neurons": {
+            "double_input": {
+                "input_channels": [
+                    "na",
+                    "nb"
+                ],
+                "dendrites": [
+                    {
+                        "name": "prox1",
+                        "dendrite_cfg": "double_input",
+                        "dendrite_count": 5
+                    }
+                ],
+                "channel_mappings": [
+                    {
+                        "from_channel": "na",
+                        "to_name": "prox1",
+                        "to_channel": "da"
+                    },
+                    {
+                        "from_channel": "nb",
+                        "to_name": "prox1",
+                        "to_channel": "db"
+                    }
+                ],
+                "default_branch_interval": 5000,
+                "default_activity_learning_window": [
+                    {
+                        "steepness": 0.66,
+                        "transition_point": 0.33
+                    },
+                    {
+                        "steepness": 0.66,
+                        "transition_point": 0.66
+                    }
+                ],
+                "random_seed": 0
+            },
             "default": {
                 "input_channels": [
                     "na"
@@ -139,7 +267,7 @@
                 "neurons": [
                     {
                         "name": "pyras",
-                        "neuron_cfg": "default",
+                        "neuron_cfg": "double_input",
                         "neuron_count": 50
                     }
                 ],
@@ -152,7 +280,7 @@
                     {
                         "from_channel": "B",
                         "to_name": "pyras",
-                        "to_channel": "na"
+                        "to_channel": "nb"
                     }
                 ],
                 "default_local_inhibition_strength": 5.0,
@@ -225,19 +353,81 @@
     "vis_hints": {
         "datasets": {
             "mnist": {},
-            "dsprites": {}
+            "dsprites": {},
+            "emnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "kmnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "cifar10": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 32,
+                        "height": 32,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "cifar100": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 32,
+                        "height": 32,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "chairs3d": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 64,
+                        "height": 64,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "color_mnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            }
         },
         "ngm2": {
             "neuron_groups": {
                 "double_input": {
                     "ngm_flat_vis": {
-                        "width": 50,
-                        "height": 2,
+                        "width": 10,
+                        "height": 10,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 10,
                         "rep_height": 10,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,
@@ -266,11 +456,13 @@
                     "ngm_flat_vis": {
                         "width": 28,
                         "height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 28,
                         "rep_height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,
@@ -299,11 +491,13 @@
                     "ngm_flat_vis": {
                         "width": 50,
                         "height": 1,
+                        "num_channels": 1,
                         "update_interval": 10000
                     },
                     "ngm_tree_vis": {
                         "rep_width": 28,
                         "rep_height": 28,
+                        "num_channels": 1,
                         "update_interval": 10000,
                         "bg_r": 30,
                         "bg_g": 30,
