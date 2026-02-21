@@ -1111,14 +1111,17 @@ public:
         vis_.create_model(ng_);
         vis_.update_root_positions(ng_);
 
-        // Register post-swap hook
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
-            on_post_swap();
+            on_post_swap_signal();
+        });
+        barrier_hook_id_ = sim_env_.set_post_swap_barrier_hook([this]() {
+            on_post_swap_wait();
         });
     }
 
     ~ngm_tree_vis_v2_instance() override {
         sim_env_.remove_post_swap_hook(hook_id_);
+        sim_env_.remove_post_swap_barrier_hook(barrier_hook_id_);
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
             std::this_thread::yield();
         }
@@ -1170,7 +1173,7 @@ public:
     }
 
 private:
-    void on_post_swap() {
+    void on_post_swap_signal() {
         inc_on_exit inc{step_count_};
 
         if (update_interval_ == 0) return;
@@ -1190,10 +1193,17 @@ private:
             return;
         }
 
+        pending_wait_ = true;
+    }
+
+    void on_post_swap_wait() {
+        if (!pending_wait_) return;
+        pending_wait_ = false;
+
         auto start = std::chrono::steady_clock::now();
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
             if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT) {
-                expected = static_cast<int>(sync_state::requested);
+                int expected = static_cast<int>(sync_state::requested);
                 if (sync_state_.compare_exchange_strong(expected,
                                                          static_cast<int>(sync_state::idle),
                                                          std::memory_order_acq_rel)) {
@@ -1213,6 +1223,8 @@ private:
     std::size_t update_interval_ = 10000;
     std::size_t step_count_ = 0;
     std::size_t hook_id_ = 0;
+    std::size_t barrier_hook_id_ = 0;
+    bool pending_wait_ = false;
 };
 
 std::unique_ptr<coast::vis::vis_instance> create_ngm_tree_vis_v2(

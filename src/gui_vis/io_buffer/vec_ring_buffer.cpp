@@ -261,18 +261,20 @@ public:
     {
         update_interval_ui_ = hints.buffer_vis.update_interval;
 
-        // Register post-swap hook for thread-safe synchronization
-        // Uses deferred registration - added to pending queue, processed by sim thread
+        // Two-phase hook registration: signal first, wait after all signals have fired.
+        // This ensures N visualizations block for only 1 GUI frame instead of N frames.
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
-            on_post_swap();
+            on_post_swap_signal();
+        });
+        barrier_hook_id_ = sim_env_.set_post_swap_barrier_hook([this]() {
+            on_post_swap_wait();
         });
     }
 
     ~vec_ring_buffer_instance() override
     {
-        // Unregister the hook before destruction
-        // Uses deferred removal - added to pending queue, processed by sim thread
         sim_env_.remove_post_swap_hook(hook_id_);
+        sim_env_.remove_post_swap_barrier_hook(barrier_hook_id_);
 
         // Ensure we're not in the middle of an update
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
@@ -319,49 +321,56 @@ public:
 
 private:
     /**
-     * Called from simulation thread via post_swap_hook.
-     * Requests an update and waits for GUI thread to complete it.
+     * Phase 1: called from simulation thread via post_swap_hook.
+     * Signals that an update is needed, then returns immediately.
+     * All visualizations signal in parallel before any waiting begins.
      */
-    void on_post_swap()
+    void on_post_swap_signal()
     {
-        inc_on_exit inc{step_count_};  // Increment step_count_ on function exit
+        inc_on_exit inc{step_count_};
 
-        // Check if it's time for an update
-        if (update_interval_ui_ <= 0) return;  // 0 or negative means disabled
-        if (!visible_.load(std::memory_order_acquire)) return;  // Don't update if not visible
+        if (update_interval_ui_ <= 0) return;
+        if (!visible_.load(std::memory_order_acquire)) return;
 
-        // Check if colormap changed (needs immediate update)
         bool colormap_changed = vis_.is_colormap_dirty();
         if (colormap_changed) {
             vis_.clear_colormap_dirty();
         }
 
-        // Update if interval elapsed OR colormap changed
         if (step_count_ % static_cast<std::size_t>(update_interval_ui_) != 0 && !colormap_changed) return;
 
-        // Request an update
         int expected = static_cast<int>(sync_state::idle);
         if (!sync_state_.compare_exchange_strong(expected,
                                                   static_cast<int>(sync_state::requested),
                                                   std::memory_order_acq_rel)) {
-            // State wasn't idle - previous update still in progress, skip
-            return;
+            return;  // Previous update still in progress, skip
         }
 
-        // Wait for GUI thread to complete the update
+        pending_wait_ = true;  // Record that we must wait in the barrier phase
+    }
+
+    /**
+     * Phase 2: called from simulation thread via post_swap_barrier_hook,
+     * after ALL post_swap_hooks have fired. Waits for GUI to complete the
+     * update signalled in phase 1. Because all visualizations signal before
+     * any waits, the GUI can service all of them in a single frame, so N
+     * visualizations block for 1 GUI frame total instead of N frames.
+     */
+    void on_post_swap_wait()
+    {
+        if (!pending_wait_) return;
+        pending_wait_ = false;
+
         auto start = std::chrono::steady_clock::now();
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            // Check for timeout
             if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT) {
-                // Timeout - try to cancel if still in 'requested' state
-                expected = static_cast<int>(sync_state::requested);
+                int expected = static_cast<int>(sync_state::requested);
                 if (sync_state_.compare_exchange_strong(expected,
                                                          static_cast<int>(sync_state::idle),
                                                          std::memory_order_acq_rel)) {
-                    // Successfully cancelled - GUI didn't start yet
-                    break;
+                    break;  // Cancelled - GUI didn't start yet
                 }
-                // CAS failed - GUI has started updating, must wait for completion
+                // CAS failed - GUI has started, must wait for completion
             }
             std::this_thread::yield();
         }
@@ -371,13 +380,15 @@ private:
     sim::env& sim_env_;
     std::string label_;
     coast::vec_ring_buffer vis_;
-    std::atomic<bool> visible_{true};  // Must be atomic: read by sim thread, written by GUI thread
+    std::atomic<bool> visible_{true};
 
     // Synchronization state
     std::atomic<int> sync_state_{static_cast<int>(sync_state::idle)};
-    int update_interval_ui_ = 100;  // UI-controlled update interval (1-1000)
+    int update_interval_ui_ = 100;
     std::size_t step_count_ = 0;
     std::size_t hook_id_ = 0;
+    std::size_t barrier_hook_id_ = 0;
+    bool pending_wait_ = false;  // Sim-thread-only: bridges signal and wait phases
 };
 
 /**
