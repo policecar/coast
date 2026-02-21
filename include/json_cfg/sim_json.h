@@ -25,12 +25,13 @@ NLOHMANN_JSON_SERIALIZE_ENUM( io_entity_type_t, {
     {io_entity_type_t::ENTITY_COUNT,        nullptr            },
 })
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(sim_node_t,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(sim_node_t,
     id,
     label,
     entity_type,
     entity_cfg,
-    inputs
+    inputs,
+    random_seed_offset
 )
 
 NLOHMANN_JSON_SERIALIZE_ENUM( sim_node_delta_op, {

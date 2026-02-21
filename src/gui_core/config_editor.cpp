@@ -889,6 +889,12 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
         ImGui::EndCombo();
     }
 
+    // Random seed offset
+    if (ImGui::InputInt("Seed Offset", &node.random_seed_offset)) {
+        modified = true;
+    }
+    ImGui::SetItemTooltip("Additive offset applied to all RNG seeds for this node");
+
     // Inputs list
     if (ImGui::TreeNode("Inputs")) {
         for (std::size_t i = 0; i < node.inputs.size(); ++i) {

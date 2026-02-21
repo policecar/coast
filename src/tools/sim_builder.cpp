@@ -15,7 +15,7 @@ sim_builder::sim_builder(env &simulation_environment) :
 
 void sim_builder::register_create_func(
     io_entity_type_t etype,
-    std::function<void(const std::string&, output_id_t, env&)> func
+    std::function<void(const std::string&, output_id_t, env&, int)> func
 ){
     create_func.emplace(etype,func);
 }
@@ -35,11 +35,12 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
     // first, create all direct nodes
     for (const auto &node_cfg : cfg.nodes) {
         node_t new_node;
-        new_node.id          = node_cfg.id;
-        new_node.label       = node_cfg.label;
-        new_node.inputs      = node_cfg.inputs;
-        new_node.entity_type = node_cfg.entity_type;
-        new_node.entity_cfg  = node_cfg.entity_cfg;
+        new_node.id                 = node_cfg.id;
+        new_node.label              = node_cfg.label;
+        new_node.inputs             = node_cfg.inputs;
+        new_node.entity_type        = node_cfg.entity_type;
+        new_node.entity_cfg         = node_cfg.entity_cfg;
+        new_node.random_seed_offset = node_cfg.random_seed_offset;
 
         nodes[new_node.id] = new_node;
     }
@@ -58,6 +59,7 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
                                        ip.first += set_cfg.base_id;
             new_node.entity_type = template_node.entity_type;
             new_node.entity_cfg  = template_node.entity_cfg;
+            new_node.random_seed_offset = template_node.random_seed_offset;
             // apply deltas if present
             const auto delta_it = set_cfg.node_deltas.find(template_node.id);
             if (delta_it != set_cfg.node_deltas.cend()) {
@@ -87,7 +89,7 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
         auto func_it = create_func.find(node.second.entity_type);
         if (func_it == create_func.end())
             throw std::runtime_error("No create function for entity type. cfg:" + node.second.entity_cfg);
-        func_it->second(node.second.entity_cfg,node.first,sim_env);
+        func_it->second(node.second.entity_cfg,node.first,sim_env,node.second.random_seed_offset);
     }
     // fourth, init io of each entity
     for (auto &entity : sim_env.iterate_entities()) {
