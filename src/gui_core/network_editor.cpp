@@ -17,9 +17,17 @@ std::shared_ptr<ImFlow::NodeStyle> get_node_style(sim::io_entity_type_t type) {
     switch (type) {
         case sim::io_entity_type_t::ngm2_neuron_group:
             return ImFlow::NodeStyle::cyan();
+        // MNIST-family datasets
         case sim::io_entity_type_t::mnist_input:
+        case sim::io_entity_type_t::emnist_input:
+        case sim::io_entity_type_t::kmnist_input:
+        case sim::io_entity_type_t::color_mnist_input:
             return ImFlow::NodeStyle::green();
+        // Visual / 3D datasets
         case sim::io_entity_type_t::dsprites_input:
+        case sim::io_entity_type_t::cifar10_input:
+        case sim::io_entity_type_t::cifar100_input:
+        case sim::io_entity_type_t::chairs3d_input:
             return ImFlow::NodeStyle::brown();
         default:
             return ImFlow::NodeStyle::cyan();
@@ -29,9 +37,15 @@ std::shared_ptr<ImFlow::NodeStyle> get_node_style(sim::io_entity_type_t type) {
 // Entity type names for display
 const char* get_entity_type_name(sim::io_entity_type_t type) {
     switch (type) {
-        case sim::io_entity_type_t::ngm2_neuron_group: return "NGM2 Group";
-        case sim::io_entity_type_t::mnist_input: return "MNIST Input";
-        case sim::io_entity_type_t::dsprites_input: return "dSprites Input";
+        case sim::io_entity_type_t::ngm2_neuron_group:  return "NGM2 Group";
+        case sim::io_entity_type_t::mnist_input:        return "MNIST Input";
+        case sim::io_entity_type_t::emnist_input:       return "EMNIST Input";
+        case sim::io_entity_type_t::kmnist_input:       return "KMNIST Input";
+        case sim::io_entity_type_t::color_mnist_input:  return "Color MNIST Input";
+        case sim::io_entity_type_t::dsprites_input:     return "dSprites Input";
+        case sim::io_entity_type_t::cifar10_input:      return "CIFAR-10 Input";
+        case sim::io_entity_type_t::cifar100_input:     return "CIFAR-100 Input";
+        case sim::io_entity_type_t::chairs3d_input:     return "3D Chairs Input";
         default: return "Unknown";
     }
 }
@@ -147,8 +161,14 @@ const sim::sim_node_t* network_editor::find_node_by_id(sim::sim_node_id_t id) co
 
 std::vector<std::string> network_editor::get_input_channels(const sim::sim_node_t& node) const {
     // Dataset nodes have no input pins
-    if (node.entity_type == sim::io_entity_type_t::mnist_input ||
-        node.entity_type == sim::io_entity_type_t::dsprites_input) {
+    if (node.entity_type == sim::io_entity_type_t::mnist_input   ||
+        node.entity_type == sim::io_entity_type_t::emnist_input  ||
+        node.entity_type == sim::io_entity_type_t::kmnist_input  ||
+        node.entity_type == sim::io_entity_type_t::color_mnist_input ||
+        node.entity_type == sim::io_entity_type_t::dsprites_input ||
+        node.entity_type == sim::io_entity_type_t::cifar10_input  ||
+        node.entity_type == sim::io_entity_type_t::cifar100_input ||
+        node.entity_type == sim::io_entity_type_t::chairs3d_input) {
         return {};
     }
 
@@ -256,15 +276,53 @@ void network_editor::render(bool* p_open) {
                             needs_rebuild = true;
                         }
                     }
+                    ImGui::Separator();
                     if (ImGui::MenuItem("MNIST Input")) {
                         if (edit_callbacks_.add_node) {
                             edit_callbacks_.add_node(sim::io_entity_type_t::mnist_input, "mnist");
                             needs_rebuild = true;
                         }
                     }
+                    if (ImGui::MenuItem("EMNIST Input")) {
+                        if (edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(sim::io_entity_type_t::emnist_input, "emnist");
+                            needs_rebuild = true;
+                        }
+                    }
+                    if (ImGui::MenuItem("KMNIST Input")) {
+                        if (edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(sim::io_entity_type_t::kmnist_input, "kmnist");
+                            needs_rebuild = true;
+                        }
+                    }
+                    if (ImGui::MenuItem("Color MNIST Input")) {
+                        if (edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(sim::io_entity_type_t::color_mnist_input, "color_mnist");
+                            needs_rebuild = true;
+                        }
+                    }
+                    ImGui::Separator();
                     if (ImGui::MenuItem("dSprites Input")) {
                         if (edit_callbacks_.add_node) {
                             edit_callbacks_.add_node(sim::io_entity_type_t::dsprites_input, "dsprites");
+                            needs_rebuild = true;
+                        }
+                    }
+                    if (ImGui::MenuItem("CIFAR-10 Input")) {
+                        if (edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(sim::io_entity_type_t::cifar10_input, "cifar10");
+                            needs_rebuild = true;
+                        }
+                    }
+                    if (ImGui::MenuItem("CIFAR-100 Input")) {
+                        if (edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(sim::io_entity_type_t::cifar100_input, "cifar100");
+                            needs_rebuild = true;
+                        }
+                    }
+                    if (ImGui::MenuItem("3D Chairs Input")) {
+                        if (edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(sim::io_entity_type_t::chairs3d_input, "chairs3d");
                             needs_rebuild = true;
                         }
                     }

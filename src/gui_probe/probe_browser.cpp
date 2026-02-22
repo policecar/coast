@@ -155,6 +155,11 @@ void probe_browser::render_structure_tree(core::structure_entry* entry,
         ImGui::PushID(static_cast<int>(child->index));
 
         bool has_probes = !child->probe_names.empty() || !child->children.empty();
+        // Also check dynamically registered probes (via PROBE macro) for this child's type
+        if (!has_probes && child->element) {
+            auto registered = core::probe_name_registry::get_probes(child->element->type_id().info());
+            has_probes = !registered.empty();
+        }
         if (has_probes) {
             bool open = ImGui::TreeNode("", "%s[%zu]", child->type.name(), child->index);
             if (open) {

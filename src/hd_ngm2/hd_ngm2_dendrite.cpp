@@ -231,6 +231,7 @@ float dendrite_t::get_response()
 
     // getting the normalized shannon entropy statistic for first partial input
     float nse = cur_stats.nse;
+    float inp_avg = cur_stats.avg;
 
     // precompute reciprocal for sum (used in penalty calculation)
     float inv_sum = 1.0f / cur_stats.sum;
@@ -250,6 +251,7 @@ float dendrite_t::get_response()
             cur_inp_it  = cur_input.begin();
             cur_inp_end = cur_input.end();
             nse = std::min(cur_stats.nse,nse);
+            inp_avg = std::min(cur_stats.avg,inp_avg);
             inv_sum = 1.0f / cur_stats.sum;
             dis1 = std::uniform_real_distribution<float> {0.0f, cur_stats.max_val / 2.0f};
         }
@@ -296,10 +298,14 @@ float dendrite_t::get_response()
     // determine the maximum activity among the leafs of the dendritic branch
     // and attenuate the activity if the normalized shannon entropy (NSE) indicates that the input is basically noise.
     // For inputs that carry information the NSE ranges mostly between 0.8 and 0.9. From there on (0.9 to 1.0) inputs
-    // are likely to be predominantly noise.
+    // are likely to be predominantly noise. EDIT: This is not entirely true. If large scale images are scaled down,
+    // as is done in the CIFAR datasets, the distributions of these images approach the same NSE as noise. However,
+    // we can differentiate them here by looking at the signal max amplitude, as our noise input is generally with
+    // low amplitude (<10% of max).
     // Please note that the segment_activity is used below in the adapt_synapses function. Hence the attenuation needs
     // to be applied to every element and not just the max_activity
-    float attenuation = 1.0f - sigmoid((nse - 0.8f) / 0.2f, {0.25f,0.5f});
+    float attenuation = 1.0f - sigmoid((nse - 0.8f) / 0.2f, {0.25f,0.5f}) * (1.0f - sigmoid(inp_avg, {0.5f,0.5f}));
+//    float attenuation = 1.0f - sigmoid((nse - 0.8f) / 0.2f, {0.25f,0.5f});
     const float inv_inp_sum = 1.0f / inp_sum;
     float max_activity = 0.0f;
     for (std::size_t si = leaf_begin; si <= max_segment_idx; ++si) {
@@ -311,6 +317,9 @@ float dendrite_t::get_response()
     PROBE("segment_activity", max_activity);
     PROBE("synapse_count", static_cast<double>(synapses.size()));
     PROBE("representation_count", static_cast<double>(get_representation_count()));
+
+    PROBE("attenuation",attenuation);
+//    PROBE("attenuation_2",attenuation_2);
 
     return max_activity;
 }
@@ -385,7 +394,8 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
 
     // calculate an attenuation factor depending on the normalized shannon entropy of this partial input
     // (see also description of the attenuation in the get_response method)
-    float attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f);
+    float attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f) * (1.0f - sigmoid(cur_stats.avg, {0.5f,0.5f}));
+//    float attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f);
 
     // precompute reciprocals for theta calculation (per partial input)
     float high_thres     = (cur_stats.avg / 2.0f) + std::numeric_limits<float>::epsilon();
@@ -406,7 +416,8 @@ void dendrite_t::adapt_synapses(const float max_activity, const float weight)
             cur_stats = new_stats;
             cur_inp_it    = cur_input.begin();
             cur_inp_end   = cur_input.end();
-            attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f);
+            //attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f);
+            attenuation = 1.0f - sigmoid((cur_stats.nse - 0.8f) / 0.2f) * (1.0f - sigmoid(cur_stats.avg, {0.5f,0.5f}));
             high_thres     = (cur_stats.avg / 2.0f) + std::numeric_limits<float>::epsilon();
             inv_high_range = 1.0f / (1.0f - high_thres);
             inv_high_thres = 1.0f / high_thres;

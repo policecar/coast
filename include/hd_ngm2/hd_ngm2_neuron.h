@@ -32,6 +32,7 @@ class neuron_t : public core::entity_element {
     // state
     std::vector<dendrite_t> dendrites;
     float                   neuron_activity;
+    float                   max_activity;
     dendrite_type_array     dendrite_type_activity;
     std::size_t             input_count;
     std::size_t             branch_interval;

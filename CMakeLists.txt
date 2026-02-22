@@ -23,7 +23,7 @@ if (APPLE)
     add_compile_options(-march=native -stdlib=libstdc++)
 else()
     # x86-64: Enable AVX512 for SIMD-optimized RNG (falls back to AVX2/scalar if unavailable)
-    add_compile_options(-march=native -mavx512f -mavx512dq -mavx512bw -mavx512vl)
+    add_compile_options(-march=native)
 endif()
 
 # ImPlot library (3rd-party, warnings disabled)
