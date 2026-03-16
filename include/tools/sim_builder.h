@@ -24,6 +24,7 @@ public:
         io_entity_type_t entity_type;
         std::string      entity_cfg;
         std::vector<std::pair<sim_node_id_t,std::string>> inputs;
+        int              random_seed_offset = 0;
     };
 
 private:
@@ -32,7 +33,7 @@ private:
 
     std::unordered_map<
         io_entity_type_t,
-        std::function<void(const std::string&, output_id_t, env&)>
+        std::function<void(const std::string&, output_id_t, env&, int)>
     > create_func;
 
     std::unordered_map<
@@ -46,7 +47,7 @@ public:
 
     void register_create_func(
         io_entity_type_t etype,
-        std::function<void(const std::string&, output_id_t, env&)> func
+        std::function<void(const std::string&, output_id_t, env&, int)> func
     );
 
     void register_init_func(

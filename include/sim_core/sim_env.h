@@ -68,16 +68,22 @@ class env {
     std::vector<pending_hook_t> pending_post_process_hooks_;
     std::vector<pending_hook_t> pending_pre_swap_hooks_;
     std::vector<pending_hook_t> pending_post_swap_hooks_;
+    std::vector<pending_hook_t> pending_post_swap_barrier_hooks_;
     std::vector<std::size_t> pending_remove_pre_process_;
     std::vector<std::size_t> pending_remove_post_process_;
     std::vector<std::size_t> pending_remove_pre_swap_;
     std::vector<std::size_t> pending_remove_post_swap_;
+    std::vector<std::size_t> pending_remove_post_swap_barrier_;
 
     // Active hooks (only modified by sim thread)
     std::unordered_map<std::size_t,std::function<void()>> pre_process_hooks_;
     std::unordered_map<std::size_t,std::function<void()>> post_process_hooks_;
     std::unordered_map<std::size_t,std::function<void()>> pre_swap_hooks_;
     std::unordered_map<std::size_t,std::function<void()>> post_swap_hooks_;
+    // Barrier hooks run after all post_swap_hooks, enabling two-phase signal+wait
+    // pattern: all post_swap_hooks signal simultaneously, then all barrier hooks wait.
+    // This ensures N visualizations block for only 1 GUI frame instead of N frames.
+    std::unordered_map<std::size_t,std::function<void()>> post_swap_barrier_hooks_;
 
     // Process pending hook additions/removals (called from sim thread)
     void process_pending_hooks();
@@ -132,6 +138,7 @@ public:
     std::size_t set_post_process_hook(std::function<void()> func);
     std::size_t set_pre_swap_hook(std::function<void()> func);
     std::size_t set_post_swap_hook(std::function<void()> func);
+    std::size_t set_post_swap_barrier_hook(std::function<void()> func);
 
     // Hook removal - adds to pending removal queue
     // Actual removal happens on sim thread at next process()/swap_io() call
@@ -139,6 +146,7 @@ public:
     void remove_post_process_hook(std::size_t id);
     void remove_pre_swap_hook(std::size_t id);
     void remove_post_swap_hook(std::size_t id);
+    void remove_post_swap_barrier_hook(std::size_t id);
 
 };
 

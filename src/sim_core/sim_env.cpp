@@ -85,6 +85,11 @@ void env::process_pending_hooks()
     }
     pending_post_swap_hooks_.clear();
 
+    for (auto& [id, func] : pending_post_swap_barrier_hooks_) {
+        post_swap_barrier_hooks_.emplace(id, std::move(func));
+    }
+    pending_post_swap_barrier_hooks_.clear();
+
     // Process removals
     for (auto id : pending_remove_pre_process_) {
         pre_process_hooks_.erase(id);
@@ -105,6 +110,11 @@ void env::process_pending_hooks()
         post_swap_hooks_.erase(id);
     }
     pending_remove_post_swap_.clear();
+
+    for (auto id : pending_remove_post_swap_barrier_) {
+        post_swap_barrier_hooks_.erase(id);
+    }
+    pending_remove_post_swap_barrier_.clear();
 
     has_pending_hooks_.store(false, std::memory_order_release);
 }
@@ -141,6 +151,10 @@ void env::swap_io()
     }
 
     for (auto &[id, func] : post_swap_hooks_) {
+        func();
+    }
+
+    for (auto &[id, func] : post_swap_barrier_hooks_) {
         func();
     }
 }
@@ -206,6 +220,22 @@ void env::remove_post_swap_hook(const std::size_t id)
 {
     std::lock_guard lock(pending_hooks_mutex_);
     pending_remove_post_swap_.push_back(id);
+    has_pending_hooks_.store(true, std::memory_order_release);
+}
+
+std::size_t env::set_post_swap_barrier_hook(std::function<void()> func)
+{
+    std::lock_guard lock(pending_hooks_mutex_);
+    std::size_t id = next_hook_id_++;
+    pending_post_swap_barrier_hooks_.push_back({id, std::move(func)});
+    has_pending_hooks_.store(true, std::memory_order_release);
+    return id;
+}
+
+void env::remove_post_swap_barrier_hook(const std::size_t id)
+{
+    std::lock_guard lock(pending_hooks_mutex_);
+    pending_remove_post_swap_barrier_.push_back(id);
     has_pending_hooks_.store(true, std::memory_order_release);
 }
 

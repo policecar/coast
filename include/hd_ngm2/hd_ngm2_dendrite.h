@@ -91,11 +91,13 @@ private:
 
     // helper functions
     static constexpr seg_id_t calc_max_segment_idx(seg_id_t max_branch_level);
+
+
 public:
     // Entity element interface
     ELEMENT_TYPE(dendrite_t, "dendrite")
 
-    dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
+    dendrite_t(const cfg_store &cs, const std::string &type, int seed_delta = 0, int seed_offset = 0);
 
     // input initialization
     void init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map);

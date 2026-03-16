@@ -45,7 +45,7 @@ public:
     ELEMENT_TYPE(neuron_t, "neuron")
     ELEMENT_CHILDREN_1(dendrites, dendrite_t)
 
-    explicit neuron_t(const cfg_store &cs, const std::string &type, int seed_delta = 0);
+    explicit neuron_t(const cfg_store &cs, const std::string &type, int seed_delta = 0, int seed_offset = 0);
 
     // input initialization
     void init_input(const std::unordered_map<std::string,sim::output_channel_t> &input_map);

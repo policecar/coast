@@ -33,6 +33,7 @@ struct sim_node_t {
     io_entity_type_t                                  entity_type;
     std::string                                       entity_cfg;
     std::vector<std::pair<sim_node_id_t,std::string>> inputs;
+    int                                               random_seed_offset;
 };
 
 enum class sim_node_delta_op
