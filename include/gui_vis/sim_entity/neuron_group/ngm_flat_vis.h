@@ -6,11 +6,11 @@
 #ifndef NGM_FLAT_VIS_H
 #define NGM_FLAT_VIS_H
 
-#include "../../primitives/vec_group_vis.h"
-#include "hd_ngm2_neuron_group.h"
-#include "../../core/color_types.h"
-#include "../../core/colormap.h"
-#include "../../core/gl_texture.h"
+#include "gui_vis/primitives/vec_group_vis.h"
+#include "hd_ngm2/hd_ngm2_neuron_group.h"
+#include "gui_vis/core/color_types.h"
+#include "gui_vis/core/colormap.h"
+#include "gui_vis/core/gl_texture.h"
 
 namespace coast {
 
@@ -50,7 +50,7 @@ private:
     bool visible = false;
 
     // Colormap selection
-    colormap_t colormap = colormap_t::grayscale;
+    colormap_t colormap = colormap_t::viridis;
     bool colormap_dirty = false;  // Set when colormap changes, cleared after update
 
 public:

@@ -1,0 +1,381 @@
+{
+    "datasets": {
+        "mnist": {
+            "max_interval": {
+                "image_file": "./data/mnist/train-images-idx3-ubyte",
+                "label_file": "./data/mnist/train-labels-idx1-ubyte",
+                "change_interval": 1,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            },
+            "default": {
+                "image_file": "./data/mnist/train-images-idx3-ubyte",
+                "label_file": "./data/mnist/train-labels-idx1-ubyte",
+                "change_interval": 1,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "dsprites": {},
+        "emnist": {},
+        "kmnist": {},
+        "cifar10": {},
+        "cifar100": {},
+        "chairs3d": {}
+    },
+    "ngm2": {
+        "dendrites": {
+            "default": {
+                "type": "proximal",
+                "input_channels": [
+                    "da"
+                ],
+                "permanence_threshold": 0.3,
+                "max_branch_level": 3,
+                "rnd_seed": 0,
+                "default_primary_learning_rate": 0.01,
+                "default_secondary_learning_rate": 0.0001,
+                "default_mismatch_act_thres": 0.8,
+                "default_mismatch_smoothing": 0.001,
+                "default_accumulated_theta_thres": 2.0,
+                "default_min_mismatch_deviation": 1.0,
+                "default_min_mismatch_percentage": 0.002
+            },
+            "onoff": {
+                "type": "proximal",
+                "input_channels": [
+                    "da_on",
+                    "da_off"
+                ],
+                "permanence_threshold": 0.3,
+                "max_branch_level": 3,
+                "rnd_seed": 0,
+                "default_primary_learning_rate": 0.01,
+                "default_secondary_learning_rate": 0.0001,
+                "default_mismatch_act_thres": 0.8,
+                "default_mismatch_smoothing": 0.001,
+                "default_accumulated_theta_thres": 2.0,
+                "default_min_mismatch_deviation": 1.0,
+                "default_min_mismatch_percentage": 0.002
+            }
+        },
+        "neurons": {
+            "default": {
+                "input_channels": [
+                    "na"
+                ],
+                "dendrites": [
+                    {
+                        "name": "prox1",
+                        "dendrite_cfg": "default",
+                        "dendrite_count": 5
+                    }
+                ],
+                "channel_mappings": [
+                    {
+                        "from_channel": "na",
+                        "to_name": "prox1",
+                        "to_channel": "da"
+                    }
+                ],
+                "default_branch_interval": 5000,
+                "random_seed": 0
+            },
+            "onoff": {
+                "input_channels": [
+                    "na_on",
+                    "na_off"
+                ],
+                "dendrites": [
+                    {
+                        "name": "prox1",
+                        "dendrite_cfg": "onoff",
+                        "dendrite_count": 5
+                    }
+                ],
+                "channel_mappings": [
+                    {
+                        "from_channel": "na_on",
+                        "to_name": "prox1",
+                        "to_channel": "da_on"
+                    },
+                    {
+                        "from_channel": "na_off",
+                        "to_name": "prox1",
+                        "to_channel": "da_off"
+                    }
+                ],
+                "default_branch_interval": 5000,
+                "random_seed": 0
+            }
+        },
+        "neuron_groups": {
+            "L4-mnist-onoff": {
+                "input_channels": [
+                    "on",
+                    "off"
+                ],
+                "neurons": [
+                    {
+                        "name": "pyramidal",
+                        "neuron_cfg": "onoff",
+                        "neuron_count": 50
+                    }
+                ],
+                "channel_mappings": [
+                    {
+                        "from_channel": "on",
+                        "to_name": "pyramidal",
+                        "to_channel": "na_on"
+                    },
+                    {
+                        "from_channel": "off",
+                        "to_name": "pyramidal",
+                        "to_channel": "na_off"
+                    }
+                ],
+                "default_local_inhibition_strength": 10.0,
+                "default_common_learning_rate": 0.0001,
+                "default_weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33
+                },
+                "default_stochastic_win_thres": 0.8,
+                "random_seed": 0
+            }
+        }
+    },
+    "sim": {
+        "nodes": [
+            {
+                "id": 0,
+                "label": "mnist",
+                "entity_type": "mnist_input",
+                "entity_cfg": "max_interval",
+                "inputs": []
+            },
+            {
+                "id": 10,
+                "label": "retina on",
+                "entity_type": "retina",
+                "entity_cfg": "on",
+                "inputs": [
+                    [
+                        0,
+                        "in"
+                    ]
+                ]
+            },
+            {
+                "id": 11,
+                "label": "retina off",
+                "entity_type": "retina",
+                "entity_cfg": "off",
+                "inputs": [
+                    [
+                        0,
+                        "in"
+                    ]
+                ]
+            },
+            {
+                "id": 1,
+                "label": "group 1",
+                "entity_type": "ngm2_neuron_group",
+                "entity_cfg": "L4-mnist-onoff",
+                "inputs": [
+                    [
+                        10,
+                        "on"
+                    ],
+                    [
+                        11,
+                        "off"
+                    ]
+                ]
+            }
+        ],
+        "node_sets": []
+    },
+    "vis_hints": {
+        "datasets": {
+            "mnist": {
+                "max_interval": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    }
+                },
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    }
+                }
+            },
+            "dsprites": {},
+            "emnist": {},
+            "kmnist": {},
+            "cifar10": {},
+            "cifar100": {},
+            "chairs3d": {}
+        },
+        "ngm2": {
+            "neuron_groups": {
+                "L4-mnist": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    },
+                    "ngm_tree_vis": {
+                        "rep_width": 28,
+                        "rep_height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000,
+                        "bg_r": 30,
+                        "bg_g": 30,
+                        "bg_b": 30,
+                        "bg_a": 255,
+                        "edge_thickness_min": 2.0,
+                        "edge_thickness_max": 10.0,
+                        "edge_r": 0,
+                        "edge_g": 121,
+                        "edge_b": 241,
+                        "edge_a": 255,
+                        "texture_scale_divisor": 1500.0,
+                        "root_node_radius": 6.0,
+                        "branch_node_radius": 3.0,
+                        "root_r": 255,
+                        "root_g": 161,
+                        "root_b": 0,
+                        "root_a": 255,
+                        "branch_r": 100,
+                        "branch_g": 180,
+                        "branch_b": 255,
+                        "branch_a": 255
+                    }
+                },
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 50,
+                        "height": 1,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    },
+                    "ngm_tree_vis": {
+                        "rep_width": 28,
+                        "rep_height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000,
+                        "bg_r": 30,
+                        "bg_g": 30,
+                        "bg_b": 30,
+                        "bg_a": 255,
+                        "edge_thickness_min": 2.0,
+                        "edge_thickness_max": 10.0,
+                        "edge_r": 0,
+                        "edge_g": 121,
+                        "edge_b": 241,
+                        "edge_a": 255,
+                        "texture_scale_divisor": 1500.0,
+                        "root_node_radius": 6.0,
+                        "branch_node_radius": 3.0,
+                        "root_r": 255,
+                        "root_g": 161,
+                        "root_b": 0,
+                        "root_a": 255,
+                        "branch_r": 100,
+                        "branch_g": 180,
+                        "branch_b": 255,
+                        "branch_a": 255
+                    }
+                },
+                "L4-mnist-onoff": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 56,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    },
+                    "ngm_tree_vis": {
+                        "rep_width": 28,
+                        "rep_height": 56,
+                        "num_channels": 1,
+                        "update_interval": 10000,
+                        "bg_r": 30,
+                        "bg_g": 30,
+                        "bg_b": 30,
+                        "bg_a": 255,
+                        "edge_thickness_min": 2.0,
+                        "edge_thickness_max": 10.0,
+                        "edge_r": 0,
+                        "edge_g": 121,
+                        "edge_b": 241,
+                        "edge_a": 255,
+                        "texture_scale_divisor": 1500.0,
+                        "root_node_radius": 6.0,
+                        "branch_node_radius": 3.0,
+                        "root_r": 255,
+                        "root_g": 161,
+                        "root_b": 0,
+                        "root_a": 255,
+                        "branch_r": 100,
+                        "branch_g": 180,
+                        "branch_b": 255,
+                        "branch_a": 255
+                    }
+                }
+            }
+        },
+        "buffer_vis": {
+            "update_interval": 100,
+            "ring_length": 500
+        }
+    },
+    "retina": {
+        "on": {
+            "width": 28,
+            "height": 28,
+            "channels": 1,
+            "luminance": false,
+            "center_sigma": 1.0,
+            "surround_sigma": 3.0,
+            "surround_weight": 0.7,
+            "gain": 2.0,
+            "noise_range": [
+                0.0,
+                0.05
+            ],
+            "random_seed": 1,
+            "polarity": "on"
+        },
+        "off": {
+            "width": 28,
+            "height": 28,
+            "channels": 1,
+            "luminance": false,
+            "center_sigma": 1.0,
+            "surround_sigma": 3.0,
+            "surround_weight": 0.7,
+            "gain": 2.0,
+            "noise_range": [
+                0.0,
+                0.05
+            ],
+            "random_seed": 2,
+            "polarity": "off"
+        }
+    }
+}

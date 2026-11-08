@@ -58,8 +58,9 @@ Per-probe state at a specific (element, probe_name) location:
 ### entity_probe_set
 
 Per-entity probe management using TBB `concurrent_hash_map` for thread-safe access:
-- **Hot path** (`record`): `const_accessor` (read lock) for lookup, then `probe_instance::record()`
-- **Registration** (`discover`, `activate`): `accessor` (write lock) for insert
+- **Hot path** (`record`): `const_accessor` (read lock) for lookup, then `probe_instance::record()`. Never inserts: an unknown probe is ignored (see the threading page)
+- **Registration** (`discover`, `activate`): `accessor` (write lock) for insert; the new instance is also appended to `list_`
+- **Traversal** (`all_instances`, `update_observers`): walks `list_`, never the map (a concurrent lookup may rehash it)
 - Hash key: `hash(element_ptr) ^ (hash(name) << 1)`
 
 ### probe_observer (Abstract)

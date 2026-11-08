@@ -1,0 +1,63 @@
+[project]
+name = "coast-eval"
+version = "0.1.0"
+description = "Frozen-evaluation metrics and observe readers for COAST runs"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2,<3",
+    "h5py",
+    "scipy",
+    "msgspec",
+    "matplotlib",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "hypothesis",
+    "ruff",
+    "pyright",
+]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "coast_eval"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
+
+[tool.ruff]
+line-length = 100
+# The toolkit's own scripts live in ../scripts beside others that are not part of it; these
+# patterns pick them out when CI runs `ruff check . ../scripts`. A pattern without a match
+# (a script that is not on this branch yet) is not an error.
+include = [
+    "pyproject.toml",
+    "src/**/*.py",
+    "tests/**/*.py",
+    "typings/**/*.pyi",
+    "../scripts/eval_*.py",
+    "../scripts/fetch_mnist_*.py",
+    "../scripts/retina_*.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY", "RUF"]
+
+[tool.pyright]
+# The same scripts as ruff's include; a glob that matches nothing is not an error.
+include = [
+    "src",
+    "tests",
+    "../scripts/eval_*.py",
+    "../scripts/fetch_mnist_*.py",
+    "../scripts/retina_*.py",
+]
+typeCheckingMode = "strict"
+pythonVersion = "3.13"
+venvPath = "."
+venv = ".venv"

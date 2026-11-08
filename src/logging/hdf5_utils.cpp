@@ -3,9 +3,11 @@
 //
 
 #include "logging/hdf5_utils.h"
+
+#include <array>
 #include <cstring>
 
-namespace logging::hdf5 {
+namespace hdf5 {
 
 group group::create_or_open(hid_t parent, const char* name) {
     // Check if it already exists
@@ -64,4 +66,40 @@ group group::create_or_open(hid_t parent, const char* name) {
     return result;
 }
 
-} // namespace logging::hdf5
+herr_t append_rows(hid_t ds, hsize_t first_row, hsize_t n_rows,
+                   std::span<const hsize_t> row_shape, hid_t mem_type, const void* data)
+{
+    // No heap per call: observe appends one row per site per step.
+    std::array<hsize_t, H5S_MAX_RANK> dims{}, offset{}, count{};
+    const std::size_t rank = 1 + row_shape.size();
+    if (rank > H5S_MAX_RANK) return -1;
+    dims[0]   = first_row + n_rows;
+    offset[0] = first_row;
+    count[0]  = n_rows;
+    for (std::size_t i = 0; i < row_shape.size(); ++i) dims[1 + i] = count[1 + i] = row_shape[i];
+
+    // The row shape must be the dataset's own before anything is touched:
+    // H5Dset_extent takes the whole extent, so a wrong row shape would silently
+    // reshape (and truncate) every row already written, not just this batch.
+    {
+        auto cur = dataspace::from_dataset(ds);
+        if (!cur) return -1;
+        std::array<hsize_t, H5S_MAX_RANK> cur_dims{};
+        const int cur_rank = H5Sget_simple_extent_ndims(cur.id());
+        if (cur_rank < 0 || static_cast<std::size_t>(cur_rank) != rank) return -1;
+        if (H5Sget_simple_extent_dims(cur.id(), cur_dims.data(), nullptr) < 0) return -1;
+        for (std::size_t i = 1; i < rank; ++i)
+            if (cur_dims[i] != dims[i]) return -1;
+    }
+
+    if (H5Dset_extent(ds, dims.data()) < 0) return -1;
+    auto file_space = dataspace::from_dataset(ds);
+    if (!file_space ||
+        file_space.select_hyperslab({ offset.data(), rank }, { count.data(), rank }) < 0)
+        return -1;
+    auto mem_space = dataspace::simple({ count.data(), rank });
+    if (!mem_space) return -1;
+    return H5Dwrite(ds, mem_type, mem_space.id(), file_space.id(), H5P_DEFAULT, data);
+}
+
+} // namespace hdf5

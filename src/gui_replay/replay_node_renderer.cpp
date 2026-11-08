@@ -318,7 +318,6 @@ void replay_node_renderer::render_stats_color(ImDrawList* draw_list,
         case stat_type::sum: value = data.current_stats.sum; break;
         case stat_type::min: value = data.current_stats.min_val; break;
         case stat_type::max: value = data.current_stats.max_val; break;
-        case stat_type::nse: value = data.current_stats.nse; break;
     }
 
     // Normalize value (assuming 0-1 range, can be adjusted)

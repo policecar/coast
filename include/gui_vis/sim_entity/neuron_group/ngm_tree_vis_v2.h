@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "core/rng/fast_rng.h"
-#include "hd_ngm2.h"
+#include "hd_ngm2/hd_ngm2.h"
 #include "gui_layout/layout_graph.h"
 #include "gui_layout/force_layout.h"
 #include "gui_layout/render/graph_canvas.h"
@@ -146,7 +146,7 @@ private:
     float region_size_ = 500.0f;  // Layout region size (larger for graph_canvas coordinates)
 
     // Colormap for representations
-    colormap_t colormap_ = colormap_t::grayscale;
+    colormap_t colormap_ = colormap_t::viridis;
     bool colormap_dirty_ = false;
 
     // Spacing control for root nodes

@@ -29,9 +29,9 @@ sequenceDiagram
         Env->>Env: hook()
     end
 
-    loop each entity
+    loop each entity (TBB parallel_for, affinity-pinned)
         Env->>Entity: process()
-        Note over Entity: Reads input buffers (previous step)<br/>Writes output buffer (current step)<br/>Calls probe() for instrumented values
+        Note over Entity: Entities are mutually independent within a step<br/>(one-step buffer latency) → run concurrently.<br/>Reads input buffers (previous step)<br/>Writes output buffer (current step)<br/>Calls probe() for instrumented values
     end
 
     loop post_process hooks
@@ -49,7 +49,7 @@ sequenceDiagram
 
     loop each io_buffer
         Env->>Buffer: swap_buffer()
-        Note over Buffer: write_idx ↔ read_idx<br/>Compute stats on new read buffer
+        Note over Buffer: write_idx ↔ read_idx<br/>(pure index flip — no stats)
     end
 
     loop post_swap hooks
@@ -104,7 +104,9 @@ After swap:
   Write buffer: recycled for next step's output
 ```
 
-This means consumers always see data from the previous step. This avoids read-write races entirely — no locks needed between entities.
+This means consumers always see data from the previous step. This avoids read-write races entirely — no locks needed between entities. It is also what makes the entities mutually independent within a `process()` pass, so `env::process()` dispatches them with a TBB `parallel_for` (CPU∥CPU) rather than a serial loop. A *persistent* `affinity_partitioner` keeps each entity on the same worker core across steps, preserving cache locality and the thread placement the neuron groups' inner `static_partitioner` loops rely on (without it, nesting an outer parallel loop over the inner loops regressed the entity-sparse mnist config ~7%; with it the dispatch is a net win over the old serial loop). Reordering independent entities is provably bit-identical (verified against the golden suite). When a GPU context is present, the recorded GPU batch is submitted *without* an immediate wait so it executes concurrently with these CPU entities.
+
+> **GPU entities** add a second encoder phase to each of `process()` and `swap_io()`, producing two GPU submits per step. The diagram above is the CPU-only path; the GPU-augmented step is traced in [GPU Dispatch]({{% relref "/data-flow/gpu-dispatch" %}}).
 
 ## The GUI Frame
 
@@ -125,7 +127,8 @@ Each frame of the main loop runs on the **main thread**:
      - Entity/Buffer/Dataset browsers
      - probe_browser.update() → drain all SPSC queues
      - probe_browser.render() → show observers
-     - logging_window.update() → auto-checkpoint check
+     - logging_window.update() → reap completed async checkpoint writes
+       (the auto-checkpoint cadence itself runs on the sim thread via a post_swap hook)
      - Buffer replay dialog
      - check_auto_save() → detect pause transition
    - render_status_bar() (FPS, SPS, config path)

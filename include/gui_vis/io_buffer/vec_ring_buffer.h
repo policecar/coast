@@ -9,9 +9,9 @@
 #include <span>
 #include <vector>
 
-#include "../core/color_types.h"
-#include "../core/colormap.h"
-#include "../core/gl_texture.h"
+#include "gui_vis/core/color_types.h"
+#include "gui_vis/core/colormap.h"
+#include "gui_vis/core/gl_texture.h"
 
 namespace coast {
 

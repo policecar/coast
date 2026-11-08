@@ -2,9 +2,8 @@
 // Created by jk on 08.09.25.
 //
 
-#include <cstdio>
-
-#include "primitives/vec_group_vis.h"
+#include "gui_vis/primitives/vec_group_vis.h"
+#include "diag/diag.h"
 
 #include <utility>
 
@@ -15,7 +14,7 @@ vec_group_vis::vec_group_vis(const params_t &_params) :
     params(_params)
 {
     if ((params.layout == layout_t::grid) && (params.vec_cnt > params.grid_width * params.grid_height)) {
-        std::printf("Warning: Given grid dimensions will be not large enough for number of vectors specified!\n");
+        COAST_WARN("vis", "given grid dimensions not large enough for the number of vectors specified");
     }
 }
 

@@ -1,0 +1,8 @@
+# Example index manifest for configs/mnist_ngm3_frozen_eval.json
+#
+# One or more sample indices per line (indices into the loaded dataset).
+# Whitespace and commas separate; '#' starts a comment. Replace these with
+# your held-out evaluation subset. With shuffle=false the loader presents
+# them in exactly this order, every epoch.
+7  3  1  0  4  2  9  5  6  8
+13, 21, 34, 55, 89, 144, 233, 377, 610, 987

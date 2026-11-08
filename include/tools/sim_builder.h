@@ -8,8 +8,8 @@
 #include <unordered_map>
 #include <string>
 
-#include "sim_env.h"
-#include "sim_builder_cfg.h"
+#include "sim_core/sim_env.h"
+#include "tools/sim_builder_cfg.h"
 
 namespace sim {
 
@@ -24,7 +24,7 @@ public:
         io_entity_type_t entity_type;
         std::string      entity_cfg;
         std::vector<std::pair<sim_node_id_t,std::string>> inputs;
-        int              random_seed_offset = 0;
+        seed_offset_t    random_seed_offset = {};
     };
 
 private:
@@ -33,7 +33,7 @@ private:
 
     std::unordered_map<
         io_entity_type_t,
-        std::function<void(const std::string&, output_id_t, env&, int)>
+        std::function<void(const std::string&, output_id_t, env&, seed_offset_t)>
     > create_func;
 
     std::unordered_map<
@@ -47,7 +47,7 @@ public:
 
     void register_create_func(
         io_entity_type_t etype,
-        std::function<void(const std::string&, output_id_t, env&, int)> func
+        std::function<void(const std::string&, output_id_t, env&, seed_offset_t)> func
     );
 
     void register_init_func(
@@ -63,6 +63,10 @@ public:
      * @return Pointer to node_t if found, nullptr otherwise
      */
     [[nodiscard]] const node_t* get_node(sim_node_id_t id) const;
+
+    /// Whether `t` has both a create and an init function registered.
+    [[nodiscard]] bool handles(io_entity_type_t t) const
+    { return create_func.contains(t) && init_func.contains(t); }
 };
 
 }

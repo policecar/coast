@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "macos-clang",
+      "hidden": true,
+      "description": "Canonical macOS toolchain: Homebrew LLVM clang + libc++. Pins the compiler because A-tier integration goldens are a fingerprint of a chaotic long run and diverge ~99% between clang and gcc codegen; a consistent compiler keeps locally-generated macos/ goldens reproducible across worktrees. Requires a Homebrew shell env (HOMEBREW_PREFIX set, e.g. via `eval \"$(brew shellenv)\"`) and `brew install llvm`.",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "$env{HOMEBREW_PREFIX}/opt/llvm/bin/clang",
+        "CMAKE_CXX_COMPILER": "$env{HOMEBREW_PREFIX}/opt/llvm/bin/clang++",
+        "CMAKE_CXX_FLAGS": "-stdlib=libc++",
+        "CMAKE_PREFIX_PATH": "$env{HOMEBREW_PREFIX}/opt/llvm"
+      }
+    },
+    {
+      "name": "macos",
+      "inherits": "macos-clang",
+      "displayName": "macOS build (clang + clang-repl console)",
+      "description": "Release build into build/ on the canonical clang toolchain.",
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "macos-tests",
+      "inherits": "macos-clang",
+      "displayName": "macOS test build (clang, BUILD_TESTING=ON)",
+      "description": "Release + tests into build-tests/ on the canonical clang toolchain, so A-tier goldens stay compiler-consistent.",
+      "binaryDir": "${sourceDir}/build-tests",
+      "cacheVariables": { "BUILD_TESTING": "ON" }
+    },
+    {
+      "name": "headless",
+      "displayName": "Headless build (no GUI)",
+      "description": "Release build into build-headless/ with COAST_WITH_GUI=OFF: no SDL2, no OpenGL, no ImGui, no embedded console. Needs only TBB and HDF5, so it configures on a machine with no graphics stack at all. Pins no compiler, unlike the macos presets: their pin exists for the clang-repl console (Homebrew libLLVM is libc++-built), which a headless build does not have. Consequence on macOS: this selects AppleClang, which is untested here, and its A-tier goldens are not comparable with the macos/ ones. Add -DCOAST_GPU_BACKEND=none for the leanest possible build.",
+      "binaryDir": "${sourceDir}/build-headless",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "COAST_WITH_GUI": "OFF"
+      }
+    },
+    {
+      "name": "headless-tests",
+      "inherits": "headless",
+      "displayName": "Headless test build (no GUI, BUILD_TESTING=ON)",
+      "description": "Release + tests into build-headless-tests/ with COAST_WITH_GUI=OFF. The GUI-layer suites (unit.gui_plot, unit.console, the b-tier simc cases) are not built; everything else runs.",
+      "binaryDir": "${sourceDir}/build-headless-tests",
+      "cacheVariables": { "BUILD_TESTING": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "macos", "configurePreset": "macos" },
+    { "name": "macos-tests", "configurePreset": "macos-tests" },
+    { "name": "headless", "configurePreset": "headless" },
+    { "name": "headless-tests", "configurePreset": "headless-tests" }
+  ]
+}

@@ -8,7 +8,7 @@
 #include <vector>
 #include <span>
 #include <cstdint>
-#include "vec_vis.h"
+#include "gui_vis/primitives/vec_vis.h"
 
 namespace coast {
 

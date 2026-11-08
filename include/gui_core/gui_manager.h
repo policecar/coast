@@ -4,21 +4,33 @@
 #include <string>
 #include <memory>
 #include <optional>
+#include <vector>
 
+#include "core/demand_published.h"
 #include "imgui.h"
-#include "sim_thread_controller.h"
+#include "sim_core/sim_thread_controller.h"
 #include "imfilebrowser.h"
 
-#include "sdl_app.h"
-#include "sim_instance.h"
-#include "config_editor.h"
-#include "entity_browser.h"
-#include "buffer_browser.h"
-#include "dataset_browser.h"
-#include "logging_window.h"
+#include "gui_core/sdl_app.h"
+#include "sim_core/sim_instance.h"
+#include "gui_core/config_editor.h"
+#include "gui_core/entity_browser.h"
+#include "gui_core/buffer_browser.h"
+#include "gui_core/dataset_browser.h"
+#include "gui_core/logging_window.h"
 #include "gui_probe/probe_browser.h"
 #include "gui_probe/observer_panel.h"
+#include "gui_observe/observe_panel.h"
 #include "gui_replay/buffer_replay_dialog.h"
+#include "gui_tools/campaign_panel.h"
+#include "gui_tools/h5_browser_window.h"
+#include "gui_tools/coastd_panel.h"
+#include "gui_tools/metric_explorer.h"
+#include "gui_core/console_iface.h"
+
+namespace hdf5 { class executor; }
+
+namespace coast::paths { struct app_config; }
 
 namespace coast {
 
@@ -27,16 +39,44 @@ namespace coast {
  * Coordinates visibility state and rendering of simulation controls
  * and introspection windows.
  *
- * Can operate with or without a loaded simulation. When no simulation
- * is loaded, only the System menu is visible.
+ * Can operate with or without a loaded simulation. The System, Tools, and
+ * Analysis menus are always available; the Simulation and Introspection menus
+ * appear only when a simulation is loaded.
  */
 class gui_manager {
 public:
     /**
      * Constructor - creates GUI manager without simulation.
      * Use set_sim_instance() to attach a simulation later.
+     *
+     * @param app      The SDL/GL application that owns the main window.
+     * @param app_cfg  Application location config. Must outlive the gui_manager
+     *                 (owned by main, forwarded via run_gui). Governs WHERE the
+     *                 GUI resolves per-config outputs (snapshot dir for auto-save
+     *                 and resume) via coast::paths::resolve_snapshot_output_dir.
+     * @param h5_exec  Process-wide HDF5 executor. Must outlive the gui_manager;
+     *                 forwarded to the replay dialog so that any HDF5 file the
+     *                 user opens through the GUI is read on the executor's
+     *                 worker thread.
      */
-    explicit gui_manager(sdl_app& app);
+    gui_manager(sdl_app& app, const paths::app_config& app_cfg, hdf5::executor& h5_exec);
+
+    /**
+     * Inject the optional C++ console (takes ownership). Adds an Analysis-menu
+     * item, renders it, and wires it into the HDF5 browser so the browser can
+     * open the browsed file in it and push variable bindings. Call before the
+     * render loop starts.
+     */
+    void set_console(std::unique_ptr<console_iface> console);
+
+    /**
+     * Tear down the console, joining its interpreter worker thread. Call at
+     * shutdown BEFORE the plot subsystem is deinit()'d: once the console thread is
+     * joined, no macro can still be creating figures or freeing image textures, so
+     * plot_manager::deinit() runs against a quiescent subsystem. Clears the HDF5
+     * browser's back-pointer to the console first so it never dangles. Idempotent.
+     */
+    void shutdown_console();
 
     /**
      * Set the simulation instance to manage.
@@ -69,6 +109,22 @@ public:
      * Render the status bar at the bottom of the main window.
      */
     void render_status_bar();
+
+    /**
+     * Free GPU resources owned by persistent, sim-independent GUI components
+     * (the Metric Explorer). Call from the application shutdown hook, while the
+     * GL context is still current, before it is destroyed.
+     */
+    void free_resources();
+
+    /**
+     * Register a closure to run once on the GUI thread, in the next state phase
+     * (outside the ImGui frame), then discarded. The registration point GUI
+     * components use for deferred GUI-thread work — e.g. freeing a GL resource
+     * whose owner was released on another thread. Thread-safe. Forwards to
+     * sdl_app::register_single_shot_func.
+     */
+    void defer(std::function<void()> func);
 
 
     /**
@@ -114,6 +170,10 @@ private:
     // Reference to application
     sdl_app& app;
 
+    // Application location config (owned by main, outlives this). Source of the
+    // config_base / leaf policy get_snapshot_dir resolves against.
+    const paths::app_config& app_cfg_;
+
     // Simulation instance (may be nullptr)
     sim_instance* sim = nullptr;
 
@@ -152,15 +212,47 @@ private:
     std::unique_ptr<entity_browser> entity_browser_window;
     std::unique_ptr<buffer_browser> buffer_browser_window;
     std::unique_ptr<dataset_browser> dataset_browser_window;
+    std::unique_ptr<metric_explorer> metric_explorer_window;
     logging_window logging_window_instance;
 
     // Probe system windows
     gui_probe::probe_browser probe_browser_window;
     gui_probe::observer_panel observer_panel_window;
 
+    // Observe (offline capture) system window
+    gui_observe::observe_panel observe_panel_window;
+
     // Analysis windows
     replay::buffer_replay_dialog buffer_replay_dialog_;
     bool show_buffer_replay_ = false;
+    std::unique_ptr<h5_browser_window> h5_browser_window_;
+    bool show_h5_browser_ = false;
+    // Campaign browser: scans a directory of runs and filters them by the swept
+    // parameters. Sim-independent, like the two above.
+    campaign_panel campaign_panel_;
+    bool           show_campaign_ = false;
+
+    // coastd daemon-control panel (Tools menu). Independent of any loaded sim.
+    coastd_panel coastd_panel_;
+    bool         show_coastd_ = false;
+
+    // Optional injected C++ console (concrete impl in coast_console). Contributed
+    // by main.cpp via run_gui so coast_lib need not depend on LLVM. Owns its own
+    // visibility; the HDF5 browser holds a non-owning pointer to drive it.
+    std::unique_ptr<console_iface> console_;
+
+    // Status dialog: per-entity status strings are computed by status_str() ON
+    // THE SIM THREAD inside a gated post_swap hook (where cur_idx/cur_epoch and
+    // the neuron-group mismatch SoA are coherent — process()'s parallel_for is
+    // done) and published here; the GUI only displays the published strings. The
+    // shared_ptr decouples the slot's lifetime from gui_manager's. The hook
+    // is registered while the Status window is open and torn down on sim swap.
+    std::shared_ptr<demand_published<std::vector<std::string>>> status_pub_ =
+        std::make_shared<demand_published<std::vector<std::string>>>();
+    std::size_t status_hook_id_ = 0;
+    bool        status_hook_registered_ = false;
+    void sync_status_hook();
+    void remove_status_hook();   // remove from the current sim's env (if any)
 
     // Render individual dialogs
     void render_control_dialog();

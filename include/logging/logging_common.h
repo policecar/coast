@@ -25,7 +25,6 @@ struct log_result {
 struct log_stats {
     std::uint64_t frames_written = 0;
     std::uint64_t bytes_written = 0;
-    std::uint64_t samples_written = 0;
     double elapsed_seconds = 0.0;
 };
 

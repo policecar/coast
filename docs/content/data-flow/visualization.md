@@ -77,14 +77,14 @@ Shows all neuron representations as a 2D grid:
 2. Upload pixel buffer to GL texture
 3. Render in ImGui window with zoomable/pannable canvas
 
-### Neuron Tree (ngm_tree_vis)
+### Neuron Tree (ngm_tree_vis_v2, ngm3_tree_vis)
 
 Force-directed tree showing dendrite structure:
 
 1. **Create model**: Build nodes for each segment in the binary tree, edges for parent-child, root nodes for neurons
 2. **Update model**: Detect new segments from branching, create nodes dynamically
-3. **Update representations**: Regenerate leaf textures from synapse permanences
-4. **Layout**: Force-directed (fbgd) with adaptive repulsion radii
+3. **Update representations**: Regenerate leaf textures from synapse permanences each update interval, so representations track learning (not just structural changes)
+4. **Layout**: Force-directed (`gui_layout` force layout) with per-neuron repulsion, boosted around visible leaf textures
 5. **Render**: Draw edges, circles (root/branch nodes), leaf textures on ImDrawList
 
 ### Time Series (vec_ring_buffer)
@@ -105,6 +105,7 @@ JSON config → json_loader → global_cfg_t.vis_hints
   → sim_builder_cfg → sim_instance
     → entity_browser → vis_registry.create_entity_vis(hints_key)
       → factory looks up hints.ngm2.neuron_groups[hints_key]
+        (ngm3 and ngm25 vis: hints.ngm3.neuron_groups[hints_key])
         → Sets width, height, num_channels, update_interval, colors, ...
 ```
 

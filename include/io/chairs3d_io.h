@@ -11,8 +11,8 @@
 #include <vector>
 
 #include "core/rng/fast_rng.h"
-#include "io_entity.h"
-#include "chairs3d_cfg.h"
+#include "sim_core/io_entity.h"
+#include "io/chairs3d_cfg.h"
 #include "core/entity_element_macros.h"
 
 namespace chairs3d {
@@ -21,6 +21,7 @@ class chairs3d_io : public sim::io_entity {
 public:
     // Entity element interface
     ELEMENT_TYPE(chairs3d_io, "chairs3d_input")
+    void perform_observations(observe::observe_accessor& acc) override;
 
 private:
     std::vector<float> images;
@@ -31,13 +32,14 @@ private:
     int image_height;
     std::size_t image_pixels;  // width * height * 3
 
-    std::function<std::span<float>()> output_mem {};
+    sim::io_buffer* output_buf {nullptr};
 
     const chairs3d_param_t params;
     sim::output_id_t id;
 
     std::size_t cur_epoch;
     std::size_t cur_idx;
+    std::uint64_t observed_index_{0};  // snapshot of cur_idx taken before it advances; read in perform_observations
 
     std::size_t ci_cnt;
     int change_interval;
@@ -48,9 +50,9 @@ private:
 public:
     explicit chairs3d_io(const chairs3d_param_t& params, sim::output_id_t output_id);
 
-    void set_outp_func(std::function<std::span<float>()>) override;
+    void set_output_buffer(sim::io_buffer&) override;
 
-    void process() override;
+    sim::step_result process() override;
 
     [[nodiscard]] sim::output_id_t get_outp_id() const override;
     [[nodiscard]] std::size_t get_outp_size() const override;
@@ -63,7 +65,9 @@ public:
     void save_state(logging::state_writer& writer) const override;
     void load_state(logging::state_reader& reader) override;
 
-    [[nodiscard]] int& get_change_interval() { return change_interval; }
+    [[nodiscard]] std::optional<seed_t> effective_seed() const override {
+        return params.random_seed;
+    }
 
     // dataset_io interface
     [[nodiscard]] std::tuple<int,int,int> get_image_info() const {
@@ -71,12 +75,6 @@ public:
     }
     [[nodiscard]] std::size_t sample_count() const {
         return image_count;
-    }
-    [[nodiscard]] std::size_t current_epoch() const {
-        return cur_epoch;
-    }
-    [[nodiscard]] std::size_t current_index() const {
-        return cur_idx;
     }
     [[nodiscard]] std::span<const float> get_sample(std::size_t idx) const {
         if (idx >= image_count) idx = image_count - 1;

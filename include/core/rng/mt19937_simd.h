@@ -1,10 +1,12 @@
 #ifndef COAST_MT19937_SIMD_H
 #define COAST_MT19937_SIMD_H
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 
 // SIMD detection and includes
 #if defined(__AVX512F__) && defined(__AVX512DQ__)
@@ -48,7 +50,7 @@ private:
     // Pad state array to allow unaligned SIMD loads at boundaries
     // We need to read mt_[i+1] which at i=623 would be mt_[624], so add padding
     alignas(64) std::array<result_type, state_size + batch_size> mt_;
-    alignas(64) std::array<result_type, state_size> tempered_;
+    alignas(64) std::array<result_type, state_size> tempered_{};
     std::size_t mti_ = state_size;
 
 public:
@@ -81,6 +83,24 @@ public:
         for (unsigned long long i = 0; i < count; ++i) {
             operator()();
         }
+    }
+
+    // --- State serialization -------------------------------------------------
+    // Verbatim snapshot of the full generator state so save_state/load_state can
+    // restore a bit-for-bit continuation of the stream. The persisted state is
+    // the canonical words mt_[0..state_size), the pre-tempered output batch
+    // tempered_[0..state_size), and the read index mti_. The mt_ padding tail is
+    // SIMD scratch (never read across calls) and is intentionally excluded.
+    std::span<const result_type> state_words()    const { return {mt_.data(),       state_size}; }
+    std::span<const result_type> tempered_words() const { return {tempered_.data(), state_size}; }
+    std::size_t                  position()        const { return mti_; }
+
+    void restore_state(std::span<const result_type> mt_words,
+                       std::span<const result_type> tempered_in,
+                       std::size_t mti) {
+        std::copy_n(mt_words.data(),     state_size, mt_.data());
+        std::copy_n(tempered_in.data(),  state_size, tempered_.data());
+        mti_ = mti;
     }
 
 private:

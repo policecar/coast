@@ -4,11 +4,11 @@
 #include <algorithm>
 #include <cmath>
 
-#include "inc_on_exit.h"
-#include "io_buffer/vec_ring_buffer.h"
-#include "vis_registry.h"
-#include "io_buffer.h"
-#include "sim_env.h"
+#include "tools/inc_on_exit.h"
+#include "gui_vis/io_buffer/vec_ring_buffer.h"
+#include "gui_vis/vis_registry.h"
+#include "sim_core/io_buffer.h"
+#include "sim_core/sim_env.h"
 
 #include <atomic>
 #include <cassert>
@@ -17,7 +17,7 @@
 #include <thread>
 
 #include "imgui.h"
-#include "imgui_scaling.h"
+#include "gui_core/imgui_scaling.h"
 
 namespace coast {
 
@@ -261,6 +261,16 @@ public:
     {
         update_interval_ui_ = hints.buffer_vis.update_interval;
 
+        // GPU-only io_buffers (io_buffer_gpu) keep no CPU mirror, so cur_read_buffer()
+        // is empty. Detect that here and route reads through an on-demand GPU->CPU
+        // readback performed on the sim thread (see on_post_swap_signal). The CPU
+        // and mirrored GPU variants (cpu_to_gpu / gpu_to_cpu) expose a non-empty
+        // read page, so they take the direct path unchanged.
+        needs_readback_ = (buffer_.size() > 0 && buffer_.cur_read_buffer().empty());
+        if (needs_readback_) {
+            gpu_mirror_.resize(buffer_.size());
+        }
+
         // Two-phase hook registration: signal first, wait after all signals have fired.
         // This ensures N visualizations block for only 1 GUI frame instead of N frames.
         hook_id_ = sim_env_.set_post_swap_hook([this]() {
@@ -273,13 +283,13 @@ public:
 
     ~vec_ring_buffer_instance() override
     {
+        // Removal is synchronous (#235): once both calls return, neither hook is
+        // running or will run again, so nothing on the sim thread touches `this`.
+        // update() runs on this (GUI) thread, so no update is in flight either; the
+        // former spin on sync_state_ == idle is not needed (and could hang if a
+        // signal fired before its barrier hook was applied).
         sim_env_.remove_post_swap_hook(hook_id_);
         sim_env_.remove_post_swap_barrier_hook(barrier_hook_id_);
-
-        // Ensure we're not in the middle of an update
-        while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            std::this_thread::yield();
-        }
     }
 
     /**
@@ -295,10 +305,26 @@ public:
         if (sync_state_.compare_exchange_strong(expected,
                                                  static_cast<int>(sync_state::updating),
                                                  std::memory_order_acq_rel)) {
-            // We successfully transitioned from 'requested' to 'updating'
-            // Sim thread is now waiting, safe to read from buffer
-            auto data = buffer_.cur_read_buffer();
-            vis_.update(std::span<float>(const_cast<float*>(data.data()), data.size()));
+            // We successfully transitioned from 'requested' to 'updating'.
+            // Sim thread is now waiting, safe to read. For GPU-only buffers the
+            // data was already copied into gpu_mirror_ on the sim thread (see
+            // on_post_swap_signal); for all other buffers read the CPU page
+            // directly. The acquire on the CAS above pairs with the sim thread's
+            // release store of 'requested', so gpu_mirror_ is fully visible here.
+            std::span<float> data =
+                needs_readback_
+                    ? std::span<float>(gpu_mirror_.data(), gpu_mirror_.size())
+                    : [&] {
+                          auto rd = buffer_.cur_read_buffer();
+                          return std::span<float>(const_cast<float*>(rd.data()), rd.size());
+                      }();
+
+            // Defensive: vis_.update() indexes vec_size elements and its assert is
+            // a no-op under NDEBUG. Skip on any size mismatch (e.g. a failed
+            // readback that left the mirror short) rather than read out of bounds.
+            if (data.size() == buffer_.size()) {
+                vis_.update(data);
+            }
 
             // Signal completion - transition to 'idle'
             sync_state_.store(static_cast<int>(sync_state::idle), std::memory_order_release);
@@ -339,6 +365,25 @@ private:
 
         if (step_count_ % static_cast<std::size_t>(update_interval_ui_) != 0 && !colormap_changed) return;
 
+        if (needs_readback_) {
+            // GPU-only buffer: the read page lives only on the GPU. Copy it to the
+            // CPU mirror HERE, on the sim thread, while the GPU is idle (post-swap),
+            // then publish 'requested' so the GUI reads the mirror. A plain
+            // load/store claim is safe: this hook has a single (sim-thread) caller
+            // and the GUI only ever drives requested->updating->idle, so once we
+            // observe 'idle' no GUI read is in flight and we solely own gpu_mirror_.
+            if (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
+                return;  // Previous update still in progress, skip this step
+            }
+            if (!buffer_.read_back_sync(gpu_mirror_)) {
+                return;  // Readback failed: skip rather than publish stale/garbage
+            }
+            // Release pairs with the GUI's acquire CAS, publishing gpu_mirror_.
+            sync_state_.store(static_cast<int>(sync_state::requested), std::memory_order_release);
+            pending_wait_ = true;
+            return;
+        }
+
         int expected = static_cast<int>(sync_state::idle);
         if (!sync_state_.compare_exchange_strong(expected,
                                                   static_cast<int>(sync_state::requested),
@@ -363,7 +408,10 @@ private:
 
         auto start = std::chrono::steady_clock::now();
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT) {
+            // Give up early while a hook removal waits for this phase (#235):
+            // the remover is usually the GUI thread this loop is waiting for.
+            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT ||
+                sim_env_.hook_removal_waiting()) {
                 int expected = static_cast<int>(sync_state::requested);
                 if (sync_state_.compare_exchange_strong(expected,
                                                          static_cast<int>(sync_state::idle),
@@ -381,6 +429,11 @@ private:
     std::string label_;
     coast::vec_ring_buffer vis_;
     std::atomic<bool> visible_{true};
+
+    // GPU-only buffers have no standing CPU read page: the sim thread copies the
+    // current GPU read page into gpu_mirror_ on demand, the GUI reads the mirror.
+    bool needs_readback_ = false;
+    std::vector<float> gpu_mirror_;
 
     // Synchronization state
     std::atomic<int> sync_state_{static_cast<int>(sync_state::idle)};

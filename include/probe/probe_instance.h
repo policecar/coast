@@ -10,8 +10,8 @@
 #include <vector>
 #include <memory>
 #include <atomic>
-#include "spsc_queue.h"
-#include "probe_observer.h"
+#include "probe/spsc_queue.h"
+#include "probe/probe_observer.h"
 
 namespace core {
 class entity_element;

@@ -1,0 +1,119 @@
+{
+    "rule": "norm_sigma = geometric mean of the median RMS(x) of the noise-only plane and of the clean digits, two significant figures",
+    "test_indices": [
+        9000,
+        9999
+    ],
+    "evaluation": "use test indices below 9000: these are the calibration images",
+    "input_noise_range": [
+        0.0,
+        0.05
+    ],
+    "norm_sigma": 0.025,
+    "margin_over_noise_only": 6.71694,
+    "margin_under_clean": 6.573107,
+    "clean_clipping": {
+        "linear_at_template_gain": {
+            "gain": 2.0,
+            "on_clipped": 0.076369,
+            "off_clipped": 0.0
+        },
+        "normalized_at_template_gain": {
+            "gain": 2.0,
+            "on_clipped": 0.805128,
+            "off_clipped": 0.254091
+        },
+        "normalized_at_matched_gain": {
+            "gain": 0.38,
+            "on_clipped": 0.071863,
+            "off_clipped": 0.0
+        }
+    },
+    "rms_x": {
+        "clean": {
+            "p5": 0.123589,
+            "median": 0.164328,
+            "p95": 0.207849
+        },
+        "blank_input_noise": {
+            "p5": 0.003424,
+            "median": 0.003722,
+            "p95": 0.004059
+        },
+        "brightness": {
+            "p5": 0.074379,
+            "median": 0.093509,
+            "p95": 0.112977
+        },
+        "canny_edges": {
+            "p5": 0.088324,
+            "median": 0.107846,
+            "p95": 0.120265
+        },
+        "dotted_line": {
+            "p5": 0.130507,
+            "median": 0.167457,
+            "p95": 0.205689
+        },
+        "fog": {
+            "p5": 0.033216,
+            "median": 0.044339,
+            "p95": 0.055224
+        },
+        "glass_blur": {
+            "p5": 0.088266,
+            "median": 0.11974,
+            "p95": 0.156637
+        },
+        "impulse_noise": {
+            "p5": 0.1236,
+            "median": 0.153363,
+            "p95": 0.187266
+        },
+        "motion_blur": {
+            "p5": 0.084189,
+            "median": 0.124062,
+            "p95": 0.166643
+        },
+        "rotate": {
+            "p5": 0.117267,
+            "median": 0.156607,
+            "p95": 0.199133
+        },
+        "scale": {
+            "p5": 0.077002,
+            "median": 0.106657,
+            "p95": 0.141664
+        },
+        "shear": {
+            "p5": 0.120878,
+            "median": 0.162139,
+            "p95": 0.204545
+        },
+        "shot_noise": {
+            "p5": 0.101914,
+            "median": 0.135486,
+            "p95": 0.169499
+        },
+        "spatter": {
+            "p5": 0.11386,
+            "median": 0.154358,
+            "p95": 0.196799
+        },
+        "stripe": {
+            "p5": 0.214927,
+            "median": 0.22612,
+            "p95": 0.240739
+        },
+        "translate": {
+            "p5": 0.123304,
+            "median": 0.162703,
+            "p95": 0.205519
+        },
+        "zigzag": {
+            "p5": 0.143887,
+            "median": 0.175109,
+            "p95": 0.211335
+        }
+    }
+}

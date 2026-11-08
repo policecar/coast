@@ -6,15 +6,12 @@
 #define DSPRITES_CFG_H
 
 #include <string>
+#include "io/sequence_params.h"
 
 namespace dsprites {
 
-struct dsprites_param_t {
-    std::string            hdf5_file         = "";
-    std::size_t            change_interval   = 15;
-    std::pair<double,double> noise_range     = {0.0, 0.05};
-    int                    random_seed       = 0;
-    bool                   randomize_readout = false;
+struct dsprites_param_t : dataset::sequence_params_t {
+    std::string hdf5_file = "";
 };
 
 }

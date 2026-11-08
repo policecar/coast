@@ -3,7 +3,10 @@
 //
 
 #include <algorithm>
-#include "sim_builder.h"
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include "tools/sim_builder.h"
 
 namespace sim {
 
@@ -15,7 +18,7 @@ sim_builder::sim_builder(env &simulation_environment) :
 
 void sim_builder::register_create_func(
     io_entity_type_t etype,
-    std::function<void(const std::string&, output_id_t, env&, int)> func
+    std::function<void(const std::string&, output_id_t, env&, seed_offset_t)> func
 ){
     create_func.emplace(etype,func);
 }
@@ -31,10 +34,19 @@ void sim_builder::register_init_func(
 
 void sim_builder::build_local(const sim_cfg_t &cfg)
 {
+    // A repeated id would overwrite the earlier node: its entity would vanish from
+    // the sim while cfg.sim.nodes (manifest, GUI) still lists it.
+    const auto insert_node = [this](node_t new_node) {
+        const auto id = new_node.id;
+        const auto [it, inserted] = nodes.try_emplace(id, std::move(new_node));
+        if (!inserted)
+            throw std::runtime_error("duplicate node id " + std::to_string(id) + ": \""
+                                     + it->second.label + "\" already uses it");
+    };
     nodes.reserve(cfg.nodes.size());
     // first, create all direct nodes
     for (const auto &node_cfg : cfg.nodes) {
-        node_t new_node;
+        node_t new_node{};
         new_node.id                 = node_cfg.id;
         new_node.label              = node_cfg.label;
         new_node.inputs             = node_cfg.inputs;
@@ -42,7 +54,7 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
         new_node.entity_cfg         = node_cfg.entity_cfg;
         new_node.random_seed_offset = node_cfg.random_seed_offset;
 
-        nodes[new_node.id] = new_node;
+        insert_node(std::move(new_node));
     }
     // second, build derived nodes based on node_sets
     for (const auto &set_cfg : cfg.node_sets) {
@@ -51,7 +63,7 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
             if (node_it == nodes.end())
                 throw std::runtime_error("missing node in nodes set. value: " + std::to_string(node_id));
             const auto &template_node = node_it->second;
-            node_t new_node;
+            node_t new_node{};
             new_node.id          = set_cfg.base_id + template_node.id;
             new_node.label       = set_cfg.base_label + "." + template_node.label;
             new_node.inputs      = template_node.inputs;
@@ -59,6 +71,10 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
                                        ip.first += set_cfg.base_id;
             new_node.entity_type = template_node.entity_type;
             new_node.entity_cfg  = template_node.entity_cfg;
+            // By design (#191, SPEC S.3.20): a copy keeps the template's offset,
+            // so all copies of a template node run the same random streams and
+            // differ only in wiring. Independent replicas are direct nodes.
+            // Exception: ri_seed_from_time draws a fresh inhibition seed per copy.
             new_node.random_seed_offset = template_node.random_seed_offset;
             // apply deltas if present
             const auto delta_it = set_cfg.node_deltas.find(template_node.id);
@@ -79,9 +95,24 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
                         } break;
                     }
             }
-            nodes[new_node.id] = new_node;
+            insert_node(std::move(new_node));
         }
     }
+    // between node assembly and entity creation: if any node maps to a GPU
+    // entity, install the gpu_context now (S5). GPU entities upload data to the
+    // device in their constructor and the io_buffer topology pre-pass needs the
+    // context, so it must exist before BOTH entity creation and init_io_buffers.
+    // Derived (node_set) nodes carry their template's entity_type, so scanning the
+    // assembled `nodes` map covers them too. CPU-only configs never enter here.
+#ifdef COAST_WITH_GPU
+    const bool needs_gpu = std::ranges::any_of(nodes, [](const auto& kv){
+        return is_gpu_entity_type(kv.second.entity_type);
+    });
+    if (needs_gpu && !sim_env.has_gpu()) {
+        sim_env.enable_gpu();
+    }
+#endif
+
     // third, go through all created nodes and create the actual simulation entities
     // (future work: in a non-local version of this build function we could parition the simulation
     // graph and distribute it over multiple machines)
@@ -105,7 +136,10 @@ void sim_builder::build_local(const sim_cfg_t &cfg)
             auto input_entity = sim_env.get_entity(inp.first);
             if (!input_entity)
                 throw std::runtime_error("node requires input id that does not exist. id:" + std::to_string(inp.first));
-            input_map[inp.second] = { inp.first, input_entity->get_outp_size() };
+            // keyed by channel name: a repeated name would silently drop the earlier link
+            if (!input_map.try_emplace(inp.second, output_channel_t{ inp.first, input_entity->get_outp_size() }).second)
+                throw std::runtime_error("node " + std::to_string(node_output_id) + " lists input channel \"" + inp.second
+                                         + "\" more than once; each input needs its own channel name");
         }
         auto func_it = init_func.find(cur_node.entity_type);
         if (func_it == init_func.end())

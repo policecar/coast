@@ -1,13 +1,15 @@
-#include "buffer_browser.h"
-#include "sim_instance.h"
-#include "sim_builder.h"
-#include "vis_registry.h"
-#include "io_buffer.h"
+#include "gui_core/buffer_browser.h"
+#include "sim_core/sim_instance.h"
+#include "tools/sim_builder.h"
+#include "sim_core/sim_env.h"
+#include "gui_vis/vis_registry.h"
+#include "sim_core/io_buffer.h"
 #include "imgui.h"
-#include "imgui_scaling.h"
+#include "gui_core/imgui_scaling.h"
 
 #include <algorithm>
 #include <unordered_map>
+#include <vector>
 
 namespace coast {
 
@@ -18,11 +20,89 @@ buffer_browser::buffer_browser(sim_instance& sim)
 
 buffer_browser::~buffer_browser()
 {
+    // Remove the stats hook while the sim (and its env) is still alive. The
+    // owning gui_manager destroys this browser before the sim instance it points
+    // at (set_sim_instance resets the browser windows before swapping `sim`, and
+    // run_gui calls set_sim_instance(nullptr) before sim.reset()), so this is
+    // safe. Removal is synchronous (#235), so the hook cannot fire after it;
+    // and it captures the shared_ptr slot, never this object, regardless.
+    if (stats_hook_registered_) {
+        sim.get_sim_env().remove_post_swap_hook(stats_hook_id_);
+        stats_hook_registered_ = false;
+    }
     free_resources();
+}
+
+std::vector<buffer_browser::buffer_stat> buffer_browser::compute_buffer_stats(sim::env& env)
+{
+    std::vector<buffer_stat> out;
+    auto& buffers = env.get_io_buffers();
+    out.reserve(buffers.size());
+
+    for (auto& [id, buffer] : buffers) {
+        const std::size_t sz = buffer->size();
+
+        // Read the coherent read page. cur_read_buffer() exposes it for CPU /
+        // mirrored variants; io_buffer_gpu (GPU-only, no mirror) returns an empty
+        // span, so pull it on demand with read_back_sync — safe here because this
+        // runs on the sim thread that owns the wgpu queue.
+        auto read_span = buffer->cur_read_buffer();
+        const float* data = nullptr;
+        std::size_t  n    = 0;
+        std::vector<float> tmp;
+        if (!read_span.empty()) {
+            data = read_span.data();
+            n    = read_span.size();
+        } else if (sz > 0) {
+            tmp.resize(sz);
+            if (buffer->read_back_sync(tmp)) {
+                data = tmp.data();
+                n    = sz;
+            }
+        }
+
+        float sum = 0.0f, min_val = 0.0f, max_val = 0.0f;
+        if (n > 0) {
+            min_val = max_val = data[0];
+            for (std::size_t i = 0; i < n; ++i) {
+                const float v = data[i];
+                sum += v;
+                min_val = std::min(min_val, v);
+                max_val = std::max(max_val, v);
+            }
+        }
+        const float avg = (n > 0) ? sum / static_cast<float>(n) : 0.0f;
+
+        out.push_back({id, sz, sum, avg, min_val, max_val});
+    }
+    return out;
+}
+
+void buffer_browser::sync_stats_hook()
+{
+    auto* env = &sim.get_sim_env();
+
+    if (is_visible && !stats_hook_registered_) {
+        // Register a post_swap hook that publishes buffer stats on demand. It
+        // captures the shared publish slot (by value) and the env pointer, never
+        // `this`, so its lifetime is decoupled from this browser.
+        auto pub = stats_pub_;
+        stats_hook_id_ = env->set_post_swap_hook([pub, env]() {
+            pub->produce_if_wanted([env]() { return compute_buffer_stats(*env); });
+        });
+        stats_hook_registered_ = true;
+    } else if (!is_visible && stats_hook_registered_) {
+        env->remove_post_swap_hook(stats_hook_id_);
+        stats_hook_registered_ = false;
+    }
 }
 
 void buffer_browser::render()
 {
+    // Register/remove the sim-thread stats publisher to follow window visibility
+    // (every frame, so closing the window stops the work).
+    sync_stats_hook();
+
     // Always update active visualizations, even when browser window is closed
     // This ensures the GUI thread processes sync requests from the sim thread
     update_visualizations();
@@ -52,10 +132,11 @@ void buffer_browser::rebuild_cache()
     cached_rows.clear();
 
     auto& sim_env = sim.get_sim_env();
-    auto& buffers = sim_env.get_io_buffers();
     const auto& builder = sim.get_builder();
 
-    // Build map from buffer ID to entity name (output_of)
+    // Build map from buffer ID to entity name (output_of). This is immutable
+    // structure (entity ids + builder labels are fixed after construction), so
+    // reading it on the GUI thread is race-free.
     std::unordered_map<std::size_t, std::string> output_of_map;
     for (auto& entity : sim_env.iterate_entities()) {
         const auto outp_id = entity.get_outp_id();
@@ -65,36 +146,25 @@ void buffer_browser::rebuild_cache()
         }
     }
 
-    for (auto& [id, buffer] : buffers) {
-        auto read_buf = buffer.cur_read_buffer();
-
-        // Calculate stats
-        float sum = 0.0f, min_val = 0.0f, max_val = 0.0f;
-        if (!read_buf.empty()) {
-            min_val = read_buf[0];
-            max_val = read_buf[0];
-            for (float v : read_buf) {
-                sum += v;
-                min_val = std::min(min_val, v);
-                max_val = std::max(max_val, v);
-            }
-        }
-        float avg = read_buf.empty() ? 0.0f : sum / static_cast<float>(read_buf.size());
-
-        // Look up entity name
+    // Buffer stats come from the sim thread's published snapshot (computed at
+    // post_swap), not a live read — this is the data race the redesign removes.
+    // Requesting the snapshot here also drives the demand-publish handshake: it
+    // signals the sim thread to recompute on its next boundary.
+    auto stats = stats_pub_->consume();
+    cached_rows.reserve(stats.size());
+    for (const auto& s : stats) {
         std::string output_of;
-        if (auto it = output_of_map.find(id); it != output_of_map.end()) {
+        if (auto it = output_of_map.find(s.id); it != output_of_map.end()) {
             output_of = it->second;
         }
-
         cached_rows.push_back({
-            id,
+            s.id,
             output_of,
-            buffer.size(),
-            sum,
-            avg,
-            min_val,
-            max_val
+            s.size,
+            s.sum,
+            s.avg,
+            s.min_val,
+            s.max_val
         });
     }
 

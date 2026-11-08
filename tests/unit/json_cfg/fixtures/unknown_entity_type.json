@@ -1,0 +1,7 @@
+{
+    "sim": {
+        "nodes": [
+            {"id": 0, "label": "typo", "entity_type": "ngm2_neuron_grop"}
+        ]
+    }
+}

@@ -1,6 +1,6 @@
 baseURL: ''
-languageCode: en-us
-title: COAST — Internal Documentation
+locale: en-us
+title: COAST Documentation
 theme: hugo-theme-relearn
 
 params:

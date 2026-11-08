@@ -1,0 +1,466 @@
+<title>Dendrite Noise Gate</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+<style>
+/* Layout: lab notebook, third of the series ("Beyond NSE", "Max-Softmax Inhibition"): findings column, then five benches that walk from the gate's formula to raw inputs, sparsity, the retina, and candidate measures. */
+:root {
+  --page: #f2f4f5;
+  --surface: #fcfcfb;
+  --ink: #0e1214;
+  --ink-2: #4c5459;
+  --muted: #858c90;
+  --grid: #e1e3e1;
+  --axis: #c0c5c4;
+  --rule: rgba(14,18,20,0.10);
+  --select: #0e1214;
+  --select-ink: #fcfcfb;
+  --c-real: #7d68ec;
+  --c-perm: #c47f12;
+  --c-unif: #b23a8f;
+  --heat: #2a78d6;
+  --neg: #c0392b;
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.125rem;
+  --step-2: 1.5rem;
+  --step-3: 2.25rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101213; --surface: #1a1a19; --ink: #eef0ef; --ink-2: #bfc4c2; --muted: #8b918f;
+    --grid: #2c2c2a; --axis: #3d3e3b; --rule: rgba(255,255,255,0.10);
+    --select: #eef0ef; --select-ink: #101213;
+    --c-real: #7a63e6; --c-perm: #b07818; --c-unif: #c2479e; --heat: #3987e5; --neg: #e5604d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #101213; --surface: #1a1a19; --ink: #eef0ef; --ink-2: #bfc4c2; --muted: #8b918f;
+  --grid: #2c2c2a; --axis: #3d3e3b; --rule: rgba(255,255,255,0.10);
+  --select: #eef0ef; --select-ink: #101213;
+  --c-real: #7a63e6; --c-perm: #b07818; --c-unif: #c2479e; --heat: #3987e5; --neg: #e5604d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--page); color: var(--ink); font-family: var(--font-body);
+  font-size: var(--step-0); line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 40px; }
+.prose { max-width: 68ch; display: grid; gap: 14px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: var(--step-3); letter-spacing: -0.01em; }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-family: var(--font-body); font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-data); font-size: var(--step--1); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+code, .mono { font-family: var(--font-data); font-size: 0.92em; }
+.muted { color: var(--ink-2); }
+.formula { font-family: var(--font-data); font-size: var(--step--1); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; overflow-x: auto; white-space: pre; line-height: 1.6; }
+.findings { display: grid; border-top: 1px solid var(--rule); }
+.finding { display: grid; grid-template-columns: 2.2rem minmax(0,1fr); gap: 12px; padding-block: 14px; border-bottom: 1px solid var(--rule); }
+.finding .n { font-family: var(--font-data); color: var(--ink-2); font-size: var(--step--1); padding-top: 3px; }
+.finding p { max-width: 76ch; }
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ctl > .lbl { font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: var(--step--1); padding: 5px 10px; border: 0; background: var(--surface); color: var(--ink); cursor: pointer; border-right: 1px solid var(--rule); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--select); color: var(--select-ink); }
+input[type=range] { accent-color: var(--ink); width: 160px; max-width: 100%; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
+.val { font-family: var(--font-data); font-size: var(--step--1); min-width: 4ch; font-variant-numeric: tabular-nums; }
+.bench { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 18px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.panel header { display: grid; gap: 4px; }
+.panel header p { color: var(--ink-2); font-size: var(--step--1); max-width: 80ch; }
+.span-12 { grid-column: span 12; } .span-5 { grid-column: span 5; } .span-7 { grid-column: span 7; } .span-6 { grid-column: span 6; }
+@media (max-width: 900px) { .span-5, .span-7, .span-6 { grid-column: span 12; } }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--ink-2); font-family: var(--font-data); font-size: 10px; }
+svg .lab { fill: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--step--1); color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw.line { height: 2px; width: 16px; border-radius: 1px; background: var(--ink); }
+.sw.dash { height: 0; width: 16px; border-top: 2px dashed var(--ink); border-radius: 0; }
+.grad { width: 80px; height: 8px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--heat)); border: 1px solid var(--rule); }
+.split { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+@media (max-width: 760px) { .split { grid-template-columns: minmax(0,1fr); } }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.kv div { border-top: 2px solid var(--c, var(--rule)); padding-top: 6px; display: grid; }
+.kv .v { font-family: var(--font-data); font-size: var(--step-1); font-variant-numeric: tabular-nums; }
+.kv .k { font-size: var(--step--1); color: var(--ink-2); }
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.tbl th, .tbl td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.tbl th { color: var(--ink-2); font-weight: 500; font-family: var(--font-data); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.tbl td.num { font-family: var(--font-data); }
+.tbl td.cell { font-family: var(--font-data); padding: 4px 6px; text-align: center; }
+.tbl tr.grp td { border-top: 1px solid var(--axis); }
+.tablewrap { overflow-x: auto; }
+.chip { display: inline-flex; align-items: center; gap: 6px; }
+.examples { display: grid; gap: 8px; }
+.exrow { display: grid; grid-template-columns: 5.5rem repeat(3, minmax(0, 96px)); gap: 8px; align-items: center; }
+.exrow .rl { font-family: var(--font-data); font-size: 11px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.exrow figure { margin: 0; display: grid; gap: 2px; }
+.exrow img { width: 100%; image-rendering: pixelated; border-radius: 3px; background: #000; border: 1px solid var(--rule); }
+.exrow figcaption { font-family: var(--font-data); font-size: 10px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.exhead { font-family: var(--font-data); font-size: 10px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; }
+.note { font-size: var(--step--1); color: var(--ink-2); max-width: 82ch; }
+.options { display: grid; gap: 10px; max-width: 82ch; }
+.options li { padding-left: 2px; }
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface); color: var(--ink); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 6px 8px; font-family: var(--font-data); font-size: 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); max-width: 260px; }
+.methods { display: grid; gap: 10px; max-width: 82ch; font-size: var(--step--1); color: var(--ink-2); }
+.methods ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { .seg button { transition: background 120ms, color 120ms; } }
+</style>
+
+<div class="wrap">
+  <section class="prose">
+    <span class="eyebrow">COAST · ngm2 dendrite · branch expl/nse-alt</span>
+    <h1>Dendrite Noise Gate</h1>
+    <p>An ngm2 dendrite decides from its input statistics whether the input is noise. It uses the normalized Shannon entropy (NSE) of the input and the input's mean activity, in two places:</p>
+<div class="formula">gate(nse, avg) = 1 − σ((nse − 0.8) / 0.2, w) · (1 − σ(avg, {0.5, 0.5}))
+
+response  get_response()   w = {0.25, 0.5}   nse, avg = minimum over the dendrite's input channels
+learning  adapt_synapses() w = {0.5, 0.5}    per input channel</div>
+    <p>The response gate scales every segment's activity; the learning gate scales every synapse's permanence update. This page measures what the gate does on the recorded probe inputs of six datasets, how NSE behaves as a measure, and what changes when a centre-surround retina sits in front of the dendrite.</p>
+  </section>
+
+  <section class="prose" style="max-width:none">
+    <h2>What the measurements show</h2>
+    <div class="findings">
+      <div class="finding"><span class="n">1</span><p><b>On raw pixels the gate cannot see structure.</b> Shuffling an image's pixels keeps its value distribution, so NSE, mean activity and the gate are the same for real and shuffled digits (gate separation −0.04 to +0.05 on mnist, emnist and kmnist). The trained groups still separate the two perfectly (+0.99 to +1.00). That comes from the learned connectivity and the synapse penalty, not from the gate.</p></div>
+      <div class="finding"><span class="n">2</span><p><b>What the gate does on raw pixels is flag dense, flat input.</b> Uniform noise gets a response gate of 0.61 against 0.89–0.96 for digits. Removing the gate lowers real-vs-noise separation from +0.92 to +0.69 on kmnist and from +1.00 to +0.98 on mnist (estimated). It misfires elsewhere: real cifar10 images get a lower gate (0.50) than noise (0.61), density-matched dsprites noise passes (0.95), and for bright inputs the <code>1 − σ(avg)</code> factor switches it off entirely (chairs3d: 0.999).</p></div>
+      <div class="finding"><span class="n">3</span><p><b>NSE is not a sparsity scale.</b> With the datasets' 0–5% input noise it is not monotonic: at 4096 inputs a pattern with 1% of the entries active scores 0.90, 5–10% active scores 0.82, and 50% active scores 0.93. A thin edge looks as noisy as half the image switched on. The window also moves with input size: without noise, NSE 0.9 means 51% active at 784 inputs but 39% at 12288, and with noise the curves for 784 and 12288 inputs lie up to 0.07 apart. Of the alternatives only mean/max rises monotonically. Hoyer sparsity also dips, at 2–3% active, but depends far less on input size (at most 0.02 apart).</p></div>
+      <div class="finding"><span class="n">4</span><p><b>Behind a retina, the same gate detects structure.</b> Centre-surround filtering is spatial, so shuffled pixels turn into dense, high-contrast ON and OFF maps. Judged jointly, as <code>get_response</code> does by taking the minimum over channels, the gate separates real inputs from shuffled pixels and from uniform noise at +1.00 on mnist, kmnist, dsprites and chairs3d (k = 0.8), and at +0.85 / +0.91 on cifar10, which no measure separated on raw pixels. The window is still placed for raw digits: real cifar10 images are gated to 0.33, and dsprites at k = 1 to 0.47.</p></div>
+      <div class="finding"><span class="n">5</span><p><b>Judged per channel, the weak polarity is rated as noise.</b> The learning gate judges each input channel on its own, by design: one input may carry a signal worth learning while another carries only noise. At k = 0.8 the mnist OFF channel learns at 0.015 of the rate of its ON channel (0.99); on chairs3d it is ON that learns at 0.006 against OFF at 0.88. A real digit's OFF channel is a faint halo on the noise floor, and NSE rates it noisier than the OFF response to uniform noise (separation −1.00). No other per-channel measure in the table rates it correctly against uniform noise either. This is the late "shadow" in training. Whether the halo should count as signal is a question of the retina's gain more than of the gate.</p></div>
+      <div class="finding"><span class="n">6</span><p><b>The two gates differ in steepness, not position.</b> Both centre at NSE 0.9. Going from 10% to 90% of its transition, the response gate spans NSE 0.84–0.96, the learning gate 0.87–0.93.</p></div>
+      <div class="finding"><span class="n">7</span><p><b>No first-order statistic helps on raw pixels; after the retina several work.</b> Judged jointly, NSE and Hoyer separate almost equally well; Hoyer needs two sums instead of a logarithm per entry and depends less on input size. Subtracting the noise floor before NSE fixes the weak channel against shuffled input but not against uniform noise, and it collapses to 0 once more than half the entries are active.</p></div>
+    </div>
+  </section>
+
+  <div class="bench">
+    <section class="panel span-5" aria-labelledby="h-gate">
+      <header><h3 id="h-gate">The two gates</h3>
+        <p>Gate value against NSE, for one mean input activity. A value of 1 lets the input through unchanged.</p></header>
+      <div class="controls">
+        <div class="ctl"><label class="lbl" for="avg">mean activity</label><input id="avg" type="range" min="0" max="1" step="0.01" value="0.15"><output class="val" id="avg-v" for="avg">0.15</output></div>
+      </div>
+      <div class="legend"><span><i class="sw line"></i>response gate, w = {0.25, 0.5}</span><span><i class="sw dash"></i>learning gate, w = {0.5, 0.5}</span></div>
+      <div id="gate-chart"></div>
+      <div class="kv" id="gate-kv"></div>
+    </section>
+
+    <section class="panel span-7" aria-labelledby="h-raw">
+      <header><h3 id="h-raw">Raw inputs</h3>
+        <p>Each point is one probe input at step 500k (250 per condition): its NSE against its mean activity. The blue background is the response gate at that position.</p></header>
+      <div class="controls"><div class="ctl"><span class="lbl">dataset</span><div class="seg" id="raw-ds" role="group" aria-label="Dataset"></div></div></div>
+      <div class="legend" id="cond-legend"></div>
+      <div id="raw-chart"></div>
+      <div class="tablewrap"><table class="tbl" id="raw-tbl"></table></div>
+      <p class="note" id="raw-sep"></p>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="h-sp">
+      <header><h3 id="h-sp">NSE and sparsity</h3>
+        <p>Synthetic vectors: a fraction of the entries at 1, the rest at 0, then the datasets' input noise U(0, 0.05) on every entry. Left, NSE for four input sizes; right, five candidate measures at 4096 inputs, all oriented so that higher reads as noisier. Only mean/max rises monotonically.</p></header>
+      <div class="controls"><div class="ctl"><span class="lbl">input noise</span><div class="seg" id="sp-floor" role="group" aria-label="Input noise"></div></div></div>
+      <div class="split">
+        <div style="display:grid;gap:6px;min-width:0"><div class="legend" id="sp-nse-leg"></div><div id="sp-nse"></div></div>
+        <div style="display:grid;gap:6px;min-width:0"><div class="legend" id="sp-meas-leg"></div><div id="sp-meas"></div></div>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="h-ret">
+      <header><h3 id="h-ret">After the retina</h3>
+        <p>The same inputs passed through ON and OFF retina nodes (centre σ 1, surround σ 3, gain 2, noise floor U(0, 0.05); RGB converted to luminance). Each point is one input: the NSE of its ON channel against the NSE of its OFF channel. The dashed lines mark NSE 0.9, the centre of both gate windows.</p></header>
+      <div class="controls">
+        <div class="ctl"><span class="lbl">dataset</span><div class="seg" id="ret-ds" role="group" aria-label="Dataset"></div></div>
+        <div class="ctl"><span class="lbl">surround k</span><div class="seg" id="ret-k" role="group" aria-label="Surround weight k"></div></div>
+      </div>
+      <div class="split">
+        <div style="display:grid;gap:10px;min-width:0">
+          <div id="ret-chart"></div>
+        </div>
+        <div style="display:grid;gap:14px;align-content:start;min-width:0">
+          <div class="kv" id="ret-kv"></div>
+          <div class="examples" id="ret-ex"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="h-cand">
+      <header><h3 id="h-cand">Candidate measures</h3>
+        <p>How well each measure tells real inputs from shuffled pixels and from uniform noise, as separation 2·AUC − 1: +1 means every noise input scores as noisier than every real input, 0 means no separation, −1 means reversed. Retina at k = 0.9; "joint" takes the minimum over ON and OFF, as the response gate does.</p></header>
+      <div class="legend"><span class="chip"><i class="sw" style="background:var(--heat)"></i>separates (toward +1)</span><span class="chip"><i class="sw" style="background:var(--neg)"></i>reversed (toward −1)</span><span>each cell: vs shuffled / vs uniform noise</span></div>
+      <div class="tablewrap"><table class="tbl" id="cand-tbl"></table></div>
+    </section>
+  </div>
+
+  <section class="prose" style="max-width:none">
+    <h2>Options for the dendrite</h2>
+    <ol class="options">
+      <li><b>Keep per-channel learning, give the weak polarity more signal.</b> Learning is judged per channel on purpose. If the faint halo should be learned, raise it above the noise floor at the retina (gain, or lower noise) instead of changing the gate. The two windows could still share one steepness.</li>
+      <li><b>Put the retina in front of every dataset.</b> The gate then measures spatial contrast instead of value spread, and it separates structure from noise on every dataset tested. The <code>1 − σ(avg)</code> term was written for raw intensities and needs a second look.</li>
+      <li><b>Replace NSE by Hoyer sparsity.</b> Same separation behind the retina, cheaper (two sums instead of a logarithm per entry) and nearly independent of input size. It also dips for very sparse inputs, and the window has to be placed again.</li>
+      <li><b>Drop the gate on raw inputs.</b> Learned connectivity already rejects shuffled input; the gate's remaining contribution on raw pixels is a modest push against dense, flat noise.</li>
+    </ol>
+  </section>
+
+  <section class="methods">
+    <h2 style="color:var(--ink)">How the numbers were made</h2>
+    <ul>
+      <li>Probe inputs and responses: ngm2 groups trained 500k steps on each dataset with the shipped configs; probes are frozen steps with a pass-through inhibitor, 2000 inputs per condition. "Shuffled" permutes each image's pixels; "uniform noise" is U(0, 1) per pixel (dsprites: density-matched binary noise).</li>
+      <li>Gates computed with float32 mirrors of <code>sigmoid</code> and <code>normalized_shannon_entropy</code>. The "without gate" peaks divide the recorded output, minus the mean neuron noise 0.03, by the response gate; this ignores clamping, so chairs3d (outputs clamped at 1) is not meaningful there.</li>
+      <li>Retina: a Python mirror of <code>retina::contrast_filter_t</code>, checked against the C++ filter on 100 mnist and 100 chairs3d inputs at k = 0, 0.7 and 1 (largest difference 7·10⁻⁷).</li>
+      <li>Separation is 2·AUC − 1 over all pairs. Retina sections use 500 inputs per condition.</li>
+      <li id="prov"></li>
+    </ul>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = /*__DATA__*/;
+const NS = "http://www.w3.org/2000/svg";
+const CONDS = ["real", "perm", "unif"];
+const CLABEL = { real: "real", perm: "shuffled pixels", unif: "uniform noise" };
+const CVAR = { real: "var(--c-real)", perm: "var(--c-perm)", unif: "var(--c-unif)" };
+const DSLABEL = { chairs3d_inv: "chairs3d inverted" };
+const st = { avg: 0.15, rawDs: "mnist", floor: "0.05", retDs: "mnist", k: "0.8" };
+
+const el = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const fmt = (v, d = 2) => (v >= 0 ? "" : "−") + Math.abs(v).toFixed(d);
+const fsep = (v) => (Math.abs(v) < 0.005 ? "" : v > 0 ? "+" : "−") + Math.abs(v).toFixed(2);
+
+// ngm2 sigmoid (hd_ngm2_tools.h)
+function sig(x, steep, tp) {
+  const inv = 1 / (1 - Math.pow(steep, 0.1));
+  return 1 / (1 + Math.exp(-(x * inv - tp * inv)));
+}
+const gate = (n, a, steep) => 1 - sig((n - 0.8) / 0.2, steep, 0.5) * (1 - sig(a, 0.5, 0.5));
+
+// tooltip
+const tip = document.getElementById("tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; moveTip(ev); }
+function moveTip(ev) {
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+
+function seg(id, items, key, onChange) {
+  const box = document.getElementById(id);
+  box.innerHTML = "";
+  for (const [val, label] of items) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(st[key] === val));
+    b.addEventListener("click", () => {
+      st[key] = val;
+      for (const c of box.children) c.setAttribute("aria-pressed", String(c === b));
+      onChange();
+    });
+    box.appendChild(b);
+  }
+}
+
+// generic frame: returns {svg, x, y, g}
+function frame(host, { w = 560, h = 300, m = { t: 12, r: 16, b: 34, l: 44 }, x0, x1, y0, y1, xlog = false,
+                       xticks, yticks, xlabel, ylabel, xfmt = (v) => v, yfmt = (v) => v }) {
+  host.innerHTML = "";
+  const svg = el("svg", { viewBox: `0 0 ${w} ${h}`, role: "img" }, host);
+  const tx = (v) => xlog ? Math.log10(v) : v;
+  const x = (v) => m.l + (tx(v) - tx(x0)) / (tx(x1) - tx(x0)) * (w - m.l - m.r);
+  const y = (v) => h - m.b - (v - y0) / (y1 - y0) * (h - m.t - m.b);
+  const g = el("g", {}, svg);
+  for (const t of yticks) {
+    el("line", { x1: m.l, x2: w - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, g);
+    el("text", { x: m.l - 6, y: y(t) + 3, "text-anchor": "end" }, g).textContent = yfmt(t);
+  }
+  for (const t of xticks) {
+    el("line", { x1: x(t), x2: x(t), y1: h - m.b, y2: h - m.b + 4, stroke: "var(--axis)" }, g);
+    el("text", { x: x(t), y: h - m.b + 15, "text-anchor": "middle" }, g).textContent = xfmt(t);
+  }
+  el("line", { x1: m.l, x2: w - m.r, y1: h - m.b, y2: h - m.b, stroke: "var(--axis)" }, g);
+  if (xlabel) el("text", { x: (m.l + w - m.r) / 2, y: h - 4, "text-anchor": "middle" }, g).textContent = xlabel;
+  if (ylabel) el("text", { x: -(m.t + h - m.b) / 2, y: 12, transform: "rotate(-90)", "text-anchor": "middle" }, g).textContent = ylabel;
+  return { svg, x, y, g, w, h, m };
+}
+
+// ---------- 1. the two gates ----------
+function transition(steep) {
+  // NSE where the NSE sigmoid reaches 10% and 90% (independent of avg)
+  const inv = 1 / (1 - Math.pow(steep, 0.1)), d = Math.log(9) / inv;
+  return [0.8 + 0.2 * (0.5 - d), 0.8 + 0.2 * (0.5 + d)];
+}
+function renderGate() {
+  const a = st.avg;
+  document.getElementById("avg-v").textContent = a.toFixed(2);
+  const F = frame(document.getElementById("gate-chart"), { w: 460, h: 260, x0: 0.7, x1: 1.0, y0: 0, y1: 1,
+    xticks: [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0], yticks: [0, 0.25, 0.5, 0.75, 1], xlabel: "NSE of the input", ylabel: "gate",
+    xfmt: (v) => v.toFixed(2), yfmt: (v) => v.toFixed(2) });
+  for (const [steep, dash] of [[0.25, null], [0.5, "5 4"]]) {
+    let d = "";
+    for (let i = 0; i <= 120; i++) { const n = 0.7 + 0.3 * i / 120; d += (i ? "L" : "M") + F.x(n).toFixed(1) + "," + F.y(gate(n, a, steep)).toFixed(1); }
+    const p = el("path", { d, fill: "none", stroke: "var(--ink)", "stroke-width": 2 }, F.g);
+    if (dash) p.setAttribute("stroke-dasharray", dash);
+  }
+  el("line", { x1: F.x(0.9), x2: F.x(0.9), y1: F.y(0), y2: F.y(1), stroke: "var(--axis)", "stroke-dasharray": "2 3" }, F.g);
+  const floor = 1 - (1 - sig(a, 0.5, 0.5));
+  const kv = document.getElementById("gate-kv");
+  const tr = transition(0.25), tl = transition(0.5);
+  kv.innerHTML = `<div><span class="v">${floor.toFixed(2)}</span><span class="k">lowest gate at this mean activity</span></div>
+    <div><span class="v">${tr[0].toFixed(2)}–${tr[1].toFixed(2)}</span><span class="k">response gate, 10–90% of its transition</span></div>
+    <div><span class="v">${tl[0].toFixed(2)}–${tl[1].toFixed(2)}</span><span class="k">learning gate, 10–90% of its transition</span></div>`;
+}
+
+// ---------- 2. raw inputs ----------
+function condLegend() {
+  document.getElementById("cond-legend").innerHTML = CONDS.map((c) =>
+    `<span><i class="sw" style="background:${CVAR[c]}"></i>${CLABEL[c]}</span>`).join("") +
+    `<span><i class="grad"></i>response gate 0 → 1</span>`;
+}
+function renderRaw() {
+  const R = D.raw[st.rawDs];
+  const F = frame(document.getElementById("raw-chart"), { w: 640, h: 330, x0: 0.75, x1: 1.0, y0: 0, y1: 1,
+    xticks: [0.75, 0.8, 0.85, 0.9, 0.95, 1.0], yticks: [0, 0.25, 0.5, 0.75, 1], xlabel: "NSE", ylabel: "mean activity",
+    xfmt: (v) => v.toFixed(2), yfmt: (v) => v.toFixed(2) });
+  const bg = el("g", {}, F.svg);
+  F.svg.insertBefore(bg, F.g);
+  const NX = 50, NY = 40;
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) {
+    const n0 = 0.75 + 0.25 * i / NX, n1 = 0.75 + 0.25 * (i + 1) / NX, a0 = j / NY, a1 = (j + 1) / NY;
+    const gv = gate((n0 + n1) / 2, (a0 + a1) / 2, 0.25);
+    el("rect", { x: F.x(n0), y: F.y(a1), width: F.x(n1) - F.x(n0) + 0.5, height: F.y(a0) - F.y(a1) + 0.5,
+      fill: "var(--heat)", "fill-opacity": (0.32 * gv).toFixed(3) }, bg);
+  }
+  const pts = el("g", {}, F.svg);
+  for (const c of CONDS) for (const [n, a] of R.scatter[c]) {
+    if (n < 0.75) continue;
+    const dot = el("circle", { cx: F.x(n), cy: F.y(a), r: 3.2, fill: CVAR[c], "fill-opacity": 0.75, stroke: "var(--surface)", "stroke-width": 1 }, pts);
+    dot.addEventListener("mouseenter", (ev) => showTip(ev, `${CLABEL[c]}<br>NSE ${n.toFixed(3)} · mean ${a.toFixed(3)}<br>response gate ${gate(n, a, 0.25).toFixed(2)}`));
+    dot.addEventListener("mousemove", moveTip); dot.addEventListener("mouseleave", hideTip);
+  }
+  const s = R.stats;
+  document.getElementById("raw-tbl").innerHTML =
+    `<tr><th>condition</th><th>NSE</th><th>mean</th><th>response gate</th><th>learning gate</th><th>peak response</th><th>peak without gate</th></tr>` +
+    CONDS.map((c) => `<tr><td><span class="chip"><i class="sw" style="background:${CVAR[c]}"></i>${CLABEL[c]}</span></td>
+      <td class="num">${s[c].nse.toFixed(3)}</td><td class="num">${s[c].avg.toFixed(3)}</td><td class="num">${s[c].gate_resp.toFixed(2)}</td>
+      <td class="num">${s[c].gate_learn.toFixed(2)}</td><td class="num">${s[c].peak.toFixed(2)}</td><td class="num">${R.saturated ? "—" : s[c].peak_ungated.toFixed(2)}</td></tr>`).join("");
+  const sp = R.sep;
+  document.getElementById("raw-sep").innerHTML = R.saturated
+    ? `Medians over 2000 inputs per condition. The group saturates on this dataset (outputs clamped at 1), so the gate cannot be divided out.`
+    : `Medians over 2000 inputs per condition. Separation of the peak response, with gate → without: real vs shuffled ${fsep(sp.real_vs_perm.with_gate)} → ${fsep(sp.real_vs_perm.without_gate)}, real vs uniform noise ${fsep(sp.real_vs_unif.with_gate)} → ${fsep(sp.real_vs_unif.without_gate)}. The gate on its own: ${fsep(sp.real_vs_perm.gate_itself)} vs shuffled, ${fsep(sp.real_vs_unif.gate_itself)} vs noise.`;
+}
+
+// ---------- 3. sparsity ----------
+function lineChart(host, series, { y0, y1, ylabel }) {
+  const fs = D.sparsity.fs;
+  const F = frame(host, { w: 560, h: 290, m: { t: 12, r: 16, b: 34, l: 48 },
+    x0: 0.003, x1: 1, y0, y1, xlog: true, xticks: [0.003, 0.01, 0.03, 0.1, 0.3, 1], yticks: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].filter((t) => t >= y0 - 1e-9 && t <= y1 + 1e-9 && (y1 - y0 <= 0.4 || Math.round(t * 10) % 2 === 0)),
+    xlabel: "fraction of entries active (log)", ylabel, xfmt: (v) => (v * 100) + "%", yfmt: (v) => v.toFixed(1) });
+  for (const s of series) {
+    let d = "";
+    s.vals.forEach((v, i) => { d += (i ? "L" : "M") + F.x(fs[i]).toFixed(1) + "," + F.y(Math.max(y0, v)).toFixed(1); });
+    const p = el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-opacity": s.op ?? 1 }, F.g);
+    if (s.dash) p.setAttribute("stroke-dasharray", s.dash);
+    for (let j = 0; j < s.vals.length; j++) {
+      const hit = el("circle", { cx: F.x(fs[j]), cy: F.y(Math.max(y0, s.vals[j])), r: 6, fill: "transparent" }, F.g);
+      hit.addEventListener("mouseenter", (ev) => showTip(ev, `${s.label}<br>${(fs[j] * 100).toFixed(1)}% active → ${s.vals[j].toFixed(3)}`));
+      hit.addEventListener("mousemove", moveTip); hit.addEventListener("mouseleave", hideTip);
+    }
+  }
+  return F;
+}
+function renderSparsity() {
+  const Ns = [784, 3072, 4096, 12288];
+  const series = Ns.map((N, i) => ({ vals: D.sparsity.nse[`${N}|${st.floor}`], color: "var(--heat)", op: [0.35, 0.55, 0.78, 1][i],
+    label: `${N} inputs`, dy: [-6, -2, 2, 6][i] }));
+  const F = lineChart(document.getElementById("sp-nse"), series, { y0: st.floor === "0.0" ? 0.3 : 0.7, y1: 1, ylabel: "NSE" });
+  document.getElementById("sp-nse-leg").innerHTML = series.map((s) =>
+    `<span><i class="sw line" style="background:var(--heat);opacity:${s.op}"></i>${s.label}</span>`).join("");
+  el("line", { x1: F.x(0.003), x2: F.x(1), y1: F.y(0.9), y2: F.y(0.9), stroke: "var(--ink)", "stroke-dasharray": "2 3", "stroke-opacity": 0.5 }, F.g);
+  el("text", { x: F.x(1), y: F.y(0.9) - 4, "text-anchor": "end" }, F.g).textContent = "gate centre 0.9";
+  const M = D.sparsity.measures;
+  const dashes = { "NSE": null, "NSE above floor": "6 3", "1 - top-10% share": "2 3", "mean / max": "8 3 2 3", "1 - Hoyer": "14 4" };
+  lineChart(document.getElementById("sp-meas"), Object.keys(M).map((m) => ({ vals: M[m], color: "var(--ink)", dash: dashes[m], label: m.replace("1 - ", "1 − ") })),
+    { y0: 0, y1: 1, ylabel: "measure (higher = noisier)" });
+  document.getElementById("sp-meas-leg").innerHTML = Object.keys(M).map((m) =>
+    `<span><svg width="22" height="6" style="display:inline-block;width:22px"><line x1="0" x2="22" y1="3" y2="3" stroke="var(--ink)" stroke-width="2"${dashes[m] ? ` stroke-dasharray="${dashes[m]}"` : ""}></line></svg>${m.replace("1 - ", "1 − ")}</span>`).join("");
+}
+
+// ---------- 4. retina ----------
+function renderRetina() {
+  const R = D.retina[st.retDs], K = R.k[st.k];
+  const F = frame(document.getElementById("ret-chart"), { w: 520, h: 420, m: { t: 12, r: 16, b: 38, l: 48 }, x0: 0.8, x1: 1.0, y0: 0.8, y1: 1.0,
+    xticks: [0.8, 0.85, 0.9, 0.95, 1.0], yticks: [0.8, 0.85, 0.9, 0.95, 1.0], xlabel: "NSE of the ON channel", ylabel: "NSE of the OFF channel",
+    xfmt: (v) => v.toFixed(2), yfmt: (v) => v.toFixed(2) });
+  el("line", { x1: F.x(0.9), x2: F.x(0.9), y1: F.y(0.8), y2: F.y(1), stroke: "var(--ink)", "stroke-dasharray": "3 3", "stroke-opacity": 0.45 }, F.g);
+  el("line", { x1: F.x(0.8), x2: F.x(1), y1: F.y(0.9), y2: F.y(0.9), stroke: "var(--ink)", "stroke-dasharray": "3 3", "stroke-opacity": 0.45 }, F.g);
+  const clip = (v) => Math.min(1, Math.max(0.8, v));
+  for (const c of CONDS) for (const [a, b] of K.scatter[c]) {
+    const dot = el("circle", { cx: F.x(clip(a)), cy: F.y(clip(b)), r: 3.2, fill: CVAR[c], "fill-opacity": 0.75, stroke: "var(--surface)", "stroke-width": 1 }, F.g);
+    dot.addEventListener("mouseenter", (ev) => showTip(ev, `${CLABEL[c]}<br>NSE ON ${a.toFixed(3)} · OFF ${b.toFixed(3)}`));
+    dot.addEventListener("mousemove", moveTip); dot.addEventListener("mouseleave", hideTip);
+  }
+  const s = K.stats;
+  document.getElementById("ret-kv").innerHTML = `
+    <div style="--c:var(--c-real)"><span class="v">${s.real.learn_on.toFixed(2)} / ${s.real.learn_off.toFixed(2)}</span><span class="k">learning gate ON / OFF, real (median)</span></div>
+    <div style="--c:var(--c-real)"><span class="v">${s.real.resp_joint.toFixed(2)}</span><span class="k">response gate, real</span></div>
+    <div style="--c:var(--c-perm)"><span class="v">${s.perm.resp_joint.toFixed(2)}</span><span class="k">response gate, shuffled</span></div>
+    <div style="--c:var(--c-unif)"><span class="v">${s.unif.resp_joint.toFixed(2)}</span><span class="k">response gate, noise</span></div>
+    <div><span class="v">${fsep(K.sep.real_vs_perm)} / ${fsep(K.sep.real_vs_unif)}</span><span class="k">response gate separation vs shuffled / noise</span></div>`;
+  const ex = document.getElementById("ret-ex");
+  ex.innerHTML = `<div class="exrow"><span></span><span class="exhead">input</span><span class="exhead">ON</span><span class="exhead">OFF</span></div>` +
+    CONDS.map((c) => `<div class="exrow"><span class="rl"><i class="sw" style="background:${CVAR[c]}"></i>${c === "real" ? "real" : c === "perm" ? "shuffled" : "noise"}</span>
+      <figure><img alt="${CLABEL[c]} input" src="${R.examples[c].input}"></figure>
+      <figure><img alt="ON channel" src="${K.img[c].on}"><figcaption>NSE ${K.img[c].nse_on.toFixed(3)}</figcaption></figure>
+      <figure><img alt="OFF channel" src="${K.img[c].off}"><figcaption>NSE ${K.img[c].nse_off.toFixed(3)}</figcaption></figure></div>`).join("");
+}
+
+// ---------- 5. candidates ----------
+function renderCandidates() {
+  const C = D.candidates, M = C.measures;
+  const cell = (v) => {
+    const a = Math.min(1, Math.abs(v)) * 0.55, col = v >= 0 ? "var(--heat)" : "var(--neg)";
+    return `<span style="display:inline-block;min-width:3.4em;padding:2px 4px;border-radius:3px;background:color-mix(in srgb, ${col} ${(a * 100).toFixed(0)}%, transparent)">${fsep(v)}</span>`;
+  };
+  let html = `<tr><th>dataset</th><th>input</th>${M.map((m) => `<th>${m.replace("1 - ", "1 − ")}</th>`).join("")}</tr>`;
+  let last = "";
+  for (const r of C.rows) {
+    const first = r.ds !== last; last = r.ds;
+    html += `<tr class="${first ? "grp" : ""}"><td>${first ? (DSLABEL[r.ds] || r.ds) : ""}</td><td>${r.view === "raw" ? "raw pixels" : r.view === "joint" ? "ON+OFF joint" : "retina " + r.view}</td>` +
+      M.map((m) => `<td class="cell">${cell(r.vals[m][0])} ${cell(r.vals[m][1])}</td>`).join("") + `</tr>`;
+  }
+  document.getElementById("cand-tbl").innerHTML = html;
+}
+
+// ---------- wiring ----------
+document.getElementById("avg").addEventListener("input", (e) => { st.avg = +e.target.value; renderGate(); });
+seg("raw-ds", Object.keys(D.raw).map((k) => [k, DSLABEL[k] || k]), "rawDs", renderRaw);
+seg("sp-floor", [["0.0", "none"], ["0.05", "U(0, 0.05)"]], "floor", renderSparsity);
+seg("ret-ds", Object.keys(D.retina).map((k) => [k, k]), "retDs", renderRetina);
+seg("ret-k", D.ks.map((k) => [k.toFixed(1), k.toFixed(1)]), "k", renderRetina);
+document.getElementById("prov").innerHTML = D.provenance || "";
+condLegend();
+renderGate(); renderRaw(); renderSparsity(); renderRetina(); renderCandidates();
+</script>

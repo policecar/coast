@@ -1,81 +1,77 @@
 //
-// Created by jk on 04.09.25.
+// Grayscale IDX dataset IO entities: MNIST, EMNIST, KMNIST.
+//
+// The three loaders are one implementation (idx_gray_io) that differs only in
+// its config type and names. Each stays a distinct C++ type, so its
+// element_type, its io_entity_type_t dispatch and its "<name>_input" structural
+// path are unchanged. color_mnist (RGB output) keeps its own class.
 //
 
 #ifndef MNIST_IO_H
 #define MNIST_IO_H
 
-#include <functional>
 #include <span>
 #include <string>
+#include <tuple>
 
-#include "core/rng/fast_rng.h"
-#include "io_entity.h"
-#include "mnist_db.h"
-#include "mnist_cfg.h"
+#include "io/idx_io_base.h"
+#include "io/mnist_cfg.h"
+#include "io/emnist_cfg.h"
+#include "io/kmnist_cfg.h"
 #include "core/entity_element_macros.h"
 
-namespace mnist {
+namespace dataset {
 
-class mnist_io : public sim::io_entity, public mnist_db {
+// Tag: config type, element_type display name, status_str() label.
+template <typename Param, const char* TypeName, const char* Label>
+struct idx_gray_tag {
+    using param_t = Param;
+    static constexpr const char* type_name = TypeName;
+    static constexpr const char* label     = Label;
+};
 
-    const mnist_param_t params;
-
+template <typename Tag>
+class idx_gray_io final : public idx_io_base {
 public:
-    // Entity element interface
-    ELEMENT_TYPE(mnist_io, "mnist_input")
+    ELEMENT_TYPE(idx_gray_io, Tag::type_name)
 
-    std::function<std::span<float>()> output_mem {};
+    explicit idx_gray_io(const typename Tag::param_t& params, sim::output_id_t output_id)
+        : idx_io_base(params.image_file, params.label_file, output_id, params) {}
 
-    sim::output_id_t id;
-
-    std::size_t cur_epoch;
-    std::size_t cur_idx;
-
-    std::size_t ci_cnt;
-    int change_interval;
-
-    fast_rng_t rgen;
-    std::uniform_real_distribution<float> dis;
-
-public:
-    explicit mnist_io(const mnist_param_t &params, sim::output_id_t output_id);
-
-    void set_outp_func(std::function<std::span<float>()>) override;
-
-    void process() override;
-
-    [[nodiscard]] sim::output_id_t get_outp_id() const override;
-    [[nodiscard]] std::size_t get_outp_size() const override;
-
-    [[nodiscard]] std::span<const std::size_t> get_inp_ids() const override { return {}; }
+    sim::step_result process() override;
 
     [[nodiscard]] std::string status_str() const override;
 
-    // State persistence
-    void save_state(logging::state_writer& writer) const override;
-    void load_state(logging::state_reader& reader) override;
-
-    [[nodiscard]] int get_change_interval() { return change_interval; }
-
-    // dataset_io interface
-    [[nodiscard]] std::tuple<int,int,int> get_image_info() const {
-        return { 28, 28, 1 };
-    }
-    [[nodiscard]] std::size_t sample_count() const {
-        return get_image_cnt();
-    }
-    [[nodiscard]] std::size_t current_epoch() const {
-        return cur_epoch;
-    }
-    [[nodiscard]] std::size_t current_index() const {
-        return cur_idx;
-    }
+    // dataset_io interface (see gui_core/dataset_access.cpp)
+    [[nodiscard]] std::tuple<int,int,int> get_image_info() const { return { 28, 28, 1 }; }
+    [[nodiscard]] std::size_t sample_count() const { return get_image_cnt(); }
+    [[nodiscard]] std::size_t current_epoch() const { return seq_.current_epoch(); }
+    [[nodiscard]] std::size_t current_index() const { return seq_.current_index(); }
     [[nodiscard]] std::span<const float> get_sample(std::size_t idx) const {
         return get_norm_image(idx);
     }
 };
 
-} // sim
+inline constexpr char mnist_type_name[]  = "mnist_input";
+inline constexpr char emnist_type_name[] = "emnist_input";
+inline constexpr char kmnist_type_name[] = "kmnist_input";
+inline constexpr char mnist_label[]      = "MNIST";
+inline constexpr char emnist_label[]     = "EMNIST";
+inline constexpr char kmnist_label[]     = "KMNIST";
+
+using mnist_tag  = idx_gray_tag<mnist::mnist_param_t,   mnist_type_name,  mnist_label>;
+using emnist_tag = idx_gray_tag<emnist::emnist_param_t, emnist_type_name, emnist_label>;
+using kmnist_tag = idx_gray_tag<kmnist::kmnist_param_t, kmnist_type_name, kmnist_label>;
+
+// Member functions are defined and instantiated in mnist_io.cpp.
+extern template class idx_gray_io<mnist_tag>;
+extern template class idx_gray_io<emnist_tag>;
+extern template class idx_gray_io<kmnist_tag>;
+
+} // namespace dataset
+
+namespace mnist  { using mnist_io  = dataset::idx_gray_io<dataset::mnist_tag>;  }
+namespace emnist { using emnist_io = dataset::idx_gray_io<dataset::emnist_tag>; }
+namespace kmnist { using kmnist_io = dataset::idx_gray_io<dataset::kmnist_tag>; }
 
 #endif //MNIST_IO_H

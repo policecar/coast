@@ -1,0 +1,179 @@
+[
+  {
+    "name": "population_out",
+    "group": "population",
+    "site": "out",
+    "kind": "group_level",
+    "pattern": "^out$",
+    "dtype": "float32",
+    "shape": "group_width",
+    "backends": [
+      "cpu"
+    ],
+    "models": [
+      "ngm2",
+      "ngm3",
+      "ngm25"
+    ],
+    "note": "post-inhibition group output; emitted by all three models' CPU neuron_group_t::perform_observations (also by ngm3's neuron_group_gpu_t::perform_observations \u2014 out of scope)."
+  },
+  {
+    "name": "population_out_pre_inhibition",
+    "group": "population",
+    "site": "out_pre_inhibition",
+    "kind": "group_level",
+    "pattern": "^out_pre_inhibition$",
+    "dtype": "float32",
+    "shape": "group_width",
+    "backends": [
+      "cpu"
+    ],
+    "models": [
+      "ngm3",
+      "ngm25"
+    ],
+    "note": "pre-inhibition per-neuron drive; CPU only, emitted by ngm3 and ngm25 neuron_group_t::perform_observations. ngm2 has no separate pre-inhibition buffer (inhibition is in-place) and does not emit it. The ngm3/ngm25 GPU overrides also do not emit this site (TODO gpu-parity, deferred): the contract test is CPU-scoped."
+  },
+  {
+    "name": "population_in",
+    "group": "population",
+    "site": "in",
+    "kind": "group_level",
+    "pattern": "^in$",
+    "dtype": "float32",
+    "shape": "input_width",
+    "backends": [
+      "cpu"
+    ],
+    "models": [
+      "ngm2",
+      "ngm3",
+      "ngm25"
+    ],
+    "note": "proximal feedforward input (the presented sample); emitted by all three models' CPU neuron_group_t::perform_observations (also by ngm3's neuron_group_gpu_t::perform_observations \u2014 out of scope). ngm25's \"in\" is input_concat_ (proximal+apical already combined -- see population_in_apical below)."
+  },
+  {
+    "name": "population_in_apical",
+    "group": "population",
+    "site": "in_apical",
+    "kind": "group_level",
+    "pattern": "^in_apical$",
+    "dtype": "float32",
+    "shape": "input_width",
+    "backends": [
+      "cpu"
+    ],
+    "models": [
+      "ngm3"
+    ],
+    "note": "top-down/context input; ngm3 CPU only, conditional on apical_cnt > 0, in neuron_group_t::perform_observations (also ngm3's neuron_group_gpu_t::perform_observations \u2014 out of scope). Dormant (not emitted) whenever apical_cnt == 0, e.g. configs/mnist_ngm3.json. ngm25 has no separate apical site -- its apical bank is folded into population_in's input_concat_ above -- and ngm2 has no apical bank at all."
+  },
+  {
+    "name": "neuron_activity",
+    "group": "neuron",
+    "site": "activity",
+    "kind": "per_neuron",
+    "pattern": "^activity$",
+    "dtype": "float32",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "ngm2 per-entity site (no ngm3 equivalent \u2014 ngm3 is a flat group-leaf model with no neuron_t entities): ngm2 neuron_t::perform_observations."
+  },
+  {
+    "name": "neuron_dendrite_count",
+    "group": "neuron",
+    "site": "dendrite_count",
+    "kind": "per_neuron",
+    "pattern": "^dendrite_count$",
+    "dtype": "uint32",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "ngm2 per-entity site: neuron_t::perform_observations."
+  },
+  {
+    "name": "dendrite_segment_activity",
+    "group": "dendrite",
+    "site": "segment_activity",
+    "kind": "per_dendrite",
+    "pattern": "^segment_activity$",
+    "dtype": "float32",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "ngm2 per-entity site: dendrite_t::perform_observations."
+  },
+  {
+    "name": "dendrite_synapse_count",
+    "group": "dendrite",
+    "site": "synapse_count",
+    "kind": "per_dendrite",
+    "pattern": "^synapse_count$",
+    "dtype": "uint32",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "ngm2 per-entity site: dendrite_t::perform_observations."
+  },
+  {
+    "name": "dendrite_attenuation",
+    "group": "dendrite",
+    "site": "attenuation",
+    "kind": "per_dendrite",
+    "pattern": "^attenuation$",
+    "dtype": "float32",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "ngm2 per-entity site: dendrite_t::perform_observations."
+  },
+  {
+    "name": "dendrite_representation_count",
+    "group": "dendrite",
+    "site": "representation_count",
+    "kind": "per_dendrite",
+    "pattern": "^representation_count$",
+    "dtype": "uint32",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "ngm2 per-entity site: dendrite_t::perform_observations. Distinct from population_structure_representation_count below (same local_id pattern, different kind/entity level; safe because a run emits only one model's sites)."
+  },
+  {
+    "name": "input_index",
+    "group": "input",
+    "site": "index",
+    "kind": "group_level",
+    "pattern": "^index$",
+    "dtype": "uint64",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "note": "model-agnostic dataset-loader site, maps step -> sample index; emitted by the loaders' perform_observations: chairs3d_io, cifar_io_base, idx_io_base, dsprites_io."
+  },
+  {
+    "name": "population_structure_representation_count",
+    "group": "population_structure",
+    "site": "representation_count",
+    "kind": "group_level",
+    "pattern": "^representation_count$",
+    "dtype": "uint64",
+    "shape": "scalar",
+    "backends": [
+      "cpu"
+    ],
+    "models": [
+      "ngm3",
+      "ngm25"
+    ],
+    "note": "group-total distinct seg_ids across all dendrites, one scalar per step; CPU only, emitted by ngm3 and ngm25 neuron_group_t::perform_observations via get_total_representation_count(). In its own group because that scan is expensive: a run observing only `population` must not pay for it. ngm2 has no group-total equivalent (its per-dendrite representation_count is an orthogonal leaf-bitmask occupation count) and does not emit this site. Reuses the ngm2 dendrite `^representation_count$` local_id pattern but is a distinct schema entry (kind=group_level vs per_dendrite); safe because a single run emits only one model's sites."
+  }
+]

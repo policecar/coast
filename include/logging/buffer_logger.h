@@ -5,14 +5,16 @@
 #ifndef COAST_BUFFER_LOGGER_H
 #define COAST_BUFFER_LOGGER_H
 
-#include "logging_common.h"
-#include "hdf5_utils.h"
-#include "gui_vis/core/vis_hints.h"
+#include "logging/logging_common.h"
+#include "logging/hdf5_utils.h"
 
+#include <chrono>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <optional>
 
@@ -21,6 +23,8 @@ namespace sim {
     class io_buffer;
 }
 
+namespace hdf5 { class executor; }
+
 namespace logging {
 
 /// Configuration for buffer logging
@@ -28,9 +32,12 @@ struct buffer_logger_config {
     std::filesystem::path output_path;
     std::size_t chunk_size = 1000;           // Frames per chunk
     compression_config compression;
-    bool include_stats = true;               // Log buffer statistics
     std::string config_json;                 // Simulation config for metadata
-    std::optional<coast::vis_hints_t> vis_hints;  // Visualization hints from sim config
+    /// Time source for the frame timestamps (seconds since start()). Empty =
+    /// std::chrono::steady_clock::now. Injectable so a test can pin the time
+    /// origin exactly instead of depending on how fast the machine runs. Called
+    /// from start() and from the sim thread; must be thread-safe.
+    std::function<std::chrono::steady_clock::time_point()> clock;
 };
 
 /// Visualization hints for a buffer (stored in HDF5 for replay)
@@ -54,10 +61,14 @@ struct network_topology {
     std::vector<buffer_info> buffers;
 };
 
-/// Captures all IO buffer contents at each simulation step
+/// Captures all IO buffer contents at each simulation step.
+///
+/// All HDF5 work is submitted to the process-wide hdf5::executor; the
+/// hooks called on the sim thread enqueue work but do not enter libhdf5
+/// directly. See design/hdf5-executor.md.
 class buffer_logger {
 public:
-    explicit buffer_logger(sim::env& env, buffer_logger_config config);
+    buffer_logger(sim::env& env, buffer_logger_config config, hdf5::executor& h5_exec);
     ~buffer_logger();
 
     buffer_logger(const buffer_logger&) = delete;
@@ -66,30 +77,79 @@ public:
     /// Start logging (registers hooks, opens file)
     log_result start();
 
-    /// Stop logging (unregisters hooks, closes file)
+    /// Remove the post-swap hook. env hook removal is synchronous (#235): once
+    /// this returns, the hook is not running and never runs again — on the sim
+    /// thread between steps (inside a run_quiesced task, as
+    /// logging_manager::stop_buffer_logging does) or on any other thread.
+    /// Idempotent.
+    void detach_hook();
+
+    /// Stop logging: detach the hook (if still attached), write the remaining
+    /// frames, close the file. Returns an error if any write of this session
+    /// failed (write_ok() false), including a failure the final close surfaces:
+    /// the file is then incomplete. Precondition: the hook cannot run concurrently —
+    /// detach_hook() already ran inside run_quiesced, or the sim thread is not
+    /// stepping (joined, or never started). Callers with a live sim thread go
+    /// through logging_manager::stop_buffer_logging(ctrl).
     log_result stop();
 
-    /// Force flush buffered data to disk
+    /// Force flush buffered data to disk. Same precondition as stop(): it
+    /// touches the frame buffer the hook appends to, so call it inside
+    /// run_quiesced (sim thread, between steps) or with the sim not stepping.
     void flush();
 
     /// Check if currently logging
     [[nodiscard]] bool is_logging() const { return logging_active_; }
 
-    /// Get statistics
-    [[nodiscard]] const log_stats& stats() const { return stats_; }
+    /// Snapshot of the counters published after each written batch. Safe from
+    /// any thread (issue #214): stats_ itself is written by write_frames() on
+    /// the HDF5 executor while the GUI / headless main thread polls this.
+    [[nodiscard]] log_stats stats() const
+    {
+        log_stats s;
+        s.frames_written = published_frames_.load(std::memory_order_relaxed);
+        s.bytes_written  = published_bytes_.load(std::memory_order_relaxed);
+        return s;
+    }
+
+    /// False once any HDF5 write of this session has failed (issue #203): disk
+    /// full, file size limit, I/O error. Sticky until the next start(); after
+    /// the failure no further frames are written. frames_written then counts
+    /// the frames HDF5 accepted, NOT what is readable: HDF5 caches chunks and
+    /// metadata, so a file that hit a full disk usually cannot be opened at
+    /// all. Safe from any thread.
+    [[nodiscard]] bool write_ok() const
+    {
+        return !write_failed_.load(std::memory_order_relaxed);
+    }
 
     /// Get the output file path
     [[nodiscard]] const std::filesystem::path& output_path() const { return config_.output_path; }
 
 private:
-    sim::env& env_;
+    sim::env&         env_;
+    hdf5::executor& h5_exec_;
     buffer_logger_config config_;
 
     bool logging_active_ = false;
-    std::size_t hook_id_ = 0;
-    std::uint64_t start_step_ = 0;
+    // Empty = no hook attached. Not a 0 sentinel: env hook ids start at 0.
+    std::optional<std::size_t> hook_id_;
+    std::chrono::steady_clock::time_point start_time_{};  // timestamp origin
 
+    // Writer-side counters: touched only inside write_frames() (on the executor,
+    // ordered by submit_sync with the hook) and reset by start() before the hook
+    // is attached. stats_.frames_written is also the next batch's row offset.
     log_stats stats_;
+    // What stats() reports. Relaxed: each is a standalone counter, and no other
+    // data is published through them.
+    std::atomic<std::uint64_t> published_frames_{0};
+    std::atomic<std::uint64_t> published_bytes_{0};
+
+    // Sticky write failure (#203). Set on the executor by fail(); read by
+    // write_ok() from any thread. The message is executor-side state like
+    // stats_, read by stop() after its last submit_sync.
+    std::atomic<bool> write_failed_{false};
+    std::string       write_error_;
 
     // HDF5 handles
     hdf5::file file_;
@@ -102,7 +162,6 @@ private:
         std::size_t buffer_id;
         std::size_t buffer_size;
         hdf5::dataset data;
-        hdf5::dataset stats;
         std::size_t current_rows = 0;
     };
     std::vector<buffer_datasets> buffer_datasets_;
@@ -110,14 +169,12 @@ private:
     // Step tracking datasets
     hdf5::dataset step_numbers_;
     hdf5::dataset timestamps_;
-    std::size_t step_count_ = 0;
 
     // Buffer for batching writes
     struct frame_data {
         std::uint64_t step;
         double timestamp;
         std::vector<std::vector<float>> buffer_data;
-        std::vector<std::array<float, 5>> buffer_stats;  // sum, avg, min, max, nse
     };
     std::vector<frame_data> frame_buffer_;
 
@@ -125,10 +182,12 @@ private:
     log_result create_file();
     log_result write_metadata();
     log_result create_datasets();
+    void close_hdf5_resources(bool flush_file);
     network_topology extract_topology();
 
     void capture_frame(std::uint64_t step);
     void write_frames();
+    void fail(std::string what);   // executor only: record the first failure
 };
 
 } // namespace logging

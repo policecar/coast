@@ -11,9 +11,12 @@
 #include <vector>
 
 #include "core/rng/fast_rng.h"
-#include "io_entity.h"
-#include "dsprites_cfg.h"
+#include "sim_core/io_entity.h"
+#include "io/dsprites_cfg.h"
+#include "io/sample_sequencer.h"
 #include "core/entity_element_macros.h"
+
+namespace hdf5 { class executor; }
 
 namespace dsprites {
 
@@ -21,6 +24,7 @@ class dsprites_io : public sim::io_entity {
 public:
     // Entity element interface
     ELEMENT_TYPE(dsprites_io, "dsprites_input")
+    void perform_observations(observe::observe_accessor& acc) override;
 
 private:
     static constexpr std::size_t image_dim = 64;
@@ -29,27 +33,31 @@ private:
     std::vector<float> images;
     std::size_t image_count = 0;
 
-    std::function<std::span<float>()> output_mem {};
+    sim::io_buffer* output_buf {nullptr};
 
     const dsprites_param_t params;
     sim::output_id_t id;
 
-    std::size_t cur_epoch;
-    std::size_t cur_idx;
+    dataset::sample_sequencer seq_;
 
-    std::size_t ci_cnt;
-    int change_interval;
+    // Snapshot of seq_.current_index() taken in process() before seq_.advance(),
+    // read back in perform_observations (post-process pass runs after process()).
+    std::uint64_t observed_index_ {0};
 
     fast_rng_t rgen;
     std::uniform_real_distribution<float> dis;
-    std::uniform_int_distribution<std::size_t> idx_dis;
 
 public:
-    explicit dsprites_io(const dsprites_param_t& params, sim::output_id_t output_id);
+    /// Loads the dSprites image set from the HDF5 file at construction time.
+    /// The libhdf5 work runs on the executor's worker thread, so the
+    /// constructor blocks on a single submit_sync that opens the file,
+    /// reads the dataset and closes everything before returning.
+    dsprites_io(const dsprites_param_t& params, sim::output_id_t output_id,
+                hdf5::executor& h5_exec);
 
-    void set_outp_func(std::function<std::span<float>()>) override;
+    void set_output_buffer(sim::io_buffer&) override;
 
-    void process() override;
+    sim::step_result process() override;
 
     [[nodiscard]] sim::output_id_t get_outp_id() const override;
     [[nodiscard]] std::size_t get_outp_size() const override;
@@ -62,7 +70,9 @@ public:
     void save_state(logging::state_writer& writer) const override;
     void load_state(logging::state_reader& reader) override;
 
-    [[nodiscard]] int& get_change_interval() { return change_interval; }
+    [[nodiscard]] std::optional<seed_t> effective_seed() const override {
+        return params.random_seed;
+    }
 
     // dataset_io interface
     [[nodiscard]] std::tuple<int,int,int> get_image_info() const {
@@ -70,12 +80,6 @@ public:
     }
     [[nodiscard]] std::size_t sample_count() const {
         return image_count;
-    }
-    [[nodiscard]] std::size_t current_epoch() const {
-        return cur_epoch;
-    }
-    [[nodiscard]] std::size_t current_index() const {
-        return cur_idx;
     }
     [[nodiscard]] std::span<const float> get_sample(std::size_t idx) const {
         if (idx >= image_count) idx = image_count - 1;

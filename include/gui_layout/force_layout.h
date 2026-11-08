@@ -5,7 +5,7 @@
 #ifndef COAST_FORCE_LAYOUT_H
 #define COAST_FORCE_LAYOUT_H
 
-#include "layout_graph.h"
+#include "gui_layout/layout_graph.h"
 
 #include <memory>
 

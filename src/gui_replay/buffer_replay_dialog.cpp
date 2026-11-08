@@ -10,7 +10,8 @@
 
 namespace coast::replay {
 
-buffer_replay_dialog::buffer_replay_dialog() {
+buffer_replay_dialog::buffer_replay_dialog(hdf5::executor& h5_exec)
+    : reader_(h5_exec) {
     // Set up file browser
     file_browser_.SetTitle("Open Buffer Log");
     file_browser_.SetTypeFilters({".h5", ".hdf5"});
@@ -279,14 +280,20 @@ void buffer_replay_dialog::render_config_panel() {
         node_renderer_.apply_global_config_to_nodes(graph_);
     }
 
-    // Colormap
-    static const char* colormap_names[] = {"Grayscale", "Green", "Viridis", "Plasma", "Inferno", "Cool"};
+    // Colormap — enum-driven so it stays in sync with colormap_t.
     vis_config config = node_renderer_.global_config();
-    int cm = static_cast<int>(config.colormap);
-    if (ImGui::Combo("Colormap", &cm, colormap_names, 6)) {
-        config.colormap = static_cast<colormap_t>(cm);
-        node_renderer_.set_global_config(config);
-        node_renderer_.apply_global_config_to_nodes(graph_);
+    if (ImGui::BeginCombo("Colormap", colormap_name(config.colormap))) {
+        for (int i = 0; i < static_cast<int>(colormap_t::COUNT); ++i) {
+            const auto cm  = static_cast<colormap_t>(i);
+            const bool sel = (config.colormap == cm);
+            if (ImGui::Selectable(colormap_name(cm), sel)) {
+                config.colormap = cm;
+                node_renderer_.set_global_config(config);
+                node_renderer_.apply_global_config_to_nodes(graph_);
+            }
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
     }
 
     // Auto normalize
@@ -431,7 +438,6 @@ void buffer_replay_dialog::render_info_panel() {
                         ImGui::Text("  Avg: %.4f", data->current_stats.avg);
                         ImGui::Text("  Min: %.4f", data->current_stats.min_val);
                         ImGui::Text("  Max: %.4f", data->current_stats.max_val);
-                        ImGui::Text("  NSE: %.4f", data->current_stats.nse);
                     }
                 } catch (...) {}
             }
@@ -628,24 +634,20 @@ void buffer_replay_dialog::update_frame_data() {
         // Read frame data
         std::vector<float> frame_data;
         if (reader_.read_frame_data(data->buffer_id, current_frame_, frame_data)) {
-            // Get stats
-            auto stats = reader_.read_frame_stats(data->buffer_id, current_frame_);
+            // Stats are recomputed from the logged frame data: the buffer_logger
+            // no longer writes a per-frame stats dataset (dropped in the S0 stats
+            // refactor), so there is nothing to read back.
             frame_stats fs;
-            if (stats) {
-                fs = *stats;
-            } else {
-                // Compute stats manually if not available
-                if (!frame_data.empty()) {
-                    fs.sum = 0.0f;
-                    fs.min_val = frame_data[0];
-                    fs.max_val = frame_data[0];
-                    for (float v : frame_data) {
-                        fs.sum += v;
-                        fs.min_val = std::min(fs.min_val, v);
-                        fs.max_val = std::max(fs.max_val, v);
-                    }
-                    fs.avg = fs.sum / static_cast<float>(frame_data.size());
+            if (!frame_data.empty()) {
+                fs.sum = 0.0f;
+                fs.min_val = frame_data[0];
+                fs.max_val = frame_data[0];
+                for (float v : frame_data) {
+                    fs.sum += v;
+                    fs.min_val = std::min(fs.min_val, v);
+                    fs.max_val = std::max(fs.max_val, v);
                 }
+                fs.avg = fs.sum / static_cast<float>(frame_data.size());
             }
 
             node_renderer_.update_node_data(node, frame_data, fs);

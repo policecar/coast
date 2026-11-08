@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <format>
 #include <stdexcept>
 #include <ranges>
 
@@ -13,8 +14,11 @@
 #include "stb_image.h"
 #include "stb_image_resize2.h"
 
-#include "chairs3d_io.h"
+#include "io/chairs3d_io.h"
+#include "core/require.h"
 #include "logging/state_io.h"
+#include "logging/rng_state_io.h"
+#include "observe/observe_accessor.h"
 
 namespace chairs3d {
 
@@ -29,7 +33,7 @@ chairs3d_io::chairs3d_io(const chairs3d_param_t& params, sim::output_id_t output
     cur_idx(0),
     ci_cnt(0),
     change_interval(params.change_interval),
-    rgen(params.random_seed),
+    rgen(std::to_underlying(params.random_seed)),
     dis(params.noise_range.first, params.noise_range.second)
 {
     if (params.noise_range.first > params.noise_range.second) {
@@ -97,23 +101,20 @@ chairs3d_io::chairs3d_io(const chairs3d_param_t& params, sim::output_id_t output
     }
 }
 
-void chairs3d_io::set_outp_func(std::function<std::span<float>()> function)
+void chairs3d_io::set_output_buffer(sim::io_buffer& buf)
 {
-    output_mem = std::move(function);
+    output_buf = &buf;
 }
 
-void chairs3d_io::process()
+sim::step_result chairs3d_io::process()
 {
-    if (!output_mem) {
-        throw std::runtime_error("chairs3d_io::process() called before set_outp_func()");
-    }
-    auto outp = output_mem();
-    if (outp.size() != image_pixels) {
-        throw std::runtime_error("Output span size mismatch: expected " +
-            std::to_string(image_pixels) + ", got " + std::to_string(outp.size()));
-    }
+    COAST_REQUIRE(output_buf != nullptr, core::error_kind::contract_violation);
+    auto outp = output_buf->cur_write_buffer();
+    COAST_REQUIRE(outp.size() == image_pixels, core::error_kind::contract_violation);
 
     if (change_interval > 0) {
+        COAST_REQUIRE((cur_idx + 1) * image_pixels <= images.size(),
+                      core::error_kind::contract_violation);
         auto img = std::span(images.begin() + cur_idx * image_pixels, image_pixels);
         std::ranges::copy(img, outp.begin());
     } else {
@@ -124,6 +125,13 @@ void chairs3d_io::process()
         ov = std::clamp(ov + dis(rgen), 0.0f, 1.0f);
     }
 
+    // Record which sample is presented this step. This does NOT line up with
+    // population/out at equal step_index: IO buffers are double-buffered, so a
+    // consumer reads this value one step later -- one step per buffered hop on
+    // the feedforward path, and recurrent (attractor) groups have no fixed
+    // offset at all. cur_idx is std::size_t (no observe dtype specialisation) -> cast.
+    observed_index_ = static_cast<std::uint64_t>(cur_idx);  // snapshot before cur_idx advances; read in perform_observations
+
     if (change_interval > 0 && ++ci_cnt >= static_cast<std::size_t>(change_interval)) {
         ci_cnt = 0;
         if (++cur_idx >= image_count) {
@@ -131,6 +139,8 @@ void chairs3d_io::process()
             ++cur_epoch;
         }
     }
+
+    return {};
 }
 
 sim::output_id_t chairs3d_io::get_outp_id() const
@@ -158,13 +168,28 @@ void chairs3d_io::save_state(logging::state_writer& writer) const
     writer.write("cur_epoch", static_cast<std::uint64_t>(cur_epoch));
     writer.write("cur_idx", static_cast<std::uint64_t>(cur_idx));
     writer.write("ci_cnt", static_cast<std::uint64_t>(ci_cnt));
+    logging::write_rng(writer, "rng", rgen);
+    dataset::save_run_binding(writer, params.run);
 }
 
 void chairs3d_io::load_state(logging::state_reader& reader)
 {
+    if (!dataset::restores_sequence(reader, params.run, std::format("chairs3d {}", get_outp_id())))
+        return;
     cur_epoch = static_cast<std::size_t>(reader.read_uint64("cur_epoch", cur_epoch));
     cur_idx = static_cast<std::size_t>(reader.read_uint64("cur_idx", cur_idx));
     ci_cnt = static_cast<std::size_t>(reader.read_uint64("ci_cnt", ci_cnt));
+    // The saved cur_idx reflects the training dataset's length; wrap it into the
+    // loaded dataset so loading onto a smaller set can't read out of range.
+    cur_idx = (image_count == 0) ? 0 : (cur_idx % image_count);
+
+    logging::read_rng(reader, "rng", rgen, std::format("3D Chairs IO {}", get_outp_id()));
+}
+
+void chairs3d_io::perform_observations(observe::observe_accessor& acc)
+{
+    if (acc.group_active("input"))
+        acc.observe(*this, "input", "index", observed_index_);
 }
 
 } // namespace chairs3d

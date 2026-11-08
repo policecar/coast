@@ -11,8 +11,8 @@
 #include <span>
 #include <vector>
 
-#include "../core/color_types.h"
-#include "../core/gradient.h"
+#include "gui_vis/core/color_types.h"
+#include "gui_vis/core/gradient.h"
 
 namespace coast {
 

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  coastd — launchd LaunchAgent (macOS SECONDARY seam, ASSUMED-UNVERIFIED).
+
+  This template mirrors the systemd user service for macOS. It is provided as a
+  starting point and has NOT been validated on a macOS host (no test machine).
+
+  ASYMMETRY WARNING (R1): launchd does NOT reap a process group the way systemd's
+  KillMode=control-group does. When launchd stops coastd it signals the daemon,
+  but child `coast` processes are NOT guaranteed to be killed with it — so the
+  "no live orphans" invariant that R1 relies on is NOT automatic here. The pid
+  duplicate-guard at boot (coastd kills a surviving orphan before relaunching)
+  is the fallback that keeps recovery correct on macOS; it is why that guard
+  exists. Verify this behaviour before relying on coastd unattended on macOS.
+
+  Install (per user):
+    cp com.coast.coastd.plist ~/Library/LaunchAgents/
+    # edit ProgramArguments paths below, then:
+    launchctl load  ~/Library/LaunchAgents/com.coast.coastd.plist
+    launchctl start com.coast.coastd
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.coast.coastd</string>
+    <key>ProgramArguments</key>
+    <array>
+        <!-- EDIT these paths for your install. -->
+        <string>/usr/local/bin/coastd</string>
+        <string>--data-root</string>
+        <string>/Users/CHANGEME/Library/Application Support/coastd</string>
+        <string>--repo</string>
+        <string>/Users/CHANGEME/src/coast</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+</dict>
+</plist>

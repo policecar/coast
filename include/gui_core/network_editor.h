@@ -8,7 +8,7 @@
 #include <unordered_map>
 
 #include "imgui.h"
-#include "json_loader.h"
+#include "json_cfg/json_loader.h"
 #include "gui_layout/layout_graph.h"
 #include "gui_layout/force_layout.h"
 

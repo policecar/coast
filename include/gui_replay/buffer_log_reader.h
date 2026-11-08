@@ -14,6 +14,8 @@
 #include <span>
 #include <array>
 
+namespace hdf5 { class executor; }
+
 namespace coast::replay {
 
 /// Visualization hints from the log file
@@ -43,7 +45,6 @@ struct frame_stats {
     float avg = 0.0f;
     float min_val = 0.0f;
     float max_val = 0.0f;
-    float nse = 0.0f;
 };
 
 /// Metadata from the buffer log file
@@ -58,13 +59,20 @@ struct log_metadata {
 /// Reader for HDF5 buffer_log files produced by buffer_logger
 class buffer_log_reader {
 public:
-    buffer_log_reader() = default;
+    /// @param h5_exec  Process-wide HDF5 executor. Must outlive the reader.
+    ///                 All libhdf5 access (open, read, close, destruction
+    ///                 of cached handles) is routed through it; the reader
+    ///                 itself never touches libhdf5 from the calling thread.
+    explicit buffer_log_reader(hdf5::executor& h5_exec);
     ~buffer_log_reader();
 
     buffer_log_reader(const buffer_log_reader&) = delete;
     buffer_log_reader& operator=(const buffer_log_reader&) = delete;
     buffer_log_reader(buffer_log_reader&&) noexcept;
-    buffer_log_reader& operator=(buffer_log_reader&&) noexcept;
+    // No move assignment: a defaulted one would close an open file_ with
+    // H5Fclose on the caller's thread, outside the HDF5 executor. close()
+    // first, then open() again.
+    buffer_log_reader& operator=(buffer_log_reader&&) = delete;
 
     /// Open a buffer_log HDF5 file
     /// @return true if successful
@@ -105,13 +113,6 @@ public:
     bool read_frame_data(std::size_t buffer_id, std::size_t frame_idx,
                          std::vector<float>& out_data);
 
-    /// Read buffer statistics for a specific frame
-    /// @param buffer_id The buffer ID
-    /// @param frame_idx The frame index (0-based)
-    /// @return Statistics, or empty optional if not available
-    [[nodiscard]] std::optional<frame_stats> read_frame_stats(std::size_t buffer_id,
-                                                               std::size_t frame_idx);
-
     /// Read a range of frames for a buffer
     /// @param buffer_id The buffer ID
     /// @param start_frame Starting frame index
@@ -127,8 +128,9 @@ public:
     [[nodiscard]] std::optional<std::size_t> get_buffer_index(std::size_t id) const;
 
 private:
+    hdf5::executor* h5_exec_ = nullptr;  // non-owning; set in ctor, preserved across moves
     std::filesystem::path path_;
-    logging::hdf5::file file_;
+    hdf5::file file_;
     log_metadata metadata_;
     replay_topology topology_;
 

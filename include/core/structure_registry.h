@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include "element_type.h"
+#include "core/element_type.h"
 
 namespace sim {
 struct io_entity;

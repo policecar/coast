@@ -1,25 +1,81 @@
-#include "gui_manager.h"
-#include "sim_thread_controller.h"
-#include "imgui_scaling.h"
-#include "probe/probe_instance.h"
+#include "gui_core/gui_manager.h"
+#include "core/local_time.h"
+#include "core/app_config.h"
+#include "sim_core/sim_thread_controller.h"
+#include "gui_core/imgui_scaling.h"
 #include "logging/logging.h"
+#include "diag/diag.h"
+#include "gui_plot/console_plot.h"
+#include "sim_console/sim_console_api.h"
 
 #include <cfloat>
 #include <filesystem>
 #include <chrono>
 #include <iomanip>
-#include <iostream>
-#include <sstream>
 #include <algorithm>
 
 namespace coast {
 
-gui_manager::gui_manager(sdl_app& app)
+void gui_manager::defer(std::function<void()> func)
+{
+    app.register_single_shot_func(std::move(func));
+}
+
+gui_manager::gui_manager(sdl_app& app, const paths::app_config& app_cfg, hdf5::executor& h5_exec)
     : app(app)
+    , app_cfg_(app_cfg)
     , file_browser(ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_ConfirmOnEnter)
+    , buffer_replay_dialog_(h5_exec)
 {
     file_browser.SetTitle("Open Configuration");
     file_browser.SetTypeFilters({ ".json" });
+
+    // Give the logging window the same location policy (default-constructed
+    // member; mirrors the set_sim_instance injection idiom) so its auto-checkpoint
+    // path resolves snapshot_dir the same way the rest of the app does.
+    logging_window_instance.set_app_config(app_cfg_);
+
+    // The Metric Explorer is a sim-independent tool: it owns its datasets (imported
+    // from config files) and persists across sim load/unload. Created once here and
+    // freed at shutdown via free_resources() (see run_gui's shutdown hook).
+    metric_explorer_window = std::make_unique<metric_explorer>(h5_exec);
+
+    // The HDF5 Browser is likewise sim-independent (reads log files offline
+    // through the shared executor) and persists across sim load/unload.
+    h5_browser_window_ = std::make_unique<h5_browser_window>(h5_exec);
+
+    // The campaign browser hands a selected run's observe file to the HDF5 browser,
+    // so it needs the back-pointer. Both are owned here and outlive each other only
+    // at shutdown, where the manager is destroyed as a whole.
+    campaign_panel_.set_browser(h5_browser_window_.get());
+}
+
+void gui_manager::set_console(std::unique_ptr<console_iface> console)
+{
+    console_ = std::move(console);
+    if (h5_browser_window_) h5_browser_window_->set_console(console_.get());
+    campaign_panel_.set_console(console_.get());
+}
+
+void gui_manager::shutdown_console()
+{
+    // Drop the browser's back-pointer FIRST so it never observes a half-destroyed
+    // console, then destroy the console — which joins its interpreter worker thread.
+    if (h5_browser_window_) h5_browser_window_->set_console(nullptr);
+    campaign_panel_.set_console(nullptr);
+    console_.reset();
+}
+
+void gui_manager::free_resources()
+{
+    // Free GPU resources owned by persistent (sim-independent) GUI components.
+    // Must run while the GL context is still current — call from the shutdown hook,
+    // before the context is torn down.
+    if (metric_explorer_window) {
+        metric_explorer_window->free_resources();
+    }
+    // Release GL textures held by console image windows.
+    coast::plot::free_resources();
 }
 
 void gui_manager::set_sim_instance(sim_instance* instance)
@@ -37,6 +93,14 @@ void gui_manager::set_sim_instance(sim_instance* instance)
         dataset_browser_window->free_resources();
         dataset_browser_window.reset();
     }
+    // NOTE: metric_explorer_window is intentionally NOT touched here — it is a
+    // persistent, sim-independent tool (owns its own imported datasets) and must
+    // survive sim load/unload. It is created once in the ctor and freed at
+    // shutdown via free_resources().
+
+    // Remove the status publish hook from the OUTGOING sim's env while it is still
+    // alive (run_gui clears the sim pointer here before destroying the instance).
+    remove_status_hook();
 
     sim = instance;
 
@@ -52,18 +116,6 @@ void gui_manager::set_sim_instance(sim_instance* instance)
         // Initialize probe system windows with sim environment
         probe_browser_window.set_env(&sim->get_sim_env());
         observer_panel_window.set_env(&sim->get_sim_env());
-
-        // Set up callback for logging probes to file
-        probe_browser_window.set_log_probe_callback([this](probe::probe_instance* probe) -> bool {
-            if (!sim) return false;
-            auto* logger = sim->get_logging_manager().get_probe_logger();
-            if (!logger) {
-                // Probe logging not started - show the logging window
-                logging_window_instance.visible() = true;
-                return false;
-            }
-            return logger->add_probe(probe);
-        });
 
         cfg_editor = std::make_unique<config_editor>(sim->get_config(), sim->get_config_path());
         // Set reload callback to trigger loading of saved config
@@ -193,14 +245,42 @@ void gui_manager::render_menu_bar()
                 if (ImGui::MenuItem("Probe Browser...", nullptr, probe_browser_window.is_visible())) {
                     probe_browser_window.toggle();
                 }
+                if (ImGui::MenuItem("Observer Capture...", nullptr, observe_panel_window.is_visible())) {
+                    observe_panel_window.toggle();
+                }
                 ImGui::EndMenu();
             }
+        }
+
+        // Tools menu - always available (tools are independent of the loaded sim;
+        // the Metric Explorer sources its datasets from imported config files).
+        if (ImGui::BeginMenu("Tools")) {
+            if (metric_explorer_window) {
+                if (ImGui::MenuItem("Metric Explorer...", nullptr, metric_explorer_window->visible())) {
+                    metric_explorer_window->visible() = !metric_explorer_window->visible();
+                }
+            }
+            if (ImGui::MenuItem("coastd Daemon...", nullptr, show_coastd_)) {
+                show_coastd_ = !show_coastd_;
+            }
+            ImGui::EndMenu();
         }
 
         // Analysis menu - always available (replay works without simulation)
         if (ImGui::BeginMenu("Analysis")) {
             if (ImGui::MenuItem("Buffer Replay...", nullptr, show_buffer_replay_)) {
                 show_buffer_replay_ = !show_buffer_replay_;
+            }
+            if (ImGui::MenuItem("HDF5 Browser...", nullptr, show_h5_browser_)) {
+                show_h5_browser_ = !show_h5_browser_;
+            }
+            if (ImGui::MenuItem("Campaign Browser...", nullptr, show_campaign_)) {
+                show_campaign_ = !show_campaign_;
+            }
+            if (console_) {
+                if (ImGui::MenuItem(console_->menu_label(), nullptr, console_->visible())) {
+                    console_->set_visible(!console_->visible());
+                }
             }
             ImGui::EndMenu();
         }
@@ -294,6 +374,15 @@ void gui_manager::render_dialogs()
         // Probe system - browser handles both update and observer windows
         probe_browser_window.update();  // Drain probe values to observers
         probe_browser_window.render();  // Render browser and observer windows
+
+        // Observe (offline capture) system panel
+        observe_panel_window.render();
+    }
+
+    // Metric Explorer is sim-independent (owns its imported datasets); render it
+    // regardless of whether a simulation is loaded.
+    if (metric_explorer_window) {
+        metric_explorer_window->render();
     }
 
     // Logging window doesn't require a simulation
@@ -304,6 +393,43 @@ void gui_manager::render_dialogs()
     if (show_buffer_replay_) {
         buffer_replay_dialog_.render(&show_buffer_replay_);
     }
+
+    // Another panel (the campaign browser) can hand the HDF5 browser a file to open.
+    // The show flag lives here, so the request is consumed here — otherwise the file
+    // loads into a window the user cannot see.
+    if (h5_browser_window_ && h5_browser_window_->take_visible_request()) {
+        show_h5_browser_ = true;
+    }
+
+    // HDF5 browser (available even without sim)
+    if (show_h5_browser_ && h5_browser_window_) {
+        h5_browser_window_->render(&show_h5_browser_);
+    }
+
+    if (show_campaign_) {
+        campaign_panel_.render(&show_campaign_);
+    }
+
+    if (show_coastd_) {
+        coastd_panel_.render(&show_coastd_);
+    } else {
+        // A closed panel must stop TALKING to the daemon. Without this the poller
+        // thread survives the window and keeps issuing a `list` RPC every 2 s, on a
+        // connection nobody can see, for the rest of the process lifetime.
+        coastd_panel_.on_hidden();
+    }
+
+    // Injected C++ console (owns its own visibility)
+    if (console_) console_->render();
+
+    // Console-created plots (drawn on the GUI thread regardless of console
+    // visibility; a no-op when no macro has made one).
+    coast::plot::render_all();
+
+    // Async sim runs launched from the console (step_async): poll their child
+    // processes and, when the status dialog is open, draw the runs table. No-op
+    // when nothing has been launched.
+    coast::simc::render_runs_window();
 
     // Render snapshot resume dialog
     render_snapshot_resume_dialog();
@@ -326,6 +452,9 @@ void gui_manager::render_control_dialog()
     if (ImGui::Begin("Simulation Control", &show_control)) {
         sim::sim_mode current_mode = controller->get_mode();
         bool is_running = (current_mode != sim::sim_mode::paused);
+        // A halted run (a per-step fault or a failed state load) cannot step
+        // again; the controller refuses, so the controls say so.
+        const bool halted = controller->is_halted();
 
         const float button_width = scaled(30);
         const float label_width = ImGui::CalcTextSize("unlimited").x + scaled(8);
@@ -333,6 +462,7 @@ void gui_manager::render_control_dialog()
         const float available_width = ImGui::GetContentRegionAvail().x;
 
         // Play/Pause button (pinned left)
+        ImGui::BeginDisabled(halted);
         if (is_running) {
             if (ImGui::Button("||##playpause", ImVec2(button_width, 0))) {
                 controller->set_mode(sim::sim_mode::paused);
@@ -348,9 +478,11 @@ void gui_manager::render_control_dialog()
             }
         }
 
+        ImGui::EndDisabled();
+
         // Single step button (pinned left, next to play)
         ImGui::SameLine();
-        ImGui::BeginDisabled(is_running);
+        ImGui::BeginDisabled(is_running || halted);
         if (ImGui::Button(">|##step", ImVec2(button_width, 0))) {
             controller->single_step();
         }
@@ -387,6 +519,15 @@ void gui_manager::render_control_dialog()
         }
         ImGui::TextUnformatted(label_text);
 
+        if (halted) {
+            if (const auto fault = controller->get_fault()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Halted at step %llu: %s (%s)",
+                                   static_cast<unsigned long long>(fault->step),
+                                   core::to_string(fault->error.kind), fault->error.site);
+            }
+            ImGui::TextWrapped("Reload the configuration to run again.");
+        }
+
         // Auto-save checkbox
         ImGui::Checkbox("Auto-save on pause", &auto_save_enabled);
         if (ImGui::IsItemHovered()) {
@@ -403,18 +544,53 @@ void gui_manager::render_control_dialog()
     ImGui::End();
 }
 
+void gui_manager::remove_status_hook()
+{
+    if (status_hook_registered_ && sim) {
+        sim->get_sim_env().remove_post_swap_hook(status_hook_id_);
+    }
+    status_hook_registered_ = false;
+}
+
+void gui_manager::sync_status_hook()
+{
+    const bool want = show_status && sim != nullptr;
+
+    if (want && !status_hook_registered_) {
+        // Publish each entity's status_str() from the sim thread, where the live
+        // state it reads (dataset cursors, neuron-group mismatch aggregates) is
+        // coherent. The hook captures the shared slot + the env pointer, never
+        // `this` — its lifetime is decoupled from gui_manager.
+        auto* env = &sim->get_sim_env();
+        auto  pub = status_pub_;
+        status_hook_id_ = env->set_post_swap_hook([pub, env]() {
+            pub->produce_if_wanted([env]() {
+                std::vector<std::string> lines;
+                for (auto& io_ent : env->iterate_entities()) {
+                    lines.push_back(io_ent.status_str());
+                }
+                return lines;
+            });
+        });
+        status_hook_registered_ = true;
+    } else if (!want && status_hook_registered_) {
+        remove_status_hook();
+    }
+}
+
 void gui_manager::render_status_dialog()
 {
+    sync_status_hook();
     if (!show_status || !sim) return;
-
-    auto& sim_env = sim->get_sim_env();
 
     ImGui::SetNextWindowSize(ImVec2(300, 250), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(20, 250), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("Status", &show_status)) {
-        for (auto& io_ent : sim_env.iterate_entities()) {
-            ImGui::TextWrapped("%s", io_ent.status_str().c_str());
+        // Display the strings the sim thread published; never touch live entity
+        // state from the GUI thread.
+        for (const auto& line : status_pub_->consume()) {
+            ImGui::TextWrapped("%s", line.c_str());
         }
     }
     ImGui::End();
@@ -443,7 +619,9 @@ void gui_manager::render_status_bar()
             if (auto* controller = sim->get_thread_controller()) {
                 ImGui::SameLine();
                 sim::sim_mode mode = controller->get_mode();
-                if (mode == sim::sim_mode::paused) {
+                if (controller->is_halted()) {
+                    ImGui::Text(" | Sim: Halted         ");
+                } else if (mode == sim::sim_mode::paused) {
                     ImGui::Text(" | Sim: Paused         ");
                 } else {
                     double actual_sps = controller->get_actual_sps();
@@ -507,17 +685,16 @@ void gui_manager::render_snapshot_resume_dialog()
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + start_x);
 
         if (ImGui::Button("Resume", ImVec2(button_width, 0))) {
-            if (sim) {
-                auto result = sim->get_logging_manager().load_state(pending_snapshot_path);
+            if (auto* controller = sim ? sim->get_thread_controller() : nullptr) {
+                sim->prepare_resume();   // as headless --resume (SPEC.md S.5.14)
+                // load_state parses on the executor, applies on the sim thread,
+                // and sets the step counter — all via the quiesced seam.
+                auto result = sim->get_logging_manager().load_state(*controller, pending_snapshot_path);
                 if (result) {
-                    // Successfully loaded - restore step counter
-                    if (auto* controller = sim->get_thread_controller()) {
-                        controller->set_step_count(result.restored_step);
-                    }
                     last_auto_save_path = pending_snapshot_path;
-                    std::cout << "Resumed from snapshot at step " << result.restored_step << "\n";
+                    COAST_INFO("gui", "resumed from snapshot at step {}", result.restored_step);
                 } else {
-                    std::cerr << "Failed to load snapshot: " << result.error_message << "\n";
+                    COAST_ERROR("gui", "failed to load snapshot: {}", result.error_message);
                 }
             }
             show_snapshot_resume_dialog = false;
@@ -545,9 +722,14 @@ void gui_manager::check_auto_save()
 
     sim::sim_mode current_mode = controller->get_mode();
 
-    // Detect transition from running to paused
+    // Detect transition from running to paused. A halt forces paused too, but
+    // a halted env may be partly loaded or faulted: saving it would put a
+    // snapshot of that state where the resume dialog offers it next. Read the
+    // mode first: the halt stores halted before paused, so a paused mode that
+    // came from a halt is always seen together with is_halted().
     if (previous_sim_mode != sim::sim_mode::paused &&
-        current_mode == sim::sim_mode::paused) {
+        current_mode == sim::sim_mode::paused &&
+        !controller->is_halted()) {
         perform_auto_save();
     }
 
@@ -570,28 +752,24 @@ void gui_manager::perform_auto_save()
         return;  // Failed to create directory
     }
 
-    // Generate filename: config_name_YYYYMMDD_HHMMSS_stepcount.h5
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm = *std::localtime(&time_t);
+    // Extract on the sim thread at a quiescent boundary; the captured step names
+    // the file coherently with its content. try_extract_state also refuses a
+    // halt that lands after the check in check_auto_save, and returns a throw
+    // from the extraction instead of letting it reach this GUI thread. A failed
+    // auto-save is skipped silently, like a failed write below.
+    auto& lm = sim->get_logging_manager();
+    auto try_extracted = lm.try_extract_state(*controller);
+    if (!try_extracted) return;
+    auto& extracted = *try_extracted;
 
-    std::string config_name = std::filesystem::path(sim->get_config_path()).stem().string();
-    std::uint64_t step_count = controller->get_step_count();
+    const std::filesystem::path full_path = core::snapshot_path(
+        snapshot_dir, std::filesystem::path(sim->get_config_path()).stem().string(), extracted.step);
 
-    std::ostringstream filename;
-    filename << config_name << "_"
-             << std::put_time(&tm, "%Y%m%d_%H%M%S") << "_"
-             << step_count << ".h5";
-
-    std::filesystem::path full_path = std::filesystem::path(snapshot_dir) / filename.str();
-
-    // Perform the save
+    // Perform the save (await the executor write).
     logging::state_save_config cfg;
     cfg.output_path = full_path;
-    cfg.compression.algorithm = logging::compression_config::type::gzip;
-    cfg.compression.level = 4;
 
-    auto result = sim->get_logging_manager().save_state(step_count, cfg);
+    auto result = lm.serialize_state(std::move(extracted.tree), cfg).get();
     if (result) {
         last_auto_save_path = full_path.string();
     }
@@ -655,33 +833,30 @@ std::optional<std::pair<std::string, std::string>> gui_manager::find_latest_snap
     auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
         latest_time - std::filesystem::file_time_type::clock::now() +
         std::chrono::system_clock::now());
-    auto time_t = std::chrono::system_clock::to_time_t(sctp);
-    std::tm tm = *std::localtime(&time_t);
-
-    std::ostringstream time_str;
-    time_str << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
     if (!info.empty()) info += " | ";
-    info += "Saved: " + time_str.str();
+    info += "Saved: " + core::format_local_time(sctp, "%Y-%m-%d %H:%M:%S");
 
     return std::make_pair(latest_path.string(), info);
 }
 
 std::string gui_manager::get_snapshot_dir() const
 {
-    if (!sim) return "snapshots";
-
-    // Get snapshot directory from config, or use default
-    const auto& config = sim->get_config();
-    std::string snapshot_dir = config.snapshot_dir;
-
-    // If relative path, make it relative to the config file's directory
-    std::filesystem::path dir_path(snapshot_dir);
-    if (dir_path.is_relative()) {
-        std::filesystem::path config_path(sim->get_config_path());
-        dir_path = config_path.parent_path() / dir_path;
+    // Precondition: callers (perform_auto_save / find_latest_snapshot) guard on
+    // sim first, so this is unreachable. If a future caller forgets the guard,
+    // fail loudly (log) and return an empty path — which finds/creates nothing —
+    // rather than a plausible-but-wrong bare leaf that would silently point
+    // auto-save at the wrong directory.
+    if (!sim) {
+        COAST_ERROR("gui", "get_snapshot_dir() called with no simulation loaded");
+        return {};
     }
 
-    return dir_path.string();
+    // The config's snapshot_dir leaf resolved under config_base (an absolute leaf
+    // wins). SAME resolver as the headless resume/checkpoint path, so GUI
+    // auto-save/resume and headless always agree on the location.
+    return paths::resolve_snapshot_output_dir(sim->get_config_path(),
+                                            sim->get_config().snapshot_dir,
+                                            app_cfg_).string();
 }
 
 } // namespace coast

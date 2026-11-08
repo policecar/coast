@@ -6,15 +6,13 @@
 #define CIFAR10_CFG_H
 
 #include <string>
+#include "io/sequence_params.h"
 
 namespace cifar10 {
 
-struct cifar10_param_t {
-    std::string            data_dir        = "";
-    std::size_t            change_interval = 15;
-    std::pair<double,double> noise_range   = {0.0, 0.05};
-    int                    random_seed     = 0;
-    bool                   use_test_set    = false;
+struct cifar10_param_t : dataset::sequence_params_t {
+    std::string data_dir     = "";
+    bool        use_test_set = false;
 };
 
 }

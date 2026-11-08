@@ -1,46 +1,22 @@
 //
-// Created by jk on 04.09.25.
+// Grayscale IDX dataset IO entities (MNIST, EMNIST, KMNIST); see mnist_io.h.
 //
 
-#include "../../include/io/mnist_io.h"
-#include "hd_ngm2_tools.h"
-#include "logging/state_io.h"
+#include "io/mnist_io.h"
+#include "core/require.h"
 
-namespace mnist {
+#include <algorithm>
 
-mnist_io::mnist_io(const mnist_param_t &params, sim::output_id_t output_id) :
-    mnist_db(params.image_file, params.label_file),
-    params(params),
-    id(output_id),
-    cur_epoch(0),
-    cur_idx(0),
-    ci_cnt(0),
-    change_interval(params.change_interval),
-    rgen(params.random_seed),
-    dis(params.noise_range.first, params.noise_range.second)
+namespace dataset {
+
+template <typename Tag>
+sim::step_result idx_gray_io<Tag>::process()
 {
-    if (params.noise_range.first > params.noise_range.second) {
-        throw std::runtime_error("noise_range[0] must be <= noise_range[1]");
-    }
-}
-
-void mnist_io::set_outp_func(std::function<std::span<float>()> function)
-{
-    output_mem = std::move(function);
-}
-
-void mnist_io::process()
-{
-    if (!output_mem) {
-        throw std::runtime_error("mnist_io::process() called before set_outp_func()");
-    }
-    auto outp = output_mem();
-    if (outp.size() != get_image_size()) {
-        throw std::runtime_error("Output span size mismatch: expected " +
-            std::to_string(get_image_size()) + ", got " + std::to_string(outp.size()));
-    }
-    if (change_interval > 0) {
-        auto img  = get_norm_image(cur_idx);
+    COAST_REQUIRE(output_buf != nullptr, core::error_kind::contract_violation);
+    auto outp = output_buf->cur_write_buffer();
+    COAST_REQUIRE(outp.size() == get_image_size(), core::error_kind::contract_violation);
+    if (seq_.change_interval() > 0) {
+        auto img  = get_norm_image(seq_.current_index());
         std::ranges::copy(img,outp.begin());
     } else {
         std::ranges::fill(outp,0.0f);
@@ -50,55 +26,29 @@ void mnist_io::process()
         ov = std::clamp(ov + dis(rgen),0.0f,1.0f);
     }
 
-    float nse = ngm2::normalized_shannon_entropy(outp);
-    PROBE("NSE",nse);
+    // Record which sample is presented this step. This does NOT line up with
+    // population/out at equal step_index: IO buffers are double-buffered, so a
+    // consumer reads this value one step later -- one step per buffered hop on
+    // the feedforward path, and recurrent (attractor) groups have no fixed
+    // offset at all. cur_idx is std::size_t (no observe dtype specialisation) -> cast.
+    observed_index_ = static_cast<std::uint64_t>(seq_.current_index());  // snapshot before seq_ advances; read in idx_io_base::perform_observations
 
-    float max_val = std::reduce(outp.begin(),outp.end(),0.0f,[](const float a, const float b){ return std::max(a,b); });
-    PROBE("MAX_VAL",max_val);
-
-    float avg = std::reduce(outp.begin(),outp.end()) / (float)outp.size();
-    PROBE("AVG",avg);
-
-    if (change_interval > 0 && ++ci_cnt >= static_cast<std::size_t>(change_interval)) {
-        ci_cnt = 0;
-        if (++cur_idx >= get_image_cnt()) {
-            cur_idx = 0;
-            ++cur_epoch;
-        }
-    }
+    seq_.advance();
+    return {};
 }
 
-sim::output_id_t mnist_io::get_outp_id() const
+template <typename Tag>
+std::string idx_gray_io<Tag>::status_str() const
 {
-    return id;
-}
-
-std::size_t mnist_io::get_outp_size() const
-{
-    return get_image_size();
-}
-
-std::string mnist_io::status_str() const
-{
-    std::string status { "MNIST IO" };
+    std::string status = std::string(Tag::label) + " IO";
     status += " | id: " + std::to_string(get_outp_id());
-    status += " | epoch: " + std::to_string(cur_epoch);
-    status += " | idx: " + std::to_string(cur_idx);
+    status += " | epoch: " + std::to_string(seq_.current_epoch());
+    status += " | idx: " + std::to_string(seq_.current_index());
     return status;
 }
 
-void mnist_io::save_state(logging::state_writer& writer) const
-{
-    writer.write("cur_epoch", static_cast<std::uint64_t>(cur_epoch));
-    writer.write("cur_idx", static_cast<std::uint64_t>(cur_idx));
-    writer.write("ci_cnt", static_cast<std::uint64_t>(ci_cnt));
-}
+template class idx_gray_io<mnist_tag>;
+template class idx_gray_io<emnist_tag>;
+template class idx_gray_io<kmnist_tag>;
 
-void mnist_io::load_state(logging::state_reader& reader)
-{
-    cur_epoch = static_cast<std::size_t>(reader.read_uint64("cur_epoch", cur_epoch));
-    cur_idx = static_cast<std::size_t>(reader.read_uint64("cur_idx", cur_idx));
-    ci_cnt = static_cast<std::size_t>(reader.read_uint64("ci_cnt", ci_cnt));
-}
-
-} // mnist
+} // namespace dataset

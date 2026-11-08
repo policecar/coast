@@ -9,7 +9,7 @@
 #include <vector>
 #include <string_view>
 #include <typeinfo>
-#include "element_type.h"
+#include "core/element_type.h"
 
 namespace sim {
 struct io_entity;  // Forward declaration
@@ -18,6 +18,10 @@ struct io_entity;  // Forward declaration
 namespace probe {
 class entity_probe_set;
 struct probe_instance;
+}
+
+namespace observe {
+class observe_accessor;
 }
 
 namespace core {
@@ -112,6 +116,29 @@ public:
     void probe(std::string_view name, double value) {
         if (active_probe_count_.load(std::memory_order_relaxed) == 0) return;
         probe_slow_path(name, value);
+    }
+
+    /// True iff at least one probe on this element is currently active. Same
+    /// load as probe()'s fast-path gate, exposed so producers can guard an
+    /// expensive value computation (e.g. a GPU->CPU readback) on it. NOTE: this
+    /// reflects activations on THIS element only — correct for flat (childless)
+    /// entities; a hierarchical entity would need to aggregate its children.
+    [[nodiscard]] bool any_probe_active() const {
+        return active_probe_count_.load(std::memory_order_relaxed) > 0;
+    }
+
+    // -- Observation --
+
+    /// Hook driven by the observe registry's post-process pass (once per step,
+    /// device idle, single-threaded). Override to emit this element's observed
+    /// values via `acc.observe(...)`, guarded by `acc.group_active(group)`. The
+    /// default recurses into children, so a composite override should call the
+    /// base after emitting its own values to reach descendants.
+    virtual void perform_observations(observe::observe_accessor& acc) {
+        for (const auto& g : children())
+            for (std::size_t i = 0; i < g.count; ++i)
+                if (auto* c = child_impl(g.type.info(), i))
+                    c->perform_observations(acc);
     }
 
     // -- Root entity access --

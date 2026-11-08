@@ -4,89 +4,87 @@
 
 #include <bit>
 
-#include "mnist_db.h"
+#include "io/mnist_db.h"
 
-#include <cassert>
+#include <filesystem>
 #include <iostream>
 #include <numeric>
 #include <limits>
+#include <memory>
 #include <ranges>
 #include <stdexcept>
+#include <string>
 
 namespace mnist {
 
-uint8_t idx_file::bswap(uint8_t x)
-{
-    return std::byteswap(x);
-}
-
-int16_t idx_file::bswab(int16_t x)
-{
-    return std::byteswap(x);
-}
-
-int32_t idx_file::bswab(int32_t x)
-{
-    return std::byteswap(x);
-}
-
 idx_file::idx_file(const std::string &filename) :
-    u8_data(), i8_data(), i16_data(), i32_data(), f32_data(), f64_data(),
-    dimensions(),element_size(),num_elements()
+    u8_data(), dimensions(), element_size(), num_elements()
 {
-    std::FILE *file = std::fopen(filename.c_str(),"rb");
+    // Closed on every exit, including a bad_alloc while reading.
+    const std::unique_ptr<std::FILE, int (*)(std::FILE*)> owner(
+        std::fopen(filename.c_str(), "rb"), &std::fclose);
+    std::FILE* const file = owner.get();
     if (!file) {
         throw std::runtime_error("Could not open file: " + filename);
     }
     uint32_t tmp;
-    std::size_t elements_read = std::fread(&tmp, sizeof(tmp), 1, file);
-    if (elements_read != 1) {
-        std::fclose(file);
+    if (std::fread(&tmp, sizeof(tmp), 1, file) != 1) {
         throw std::runtime_error("Could not read file: " + filename);
     }
-    uint32_t magic = std::byteswap(tmp);
+    const uint32_t magic = std::byteswap(tmp);
     if ((magic >> 16) != 0) {
-        std::fclose(file);
         throw std::runtime_error("Invalid magic number in file: " + filename);
     }
-    uint8_t data_type = (magic >> 8) & 0xff;
-    uint8_t dim_count = (magic >> 0) & 0xff;
+    const uint8_t data_type = (magic >> 8) & 0xff;
+    const uint8_t dim_count = (magic >> 0) & 0xff;
+    if (data_type != 0x08) {
+        throw std::runtime_error("Unsupported IDX data type in file: " + filename +
+                                 " (only unsigned byte, 0x08, is supported)");
+    }
     if (dim_count == 0) {
-        std::fclose(file);
         throw std::runtime_error("Invalid dimensions in file: " + filename);
     }
     for (uint8_t i = 0; i < dim_count; i++) {
-        //    ifs >> tmp;
-        //ifs.read((char *)&tmp, sizeof(tmp));
-        std::fread(&tmp, sizeof(tmp), 1, file);
+        if (std::fread(&tmp, sizeof(tmp), 1, file) != 1) {
+            throw std::runtime_error("Truncated header in file: " + filename);
+        }
         dimensions.push_back(std::byteswap(tmp));
     }
-    element_size = std::accumulate(dimensions.begin()+1, dimensions.end(), 1, std::multiplies<>());
-    num_elements = dimensions[0];
-    switch (data_type) {
-        case 0x08 : {
-            read_data(file, u8_data);
-        } break;
-        case 0x09 : {
-            read_data(file, i8_data);
-        } break;
-        case 0x0B : {
-            read_data(file, i16_data);
-        } break;
-        case 0x0C : {
-            read_data(file, i32_data);
-        } break;
-        case 0x0D : {
-            read_data(file, f32_data);
-        } break;
-        case 0x0E : {
-            read_data(file, f64_data);
-        } break;
-        default:
-            std::fclose(file);
-            throw std::runtime_error("Invalid data type in file: " + filename);
+    // Fold in std::size_t with an overflow check: the dimensions come from the file.
+    element_size = 1;
+    for (const std::size_t d : dimensions | std::views::drop(1)) {
+        if (d != 0 && element_size > std::numeric_limits<std::size_t>::max() / d) {
+            throw std::runtime_error("Element size overflows in file: " + filename);
+        }
+        element_size *= d;
     }
-    std::fclose(file);
+    num_elements = dimensions[0];
+    if (num_elements != 0 &&
+        element_size > std::numeric_limits<std::size_t>::max() / num_elements) {
+        throw std::runtime_error("Data size overflows in file: " + filename);
+    }
+    // The header must describe exactly the data that follows it: a short file
+    // (interrupted download) or trailing bytes both mean the file is not what
+    // the header claims. Compared against the file size before allocating, so
+    // a header that declares terabytes fails here rather than in the allocator.
+    const std::size_t declared   = num_elements * element_size;
+    const std::size_t header     = sizeof(uint32_t) * (1 + std::size_t{dim_count});
+    const std::size_t file_bytes = std::filesystem::file_size(filename);
+    if (file_bytes - header != declared) {   // header bytes were read, so file_bytes >= header
+        throw std::runtime_error("Unexpected data size in file: " + filename +
+                                 " (header declares " + std::to_string(declared) +
+                                 " bytes, file holds " + std::to_string(file_bytes - header) + ")");
+    }
+    u8_data.resize(declared);
+    if (std::fread(u8_data.data(), 1, declared, file) != declared) {
+        throw std::runtime_error("Could not read data from file: " + filename);
+    }
+}
+
+std::span<const uint8_t> idx_file::get_element(std::size_t idx) const
+{
+    if (idx >= num_elements) idx = num_elements - 1;
+    return { u8_data.data() + idx * element_size, element_size };
 }
 
 mnist_db::mnist_db(const std::string &img_file, const std::string &label_file) :
@@ -94,8 +92,11 @@ mnist_db::mnist_db(const std::string &img_file, const std::string &label_file) :
     label_data(label_file),
     norm_img_data( img_data.get_u8().size() )
 {
-    if (img_data.get_u8().size() != img_data.get_num_elements() * img_data.get_element_size()) {
-        throw std::runtime_error("Unexpected data size in image file: " + img_file);
+    // idx_file guarantees the data matches the header; an empty dataset is
+    // still well-formed IDX but cannot be sampled (every get_norm_image would
+    // be out of range), so reject it here.
+    if (img_data.get_num_elements() == 0 || img_data.get_element_size() == 0) {
+        throw std::runtime_error("Image file holds no image data: " + img_file);
     }
     if (img_data.get_num_elements() != label_data.get_num_elements()) {
         throw std::runtime_error("Image file and label file have different number of elements");
@@ -127,19 +128,27 @@ void mnist_db::print_info() const
 
 std::span<const uint8_t> mnist_db::get_image(std::size_t idx) const
 {
-    return img_data.get_element<uint8_t>(idx);
+    return img_data.get_element(idx);
 }
 
 std::span<const float> mnist_db::get_norm_image(std::size_t idx) const
 {
-    if((idx + 1) * img_data.get_element_size() > norm_img_data.size()) {
-        std::cout << "idx: " << idx << std::endl;
-        std::cout << "elem_size: " << img_data.get_element_size() << std::endl;
-        std::cout << "data.size: " << norm_img_data.size() << std::endl;
-        assert(false);
+    // Real runtime bounds check: a bare assert() is compiled out under -DNDEBUG
+    // (Release), so an out-of-range index would read past the buffer (segfault /
+    // corrupt output) instead of failing cleanly.
+    const std::size_t elem = img_data.get_element_size();
+    if ((idx + 1) * elem > norm_img_data.size()) {
+        throw std::out_of_range(
+            "mnist_db::get_norm_image: image index " + std::to_string(idx) +
+            " is out of range (dataset has " + std::to_string(get_image_cnt()) +
+            " images)");
     }
+    return { norm_img_data.data() + idx * elem, elem };
+}
 
-    return { norm_img_data.data() + idx * img_data.get_element_size(), img_data.get_element_size()};
+std::span<const float> mnist_db::get_all_norm_images() const
+{
+    return { norm_img_data.data(), norm_img_data.size() };
 }
 
 uint8_t mnist_db::get_label(std::size_t idx) const

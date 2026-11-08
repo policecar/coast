@@ -7,7 +7,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "sim_builder_cfg.h"
+#include "tools/sim_builder_cfg.h"
 
 namespace coast {
 

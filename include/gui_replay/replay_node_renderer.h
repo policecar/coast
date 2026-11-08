@@ -8,7 +8,7 @@
 #include "gui_layout/render/node_renderer.h"
 #include "gui_vis/core/gl_texture.h"
 #include "gui_vis/core/colormap.h"
-#include "buffer_log_reader.h"
+#include "gui_replay/buffer_log_reader.h"
 
 #include <string>
 #include <vector>
@@ -39,8 +39,7 @@ enum class stat_type {
     average,
     sum,
     min,
-    max,
-    nse
+    max
 };
 
 /// User data stored in node_t::user_data

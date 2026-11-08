@@ -2,8 +2,8 @@
 // Created by claude on 29.01.26.
 //
 
-#include "vis_registry.h"
-#include "io_buffer.h"
+#include "gui_vis/vis_registry.h"
+#include "sim_core/io_buffer.h"
 
 #include <algorithm>
 

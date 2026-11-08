@@ -1,0 +1,25 @@
+# ThreadSanitizer suppressions for COAST. See SANITIZERS.md.
+#
+# Run with:  TSAN_OPTIONS="suppressions=tests/sanitizer_suppressions/tsan.supp" ctest ...
+#
+# These are KNOWN false positives in third-party code that TSan cannot model.
+# COAST's own synchronization (atomics, std::mutex, the sim/GUI thread seam) is
+# NOT suppressed — judge COAST races by provenance, then fix them.
+
+# --- oneTBB task system ---------------------------------------------------------
+# TBB's affinity_partitioner writes per-task affinity HINTS with intentional
+# relaxed races (a work-stealing scheduling optimization, not correctness state),
+# and its work-stealing queues use custom synchronization TSan does not model.
+# Surfaced by any non-empty parallel_for (e.g. env::dispatch_cpu_entities).
+#
+# Scoped by library because a precise race:<func>/<file> scope does NOT work: TSan
+# inlines the TBB partitioner frames (note_affinity, partitioner.h) into the
+# caller, so the only matchable frame is the libtbb.so one.
+#
+# CAVEAT: `called_from_lib:libtbb.so` is broad — it ALSO masks first-party races
+# inside parallel_for lambda BODIES (e.g. the hd_ngm2 per-neuron loops). That is
+# acceptable for the TSan test run, which is unit-tests-only (no first-party
+# compute lambdas; A-tier integration is excluded under sanitizers — SANITIZERS.md).
+# When AUDITING first-party parallel_for code (the hd_ngm2 partition-disjointness
+# review), run TSan WITHOUT this suppression so those frames stay visible.
+called_from_lib:libtbb.so

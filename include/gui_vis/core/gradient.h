@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <array>
 
-#include "color_types.h"
+#include "gui_vis/core/color_types.h"
 
 namespace coast {
 

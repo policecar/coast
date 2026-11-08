@@ -1,0 +1,435 @@
+<title>Max-Softmax Inhibition</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+<style>
+/* Layout: lab notebook (sibling of "Beyond NSE") — findings column, then a bench: training curves, an input picker, the picked input's response, winners by digit. */
+:root {
+  --page: #f2f4f5;
+  --surface: #fcfcfb;
+  --ink: #0e1214;
+  --ink-2: #4c5459;
+  --muted: #858c90;
+  --grid: #e1e3e1;
+  --axis: #c0c5c4;
+  --rule: rgba(14,18,20,0.10);
+  --select: #0e1214;
+  --select-ink: #fcfcfb;
+  --r-swta: #c47f12;
+  --r-msm10: #7d68ec;
+  --r-msm20: #b23a8f;
+  --pre: #c9cdd0;
+  --heat: #2a78d6;
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.125rem;
+  --step-2: 1.5rem;
+  --step-3: 2.25rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101213; --surface: #1a1a19; --ink: #eef0ef; --ink-2: #bfc4c2; --muted: #8b918f;
+    --grid: #2c2c2a; --axis: #3d3e3b; --rule: rgba(255,255,255,0.10);
+    --select: #eef0ef; --select-ink: #101213;
+    --r-swta: #b07818; --r-msm10: #7a63e6; --r-msm20: #c2479e; --pre: #3b3f41; --heat: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #101213; --surface: #1a1a19; --ink: #eef0ef; --ink-2: #bfc4c2; --muted: #8b918f;
+  --grid: #2c2c2a; --axis: #3d3e3b; --rule: rgba(255,255,255,0.10);
+  --select: #eef0ef; --select-ink: #101213;
+  --r-swta: #b07818; --r-msm10: #7a63e6; --r-msm20: #c2479e; --pre: #3b3f41; --heat: #3987e5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--page); color: var(--ink); font-family: var(--font-body);
+  font-size: var(--step-0); line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 40px; }
+.prose { max-width: 68ch; display: grid; gap: 14px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: var(--step-3); letter-spacing: -0.01em; }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-family: var(--font-body); font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-data); font-size: var(--step--1); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+code, .mono { font-family: var(--font-data); font-size: 0.92em; }
+.muted { color: var(--ink-2); }
+.small { font-size: var(--step--1); }
+.formula { font-family: var(--font-data); font-size: var(--step--1); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; overflow-x: auto; white-space: pre; line-height: 1.6; }
+.findings { display: grid; border-top: 1px solid var(--rule); }
+.finding { display: grid; grid-template-columns: 2.2rem minmax(0,1fr); gap: 12px; padding-block: 14px; border-bottom: 1px solid var(--rule); }
+.finding .n { font-family: var(--font-data); color: var(--ink-2); font-size: var(--step--1); padding-top: 3px; }
+.finding p { max-width: 74ch; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--page);
+  padding-block: 10px; border-bottom: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page); }
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ctl > .lbl { font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: var(--step--1); padding: 5px 10px; border: 0; background: var(--surface); color: var(--ink); cursor: pointer; border-right: 1px solid var(--rule); display: inline-flex; align-items: center; gap: 6px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--select); color: var(--select-ink); }
+input[type=range] { accent-color: var(--ink); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--heat); outline-offset: 2px; }
+.val { font-family: var(--font-data); font-size: var(--step--1); min-width: 4ch; font-variant-numeric: tabular-nums; }
+
+.bench { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 18px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.panel header { display: grid; gap: 2px; }
+.span-12 { grid-column: span 12; } .span-5 { grid-column: span 5; } .span-7 { grid-column: span 7; }
+@media (max-width: 900px) { .span-5, .span-7 { grid-column: span 12; } }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--ink-2); font-family: var(--font-data); font-size: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--step--1); color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.sw.line { height: 2px; width: 14px; border-radius: 1px; }
+.sw.dash { height: 0; width: 14px; border-top: 2px dashed var(--ink); }
+.facets { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+@media (max-width: 700px) { .facets { grid-template-columns: minmax(0,1fr); } }
+.facet { display: grid; gap: 4px; min-width: 0; }
+.facet h4 { margin: 0; font-size: var(--step--1); font-weight: 600; }
+.picker { display: grid; gap: 6px; }
+.prow { display: grid; grid-template-columns: 6.5rem minmax(0,1fr); gap: 8px; align-items: center; }
+.prow .rl { font-family: var(--font-data); font-size: 11px; color: var(--ink-2); }
+.thumbs { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 3px; }
+.thumbs button { padding: 0; border: 2px solid transparent; border-radius: 4px; background: none; cursor: pointer; line-height: 0; }
+.thumbs button[aria-pressed="true"] { border-color: var(--ink); }
+.thumbs img { width: 100%; image-rendering: pixelated; border-radius: 2px; background: #000; }
+@media (max-width: 600px) { .prow { grid-template-columns: minmax(0,1fr); } }
+.sel { display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 14px; align-items: start; }
+.sel img { width: 96px; image-rendering: pixelated; border-radius: 4px; border: 1px solid var(--rule); background: #000; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.kv div { border-top: 2px solid var(--c, var(--rule)); padding-top: 6px; display: grid; }
+.kv .v { font-family: var(--font-data); font-size: var(--step-1); font-variant-numeric: tabular-nums; }
+.kv .k { font-size: var(--step--1); color: var(--ink-2); }
+.sliders { display: grid; grid-template-columns: auto minmax(0,1fr) 5ch; gap: 6px 10px; align-items: center; font-size: var(--step--1); }
+.sliders output { font-family: var(--font-data); text-align: right; font-variant-numeric: tabular-nums; }
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.tbl th, .tbl td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.tbl th { color: var(--ink-2); font-weight: 500; font-family: var(--font-data); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.tablewrap { overflow-x: auto; }
+.note { font-size: var(--step--1); color: var(--ink-2); max-width: 80ch; }
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface); color: var(--ink); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 6px 8px; font-family: var(--font-data); font-size: 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); max-width: 260px; }
+.methods { display: grid; gap: 10px; max-width: 80ch; font-size: var(--step--1); color: var(--ink-2); }
+.methods ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { .seg button { transition: background 120ms, color 120ms; } }
+</style>
+
+<div class="wrap">
+  <section class="prose">
+    <div class="eyebrow">COAST · ngm2 · inhibition kind max_softmax · branch expl/nse-alt</div>
+    <h1>Max-softmax local inhibition</h1>
+    <p>A softmax over the group output, rescaled so the strongest neuron keeps its activity. The softmax normaliser cancels in that rescaling, so each neuron ends at the leader's activity times <code>exp(−β · gap)</code>, where the gap is how far it trails the leader. No entropy, no window: β is the strength, in units of 1/activity.</p>
+    <div class="formula">out_i = max(v) · softmax(β·v)_i / max_j softmax(β·v)_j
+      = max(v) · exp(−β · (max(v) − v_i))</div>
+    <p>A neuron is <b>raised</b> when <code>exp(−β·gap) &gt; v_i / max</code>, so the kind is not damping-only: with a weak leader the gaps are small, and the rest of the group is pulled up toward it (never above it). Below, ngm2 groups trained with this inhibitor (β = 10 and β = 20) are compared with groups trained with the current default soft-WTA, on mnist, on chairs3d, whose inputs are bright enough to saturate the group, and on chairs3d with inverted pixels (black background).</p>
+  </section>
+
+  <section class="prose" style="max-width:none">
+    <h2>What the runs show</h2>
+    <div class="findings"><!--__FINDINGS__--></div>
+  </section>
+
+  <div class="bar" role="toolbar" aria-label="View controls">
+    <div class="ctl"><span class="lbl">Dataset</span><div class="seg" id="c-ds"></div></div>
+    <div class="ctl"><span class="lbl">Trained with</span><div class="seg" id="c-run"></div></div>
+  </div>
+
+  <div class="bench">
+    <section class="panel span-12" aria-labelledby="h-traj">
+      <header>
+        <h3 id="h-traj">Training</h3>
+        <p class="small muted" id="traj-sub"></p>
+      </header>
+      <div class="ctl" style="gap:16px">
+        <div class="ctl"><span class="lbl">Measure</span><div class="seg" id="c-metric"></div></div>
+        <div class="ctl"><span class="lbl">Vector</span><div class="seg" id="c-kind"></div></div>
+      </div>
+      <div class="legend" id="traj-legend"></div>
+      <div class="facets" id="traj"></div>
+    </section>
+
+    <section class="panel span-7" aria-labelledby="h-pick">
+      <header>
+        <h3 id="h-pick">Inputs</h3>
+        <p class="small muted" id="pick-sub"></p>
+      </header>
+      <div class="picker" id="picker"></div>
+    </section>
+
+    <section class="panel span-5" aria-labelledby="h-resp">
+      <header>
+        <h3 id="h-resp">Response to the selected input</h3>
+        <p class="small muted" id="resp-sub"></p>
+      </header>
+      <div class="sel"><img id="sel-img" alt="Selected input image"><div class="kv" id="sel-kv"></div></div>
+      <div class="legend" id="resp-legend"></div>
+      <svg id="resp" viewBox="0 0 460 190" role="img" aria-label="Group response by neuron, before and after inhibition"></svg>
+      <div class="sliders">
+        <label for="beta">what-if β</label><input type="range" id="beta" min="0" max="40" step="0.5" value="10"><output id="beta-out" for="beta">10</output>
+      </div>
+      <p class="note">The dashed outline applies max-softmax with the what-if β to this group's pre-inhibition response. It shows what a different β does to this one vector; the group was trained with the setting chosen above.</p>
+      <h3 style="margin-top:6px">Sorted, all three trained groups</h3>
+      <div class="legend" id="sort-legend"></div>
+      <svg id="sorted" viewBox="0 0 460 150" role="img" aria-label="Output of each trained group to this input, sorted high to low"></svg>
+    </section>
+
+    <section class="panel span-12" aria-labelledby="h-win" id="win-panel">
+      <header>
+        <h3 id="h-win">Winners by digit</h3>
+        <p class="small muted">mnist, 2,000 probe images at 500k. Each row is a digit; each column a neuron, ordered by the digit it wins most. Cell shade = share of that digit's images the neuron wins (strongest output after inhibition).</p>
+      </header>
+      <div class="tablewrap"><table class="tbl" id="win-tbl"></table></div>
+      <svg id="heat" viewBox="0 0 1000 200" role="img" aria-label="Winning neuron by digit"></svg>
+    </section>
+  </div>
+
+  <section class="methods" aria-labelledby="h-methods">
+    <h2 id="h-methods" style="color:var(--ink)">How the numbers were made</h2>
+    <ul>
+      <li>Model: ngm2, one group of 50 neurons, configs <code>configs/mnist.json</code> and <code>configs/chairs3d.json</code> unchanged except for the group's inhibitor; "chairs3d inverted" additionally sets the new loader flag <code>"invert": true</code> (pixel → 1 − pixel at load, before the U(0, 0.05) input noise) for training and probes. soft-WTA runs use the default (strength 5, entropy gate as fixed in PR #135); the max-softmax runs reference an <code>inhibitions</code> entry <code>{"type": "max_softmax", "strength": β}</code>.</li>
+      <li>Training was chained through checkpoints at steps 1, 500, 2k, 5k, 10k, 20k, 50k, 100k, 200k, 300k, 400k and 500k with <code>--load-state</code> / <code>--save-state</code>.</li>
+      <li>Probes: each checkpoint ran 2,000 frozen steps (no learning, no branching) with a pass-through inhibitor, on real images and on two noise sets: the same images with pixels shuffled, and iid uniform pixels. That records the group's response before inhibition. The output after inhibition is the run's own inhibitor applied to it, using float32 Python mirrors of the C++ code.</li>
+      <li>The probe continues the training input stream, so at 500k every run sees the same images (checked: inputs differ only by the loader's independent U(0, 0.05) noise). mnist labels come from matching each probe image to its nearest training image; every match was unambiguous.</li>
+      <li>Measures: <b>peak</b> = largest entry; <b>mean</b> = mean entry; <b>active neurons</b> n_eff = sum / max (50 for a flat vector, 1 for a single winner); <b>raised</b> = share of neurons the inhibitor lifted above their pre-inhibition value. Curves show medians over the 2,000 probe vectors.</li>
+      <li id="prov"></li>
+    </ul>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = /*__DATA__*/;
+const RUN_LABEL = { swta: "soft-WTA (default)", msm10: "max-softmax β 10", msm20: "max-softmax β 20" };
+const RUN_VAR = { swta: "--r-swta", msm10: "--r-msm10", msm20: "--r-msm20" };
+const COND_LABEL = { real: "real images", perm: "pixel-shuffled", unif: "uniform noise" };
+const METRICS = { max: "peak", mean: "mean", neff: "active neurons", raised: "raised" };
+const st = { ds: "mnist", run: "msm10", metric: "neff", kind: "post", ex: 0, beta: 10 };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const fmtStep = (s) => s >= 1e6 ? (s / 1e6) + "M" : s >= 1000 ? (s / 1000) + "k" : String(s);
+const tip = document.getElementById("tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; const x = Math.min(ev.clientX + 12, innerWidth - 270); tip.style.left = x + "px"; tip.style.top = (ev.clientY + 12) + "px"; }
+function hideTip() { tip.hidden = true; }
+
+function u16(b64) {
+  const s = atob(b64), b = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return Array.from(new Uint16Array(b.buffer), (x) => x / 65535);
+}
+const PRE = {};
+for (const ds in D.datasets) { PRE[ds] = {}; for (const r in D.datasets[ds].pre) PRE[ds][r] = u16(D.datasets[ds].pre[r]); }
+const vec = (ds, run, i) => PRE[ds][run].slice(i * 50, i * 50 + 50);
+
+// inhibitor mirrors (float64 here; the build used float32 mirrors validated against the model)
+function maxSoftmax(v, beta) { const m = Math.max(...v); if (!(m > 1.1754944e-38)) return v.slice(); return v.map((x) => m * Math.exp(-beta * (m - x))); }
+function sig(x) { const inv = 1 / (1 - Math.pow(0.5, 0.1)); return 1 / (1 + Math.exp(-(x * inv - 0.5 * inv))); }
+function nse(v) { const s = v.reduce((a, b) => a + b, 0); if (!(s > 1.1754944e-38)) return 0; let h = 0; for (const x of v) { const p = x / s; if (p >= 1.1920929e-7) h -= p * Math.log2(p); } return Math.min(1, Math.max(0, h / Math.log2(v.length))); }
+function softWta(v, S) { const m = Math.max(...v); if (!(m > 1.1754944e-38)) return v.slice(); const f = 1 - sig((nse(v) - 0.8) / 0.2); const e = 1 + (S - 1) * f; return v.map((x) => Math.min(1, Math.max(0, x * Math.pow(x / m, e)))); }
+function inhibit(run, v) { const r = D.runs[run]; return r.kind === "soft_wta" ? softWta(v, r.param) : maxSoftmax(v, r.param); }
+const neff = (v) => { const m = Math.max(...v); return m > 0 ? v.reduce((a, b) => a + b, 0) / m : 0; };
+
+function seg(id, items, key, after) {
+  const box = document.getElementById(id); box.innerHTML = "";
+  for (const [val, label, sw] of items) {
+    const b = document.createElement("button"); b.type = "button";
+    if (sw) { const s = document.createElement("span"); s.className = "sw"; s.style.background = `var(${sw})`; b.appendChild(s); }
+    b.appendChild(document.createTextNode(label));
+    b.setAttribute("aria-pressed", String(st[key] === val));
+    b.onclick = () => { st[key] = val; after(); };
+    box.appendChild(b);
+  }
+}
+
+function legend(id, items) {
+  document.getElementById(id).innerHTML = items.map(([c, t, cls]) => `<span><i class="sw ${cls || "line"}" style="background:var(${c})"></i>${t}</span>`).join("");
+}
+
+// ---- training curves: one facet per input condition, one line per trained group ----
+function drawTraj() {
+  const d = D.datasets[st.ds], steps = d.steps, box = document.getElementById("traj");
+  box.innerHTML = "";
+  const kind = st.metric === "raised" ? "raised" : st.kind;
+  document.getElementById("traj-sub").textContent =
+    `Median ${METRICS[st.metric]} of the ${st.metric === "raised" ? "neurons the group's inhibitor lifted" : (st.kind === "post" ? "group output after inhibition" : "response before inhibition")} over 2,000 probe vectors, per checkpoint (log steps).`;
+  legend("traj-legend", d.runs.map((r) => [RUN_VAR[r], RUN_LABEL[r]]));
+  const val = (r, c) => kind === "raised" ? d.traj[r][c].raised : d.traj[r][c][kind][st.metric];
+  let ymax = 0;
+  for (const r of d.runs) for (const c of D.conds) ymax = Math.max(ymax, ...val(r, c));
+  ymax = st.metric === "neff" ? 50 : st.metric === "raised" ? Math.max(0.05, ymax) : Math.min(1, ymax * 1.08 || 1);
+  const W = 380, H = 200, L = 34, R = 10, T = 8, B = 26;
+  const lx = (s) => L + (Math.log10(s) / Math.log10(steps[steps.length - 1])) * (W - L - R);
+  const ly = (y) => T + (1 - y / ymax) * (H - T - B);
+  for (const c of D.conds) {
+    const f = document.createElement("div"); f.className = "facet";
+    f.innerHTML = `<h4>${COND_LABEL[c]}</h4>`;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${METRICS[st.metric]} over training, ${COND_LABEL[c]}` });
+    for (let k = 0; k <= 4; k++) {
+      const y = ymax * k / 4;
+      el("line", { x1: L, x2: W - R, y1: ly(y), y2: ly(y), stroke: css("--grid"), "stroke-width": 1 }, svg);
+      const t = el("text", { x: L - 6, y: ly(y) + 3, "text-anchor": "end" }, svg); t.textContent = st.metric === "neff" ? Math.round(y) : y.toFixed(2);
+    }
+    let lastX = -1e9;
+    for (const s of steps) {
+      const x = lx(s); if (x - lastX < 30 && s !== steps[steps.length - 1]) continue; lastX = x;
+      const t = el("text", { x, y: H - 8, "text-anchor": "middle" }, svg); t.textContent = fmtStep(s);
+    }
+    for (const r of d.runs) {
+      const ys = val(r, c);
+      el("path", { d: ys.map((y, i) => `${i ? "L" : "M"}${lx(steps[i])},${ly(y)}`).join(""), fill: "none", stroke: css(RUN_VAR[r]), "stroke-width": r === st.run ? 2.5 : 1.5, "stroke-linejoin": "round" }, svg);
+      const i = ys.length - 1;
+      el("circle", { cx: lx(steps[i]), cy: ly(ys[i]), r: 3.5, fill: css(RUN_VAR[r]), stroke: css("--surface"), "stroke-width": 2 }, svg);
+    }
+    const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
+    const cross = el("line", { y1: T, y2: H - B, stroke: css("--axis"), "stroke-width": 1, visibility: "hidden" }, svg);
+    hit.addEventListener("mousemove", (ev) => {
+      const p = svg.getBoundingClientRect(), x = (ev.clientX - p.left) * W / p.width;
+      let bi = 0; for (let i = 0; i < steps.length; i++) if (Math.abs(lx(steps[i]) - x) < Math.abs(lx(steps[bi]) - x)) bi = i;
+      cross.setAttribute("x1", lx(steps[bi])); cross.setAttribute("x2", lx(steps[bi])); cross.setAttribute("visibility", "visible");
+      showTip(ev, `<b>step ${fmtStep(steps[bi])}</b> · ${COND_LABEL[c]}<br>` + d.runs.map((r) => `${RUN_LABEL[r]}: ${val(r, c)[bi].toFixed(3)}`).join("<br>"));
+    });
+    hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); });
+    f.appendChild(svg); box.appendChild(f);
+  }
+}
+
+// ---- input picker ----
+function drawPicker() {
+  const d = D.datasets[st.ds], box = document.getElementById("picker");
+  box.innerHTML = "";
+  document.getElementById("pick-sub").textContent = st.ds === "mnist"
+    ? "Probe images at step 500k, 12 per digit, then pixel-shuffled and uniform-noise inputs. Click one."
+    : "Probe images at step 500k: 36 chairs, then pixel-shuffled and uniform-noise inputs. Click one.";
+  const groups = [];
+  d.examples.forEach((e, i) => {
+    const key = e.cond !== "real" ? COND_LABEL[e.cond] : (e.label >= 0 ? `digit ${e.label}` : "chairs");
+    let g = groups.find((x) => x.key === key); if (!g) groups.push(g = { key, idx: [] }); g.idx.push(i);
+  });
+  for (const g of groups) {
+    for (let k = 0; k < g.idx.length; k += 12) {
+      const row = document.createElement("div"); row.className = "prow";
+      row.innerHTML = `<span class="rl">${k === 0 ? g.key : ""}</span>`;
+      const th = document.createElement("div"); th.className = "thumbs";
+      for (const i of g.idx.slice(k, k + 12)) {
+        const b = document.createElement("button"); b.type = "button";
+        b.setAttribute("aria-pressed", String(i === st.ex)); b.setAttribute("aria-label", `${g.key}, example ${i}`);
+        b.innerHTML = `<img src="${d.examples[i].img}" alt="">`;
+        b.onclick = () => { st.ex = i; box.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); drawResp(); };
+        th.appendChild(b);
+      }
+      row.appendChild(th); box.appendChild(row);
+    }
+  }
+}
+
+// ---- response of the selected run to the selected input ----
+function drawResp() {
+  const d = D.datasets[st.ds], e = d.examples[st.ex];
+  const pre = vec(st.ds, st.run, st.ex), post = inhibit(st.run, pre), what = maxSoftmax(pre, st.beta);
+  document.getElementById("sel-img").src = e.img;
+  document.getElementById("resp-sub").textContent = `${RUN_LABEL[st.run]}, step 500k. Bars by neuron index (each trained group has its own neurons).`;
+  const raised = pre.filter((x, i) => post[i] > x + 1e-6).length;
+  const kv = [["peak before", Math.max(...pre).toFixed(3), "--pre"], ["peak after", Math.max(...post).toFixed(3), RUN_VAR[st.run]],
+              ["active before", neff(pre).toFixed(1), "--pre"], ["active after", neff(post).toFixed(1), RUN_VAR[st.run]],
+              ["raised", `${raised} / 50`, RUN_VAR[st.run]]];
+  document.getElementById("sel-kv").innerHTML = kv.map(([k, v, c]) => `<div style="--c:var(${c})"><span class="v">${v}</span><span class="k">${k}</span></div>`).join("");
+  legend("resp-legend", [["--pre", "before inhibition", ""], [RUN_VAR[st.run], "after (trained setting)", ""], ["--ink", `what-if β ${st.beta}`, "dash"]]);
+  const svg = document.getElementById("resp"); svg.innerHTML = "";
+  const W = 460, H = 190, L = 30, R = 4, T = 6, B = 18, bw = (W - L - R) / 50;
+  const ly = (y) => T + (1 - y) * (H - T - B);
+  for (const y of [0, 0.25, 0.5, 0.75, 1]) {
+    el("line", { x1: L, x2: W - R, y1: ly(y), y2: ly(y), stroke: css("--grid"), "stroke-width": 1 }, svg);
+    const t = el("text", { x: L - 5, y: ly(y) + 3, "text-anchor": "end" }, svg); t.textContent = y.toFixed(2);
+  }
+  for (const k of [0, 10, 20, 30, 40, 49]) { const t = el("text", { x: L + (k + 0.5) * bw, y: H - 4, "text-anchor": "middle" }, svg); t.textContent = k; }
+  for (let i = 0; i < 50; i++) {
+    const x = L + i * bw;
+    el("rect", { x: x + 0.5, y: ly(pre[i]), width: bw - 1, height: Math.max(0, ly(0) - ly(pre[i])), fill: css("--pre"), rx: 1 }, svg);
+    el("rect", { x: x + 2, y: ly(post[i]), width: Math.max(1, bw - 4), height: Math.max(0, ly(0) - ly(post[i])), fill: css(RUN_VAR[st.run]), rx: 1 }, svg);
+    el("line", { x1: x + 1, x2: x + bw - 1, y1: ly(what[i]), y2: ly(what[i]), stroke: css("--ink"), "stroke-width": 1.5, "stroke-dasharray": "2 2" }, svg);
+    const hit = el("rect", { x, y: T, width: bw, height: H - T - B, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", (ev) => showTip(ev, `<b>neuron ${i}</b><br>before ${pre[i].toFixed(3)}<br>after ${post[i].toFixed(3)}${post[i] > pre[i] + 1e-6 ? " (raised)" : ""}<br>what-if β ${st.beta}: ${what[i].toFixed(3)}`));
+    hit.addEventListener("mouseleave", hideTip);
+  }
+  drawSorted();
+}
+
+function drawSorted() {
+  const d = D.datasets[st.ds];
+  legend("sort-legend", d.runs.map((r) => [RUN_VAR[r], RUN_LABEL[r]]));
+  const svg = document.getElementById("sorted"); svg.innerHTML = "";
+  const W = 460, H = 150, L = 30, R = 4, T = 6, B = 18;
+  const lx = (i) => L + (i / 49) * (W - L - R), ly = (y) => T + (1 - y) * (H - T - B);
+  for (const y of [0, 0.5, 1]) {
+    el("line", { x1: L, x2: W - R, y1: ly(y), y2: ly(y), stroke: css("--grid"), "stroke-width": 1 }, svg);
+    const t = el("text", { x: L - 5, y: ly(y) + 3, "text-anchor": "end" }, svg); t.textContent = y.toFixed(1);
+  }
+  for (const [k, lab] of [[0, "1st"], [9, "10th"], [24, "25th"], [49, "50th"]]) { const t = el("text", { x: lx(k), y: H - 4, "text-anchor": "middle" }, svg); t.textContent = lab; }
+  const rows = {};
+  for (const r of d.runs) {
+    const out = inhibit(r, vec(st.ds, r, st.ex)).sort((a, b) => b - a); rows[r] = out;
+    el("path", { d: out.map((y, i) => `${i ? "L" : "M"}${lx(i)},${ly(y)}`).join(""), fill: "none", stroke: css(RUN_VAR[r]), "stroke-width": r === st.run ? 2.5 : 1.5 }, svg);
+  }
+  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", (ev) => {
+    const p = svg.getBoundingClientRect(), i = Math.max(0, Math.min(49, Math.round(((ev.clientX - p.left) * W / p.width - L) / (W - L - R) * 49)));
+    showTip(ev, `<b>rank ${i + 1}</b><br>` + d.runs.map((r) => `${RUN_LABEL[r]}: ${rows[r][i].toFixed(3)}`).join("<br>"));
+  });
+  hit.addEventListener("mouseleave", hideTip);
+}
+
+// ---- winners by digit (mnist) ----
+function drawWinners() {
+  const panel = document.getElementById("win-panel"), d = D.datasets[st.ds];
+  panel.hidden = !d.winners; if (!d.winners) return;
+  document.getElementById("win-tbl").innerHTML =
+    `<thead><tr><th>Trained with</th><th>neurons that win at least once</th><th>information about the digit (I/H)</th></tr></thead><tbody>` +
+    d.runs.map((r) => `<tr${r === st.run ? ' style="font-weight:600"' : ""}><td><i class="sw" style="background:var(${RUN_VAR[r]});margin-right:6px"></i>${RUN_LABEL[r]}</td><td>${d.winners[r].used} / 50</td><td>${d.winners[r].nmi.toFixed(3)}</td></tr>`).join("") + "</tbody>";
+  const J = d.winners[st.run].counts, svg = document.getElementById("heat"); svg.innerHTML = "";
+  const rowSum = J.map((row) => row.reduce((a, b) => a + b, 0));
+  const P = J.map((row, k) => row.map((x) => x / Math.max(1, rowSum[k])));
+  const pref = J[0].map((_, n) => { let b = 0, bv = -1; for (let k = 0; k < 10; k++) if (P[k][n] > bv) { bv = P[k][n]; b = k; } return [n, b, bv, J.reduce((a, row) => a + row[n], 0)]; });
+  pref.sort((a, b) => (a[3] === 0) - (b[3] === 0) || a[1] - b[1] || b[2] - a[2]);
+  const W = 1000, H = 200, L = 52, R = 4, T = 4, B = 22, cw = (W - L - R) / 50, ch = (H - T - B) / 10;
+  const vmax = Math.max(...P.flat());
+  for (let k = 0; k < 10; k++) { const t = el("text", { x: L - 6, y: T + (k + 0.5) * ch + 3, "text-anchor": "end" }, svg); t.textContent = `digit ${k}`; }
+  pref.forEach(([n], j) => {
+    if (j % 5 === 0) { const t = el("text", { x: L + (j + 0.5) * cw, y: H - 6, "text-anchor": "middle" }, svg); t.textContent = `n${n}`; }
+    for (let k = 0; k < 10; k++) {
+      const v = P[k][n];
+      const r = el("rect", { x: L + j * cw + 1, y: T + k * ch + 1, width: cw - 2, height: ch - 2, rx: 2, fill: v > 0 ? css("--heat") : css("--grid"), "fill-opacity": v > 0 ? (0.12 + 0.88 * v / vmax).toFixed(3) : 0.5 }, svg);
+      r.addEventListener("mousemove", (ev) => showTip(ev, `<b>neuron ${n}</b> · digit ${k}<br>wins ${J[k][n]} of ${rowSum[k]} images (${(100 * v).toFixed(1)}%)`));
+      r.addEventListener("mouseleave", hideTip);
+    }
+  });
+}
+
+function renderAll() {
+  seg("c-ds", Object.keys(D.datasets).map((k) => [k, k === "chairs3d_inv" ? "chairs3d inverted" : k]), "ds", () => { st.ex = 0; renderAll(); });
+  seg("c-run", D.datasets[st.ds].runs.map((r) => [r, RUN_LABEL[r], RUN_VAR[r]]), "run", renderAll);
+  seg("c-metric", Object.entries(METRICS).map(([k, v]) => [k, v]), "metric", renderAll);
+  seg("c-kind", [["post", "after inhibition"], ["pre", "before inhibition"]], "kind", renderAll);
+  document.querySelectorAll("#c-kind button").forEach((b) => { b.disabled = st.metric === "raised"; });
+  drawTraj(); drawPicker(); drawResp(); drawWinners();
+}
+const beta = document.getElementById("beta"), betaOut = document.getElementById("beta-out");
+beta.addEventListener("input", () => { st.beta = +beta.value; betaOut.textContent = st.beta; drawResp(); });
+document.getElementById("prov").innerHTML = D.provenance;
+renderAll();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>

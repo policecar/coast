@@ -22,7 +22,7 @@ sequenceDiagram
     Note over EE: Gate 1: active_probe_count_ == 0?<br/>→ YES: return (zero cost)<br/>→ NO: continue
 
     EE->>EPS: record(element, "activity", value)
-    Note over EPS: Gate 2: TBB const_accessor lookup<br/>→ NOT FOUND: create inactive instance, return<br/>→ FOUND but inactive: return<br/>→ FOUND and active: continue
+    Note over EPS: Gate 2: TBB const_accessor lookup<br/>→ NOT FOUND: return (record never inserts)<br/>→ FOUND but inactive: return<br/>→ FOUND and active: continue
 
     EPS->>PI: record(value)
     Note over PI: Gate 3: Decimation check<br/>call_count++ % decimation != 0? → return
@@ -78,15 +78,3 @@ No mutexes, no CAS loops. When the queue is full, values are silently dropped �
 3. Each frame: `update_observers()` drains SPSC queue → calls `push(step, value)` on each observer
 4. User closes observer window → `cleanup_closed_windows()` removes observer
 5. When last observer removed → `probe_instance::deactivate()` → decrements `active_probe_count_`
-
-## Probe-to-File Path
-
-When probe logging is active, `file_observer` instances are attached alongside visual observers:
-
-```
-probe_instance::update_observers()
-  → file_observer::push(step, value)
-    → probe_logger::record_value(path, step, value)
-      → buffered in memory
-        → flush to HDF5 or CSV when buffer fills
-```

@@ -5,6 +5,6 @@ weight = 10
 
 # Module Reference
 
-Detailed documentation for each of COAST's 13 modules. Each page covers all files, classes, and responsibilities within that module.
+Detailed documentation for the modules listed below: each page covers the module's files, classes, and responsibilities. The modules without a page of their own — `hd_ngm25`, `ngm`, `cli`, `app`, `hdf5`, `sim_console`, `run_config` and `coastd_console` — are covered file by file in the [File Reference]({{% relref "/reference" %}}).
 
-{{% children depth="1" %}}
+{{% pages display="tree" levels="1" %}}

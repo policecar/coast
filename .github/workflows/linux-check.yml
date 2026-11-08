@@ -1,0 +1,156 @@
+# Build + test every push on a self-hosted Linux runner (any registered one —
+# no runner-name label is required, so captncrunch and majorcrunch both qualify),
+# once with gcc and once with clang, plus a headless gcc build. Failures notify
+# the pusher via GitHub's standard Actions notifications (Settings →
+# Notifications → Actions).
+name: linux-check
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run still in flight for it.
+concurrency:
+  group: linux-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler }}
+    # The runners are this repo's own machines; a public mirror has none, so its runs are skipped
+    # rather than queued forever (and a fork's code never reaches them).
+    if: github.repository == 'cimcai/coast'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+            # integration_b runs in its own step (see "Test (B-tier)").
+            ctest_filter: -E '^integration_b$'
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+            # A-tier goldens are toolchain-specific; there are no clang goldens.
+            ctest_filter: -E '^integration\.(mnist_seed[012]_baseline|mnist_ngm3_(philox|cpu_to_gpu|gpu_to_cpu|heterogeneous)|mnist_ngm25)$|^integration_b$'
+          # The headless build is the only build that enforces the core/GUI
+          # boundary: a core TU including an ImGui-free coast_gui header links
+          # fine wherever coast_gui is linked, i.e. in both builds above. Here
+          # coast_gui does not exist, so such a TU fails to link (the coast exe,
+          # or any unit test linking bare coast_lib).
+          # The build is the check. Of the tests, only those whose code differs
+          # without the GUI run: unit.cli (the parser's headless branch) and the
+          # B-tier step (the CLI, whose headless behaviour differs). Every other
+          # test exercises coast_lib, built by the same compiler as in the gcc
+          # job (a headless binary produces byte-identical state), so running
+          # it again would add time and no coverage.
+          # No clang-headless: the boundary is a link check and does not depend
+          # on the compiler, and the clang job already compiles every core TU;
+          # only the few #ifndef COAST_WITH_GUI lines would be new to clang.
+          - compiler: gcc-headless
+            cc: gcc
+            cxx: g++
+            cmake_extra: -DCOAST_WITH_GUI=OFF
+            ctest_filter: -R '^unit\.cli\.'
+    env:
+      # Outside the checkout, so actions/checkout's clean step keeps it and
+      # builds stay incremental across runs. One subdir per branch + compiler.
+      BUILD_ROOT: ${{ github.workspace }}/../builds
+      # Tests that read the NAS directly (campaign.real) skip on the runner:
+      # CI must not depend on the NAS being reachable or fast (CLAUDE.md).
+      COAST_NO_NAS: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Runner info
+        run: |
+          echo "nproc: $(nproc)"
+          ${{ matrix.cxx }} --version | head -1
+
+      - name: Link datasets
+        run: ln -sfn /mnt/NAS/datasets data
+
+      # Branch names may contain '/' and other characters; flatten them. The
+      # touch marks the dir as in use; dirs untouched for 14 days (deleted or
+      # stale branches) are pruned so the disk does not fill up.
+      - name: Select build dir
+        run: |
+          branch=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '_')
+          dir="$BUILD_ROOT/$branch-${{ matrix.compiler }}"
+          mkdir -p "$dir" && touch "$dir"
+          find "$BUILD_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime +14 \
+            -exec rm -rf {} +
+          echo "BUILD_DIR=$dir" >> "$GITHUB_ENV"
+          echo "build dir: $dir"
+
+      - name: Configure
+        run: >
+          cmake -S . -B "$BUILD_DIR" -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=${{ matrix.cc }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DBUILD_TESTING=ON
+          -DCOAST_GPU_BACKEND=webgpu
+          ${{ matrix.cmake_extra }}
+
+      # nice + -j28: leaves 4 of captncrunch's 32 cores for coastd jobs.
+      - name: Build
+        run: nice -n 10 cmake --build "$BUILD_DIR" -j 28
+
+      # Serial on purpose: the simulation tests use all cores (TBB); -j would
+      # save at most ~35 of ~300 s (measured on captncrunch, 2026-10-27).
+      # integration_b is one ctest wrapping all b_tier doctest cases; it runs
+      # in the next step, where doctest reports each case on its own.
+      # --no-tests=error: a filter that leaves nothing to run fails the job
+      # instead of passing silently.
+      - name: Test (ctest)
+        run: >
+          nice -n 10 ctest --test-dir "$BUILD_DIR" --output-on-failure
+          --no-tests=error
+          ${{ matrix.ctest_filter }}
+
+      - name: Test (B-tier)
+        run: nice -n 10 "$BUILD_DIR/tests/integration_b/test_b_tier"
+
+  # The Python evaluation toolkit (eval/, issue #82): lint, format, strict types and
+  # the tests, with exactly the locked dependencies. No dataset is read: the tests
+  # use synthetic arrays and files they write themselves. The toolkit's scripts in
+  # ../scripts are picked out by the include patterns in eval/pyproject.toml (ruff
+  # and pyright), so the other scripts there are not checked.
+  python-eval:
+    name: python-eval
+    # The runners are this repo's own machines; a public mirror has none, so its runs are skipped
+    # rather than queued forever (and a fork's code never reaches them).
+    if: github.repository == 'cimcai/coast'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: eval
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Sync (locked)
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check . ../scripts
+
+      - name: Format
+        run: uv run ruff format --check . ../scripts
+
+      - name: Types (pyright strict)
+        run: uv run pyright
+
+      - name: Test
+        run: uv run pytest

@@ -1,15 +1,15 @@
 [submodule "3rd_party/imgui"]
 	path = 3rd_party/imgui
-	url = git@github.com:ocornut/imgui.git
+	url = https://github.com/ocornut/imgui.git
 [submodule "3rd_party/json"]
 	path = 3rd_party/json
-	url = git@github.com:nlohmann/json.git
+	url = https://github.com/nlohmann/json.git
 [submodule "3rd_party/implot"]
 	path = 3rd_party/implot
 	url = https://github.com/epezent/implot.git
 [submodule "3rd_party/ImNodeFlow"]
 	path = 3rd_party/ImNodeFlow
-	url = git@github.com:jkerdels/ImNodeFlow.git
+	url = https://github.com/jkerdels/ImNodeFlow.git
 [submodule "docs/themes/hugo-theme-relearn"]
 	path = docs/themes/hugo-theme-relearn
 	url = https://github.com/McShelby/hugo-theme-relearn.git

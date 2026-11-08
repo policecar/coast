@@ -1,0 +1,37 @@
+# coastd — systemd USER service (the primary, supported deployment).
+#
+# Install (per user, headless-boot-capable):
+#   mkdir -p ~/.config/systemd/user
+#   cp coastd.service ~/.config/systemd/user/       # or: coastd --install-service
+#   # edit ExecStart below for your binary path / data-root / repo, then:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now coastd
+#   sudo loginctl enable-linger "$USER"             # start at BOOT without a login
+#
+# Why a USER service (not system): it inherits the user's git credentials (coastd
+# builds refs) and their environment, and `loginctl enable-linger` gives headless
+# boot-start without a system unit or root.
+#
+# RECOVERY MODEL (R1): KillMode=control-group is STOCK systemd and is DELIBERATELY
+# NOT overridden. On stop/restart/crash systemd reaps the whole cgroup — every
+# child `coast` dies with the daemon. That is exactly the recovery contract: no
+# live orphans ever, so each restart relaunches interrupted jobs from their last
+# checkpoint with zero risk of two children clobbering shared output. Do NOT set
+# KillMode=process or KillMode=mixed — that would leave orphans and break R1.
+
+[Unit]
+Description=coastd — resident COAST headless-job daemon
+After=network.target
+
+[Service]
+Type=simple
+# EDIT these three paths for your install (coastd --install-service fills them in):
+ExecStart=%h/.local/bin/coastd --data-root %h/.local/share/coastd --repo %h/src/coast
+Restart=on-failure
+RestartSec=2
+# Stock cgroup reap — the R1 recovery model. Do not change (see header).
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

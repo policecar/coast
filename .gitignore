@@ -1,5 +1,18 @@
-# Project
-configs/snapshots
+# Project — per-config outputs land under configs/<config>/ (the config_base
+# default `<config_dir>/<config>/`). Ignore the generated output subdirs; the
+# tracked configs/*.json files are unaffected.
+# `**` matches zero-or-more dirs, so both a flat config (configs/mnist/…) and a
+# nested one (configs/experiments/foo/…, which config_base supports) are covered.
+configs/**/snapshots/
+configs/**/observe/
+configs/**/observe_out/
+configs/**/logs/
+
+# OBSERVE system: capture outputs (default dir + any user-chosen variants,
+# including config-relative ones — the patterns below are unanchored)
+observe_out/
+observe*_out/
+*.observe.h5
 
 # osx
 .DS_Store
@@ -7,8 +20,9 @@ configs/snapshots
 # IDEs
 .idea
 
-# claude
-.claude
+# claude: local settings stay private; project skills are shared
+.claude/*
+!.claude/skills/
 CLAUDE_SESSION.md
 
 # Build
@@ -17,8 +31,28 @@ cmake-build-*
 compile_commands.json
 .cache
 
-# Data files
+# In-source CMake build artifacts (canonical builds are out-of-tree in build*/;
+# these only appear if cmake is run at the repo root by mistake)
+/CMakeCache.txt
+/CMakeFiles/
+/Makefile
+/cmake_install.cmake
+/Testing/
+tools/**/CMakeFiles/
+tools/**/Makefile
+tools/**/cmake_install.cmake
+__pycache__/
+
+# Reversible holding area for ambiguous cleanup (local only)
+.cleanup_clutter/
+
+# Data files (also as a symlink to a shared dataset dir — `data/` alone would
+# miss a symlink named `data`, which is a file, not a directory)
 data/
+/data
+
+# Console sim-control run outputs (simc::run defaults to runs/<config-stem>/)
+/runs/
 
 # Local plans
 docs/public/
@@ -68,3 +102,24 @@ imgui.ini
 # debug information files
 *.dwo
 data/
+
+# dew workflow state (local only)
+.dew/
+
+# git worktrees (local only)
+/.worktrees/
+
+# commit-gate test status (written locally by scripts/test-status.sh, not shared)
+.test-status
+
+# Platform-specific test goldens: only canonical Linux goldens live in git;
+# locally-generated platform goldens (coast_update_goldens on non-Linux) stay untracked.
+tests/integration/*/goldens/*/
+
+# Eval reports are not committed here: they go to the private policecar/roast.
+# Figures are regenerated from a report's numbers and never committed; the docs
+# keep their own static assets.
+*.svg
+*.png
+*.pdf
+!docs/static/**

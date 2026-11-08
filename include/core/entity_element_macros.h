@@ -7,8 +7,8 @@
 #ifndef COAST_ENTITY_ELEMENT_MACROS_H
 #define COAST_ENTITY_ELEMENT_MACROS_H
 
-#include "entity_element.h"
-#include "probe_name_registry.h"
+#include "core/entity_element.h"
+#include "core/probe_name_registry.h"
 
 /// Implement type_id() for an entity_element subclass.
 /// Usage: ELEMENT_TYPE(my_class, "display_name")
@@ -60,6 +60,55 @@
     [[nodiscard]] std::size_t child_count_impl(const std::type_info& type) const override { \
         if (type == typeid(T1)) return m1.size(); \
         if (type == typeid(T2)) return m2.size(); \
+        return 0; \
+    }
+
+/// Implement child accessors for a single std::unique_ptr<BaseType> child.
+/// Advertises 0 children when the pointer is null. The display name is explicit
+/// because the held object may be any subclass of BaseType — keeping the
+/// structural path stable across subclass swaps (the registry uses the
+/// advertised type, not the child's virtual type_id()).
+/// Usage: ELEMENT_CHILD_PTR(member_ptr, BaseType, "display_name")
+#define ELEMENT_CHILD_PTR(member, BaseType, display_name) \
+    [[nodiscard]] std::vector<child_group> children() const override { \
+        if (!member) return {}; \
+        return {{core::element_type::of<BaseType>(display_name), 1}}; \
+    } \
+    [[nodiscard]] core::entity_element* child_impl(const std::type_info& type, std::size_t index) override { \
+        if (type == typeid(BaseType) && index == 0 && member) return member.get(); \
+        return nullptr; \
+    } \
+    [[nodiscard]] const core::entity_element* child_impl(const std::type_info& type, std::size_t index) const override { \
+        if (type == typeid(BaseType) && index == 0 && member) return member.get(); \
+        return nullptr; \
+    } \
+    [[nodiscard]] std::size_t child_count_impl(const std::type_info& type) const override { \
+        if (type == typeid(BaseType)) return member ? 1 : 0; \
+        return 0; \
+    }
+
+/// A vector child plus a single std::unique_ptr child (heterogeneous). The ptr
+/// child advertises 0 when null. Usage:
+///   ELEMENT_CHILDREN_1_AND_PTR(neurons, neuron_t, inhibitor_, inhibition::inhibitor_t, "inhibition")
+#define ELEMENT_CHILDREN_1_AND_PTR(vec, VecType, ptr, PtrType, ptr_name) \
+    [[nodiscard]] std::vector<child_group> children() const override { \
+        std::vector<child_group> cs{{core::element_type::of<VecType>(#VecType), vec.size()}}; \
+        if (ptr) cs.push_back({core::element_type::of<PtrType>(ptr_name), 1}); \
+        return cs; \
+    } \
+    [[nodiscard]] core::entity_element* child_impl(const std::type_info& type, std::size_t index) override { \
+        if (type == typeid(VecType) && index < vec.size()) return &vec[index]; \
+        if (type == typeid(PtrType) && index == 0 && ptr) return ptr.get(); \
+        return nullptr; \
+    } \
+    [[nodiscard]] const core::entity_element* child_impl(const std::type_info& type, std::size_t index) const override { \
+        if (type == typeid(VecType) && index < vec.size()) return &vec[index]; \
+        if (type == typeid(PtrType) && index == 0 && ptr) return ptr.get(); \
+        return nullptr; \
+    } \
+    [[nodiscard]] std::size_t child_count_impl(const std::type_info& type) const override { \
+        if (type == typeid(VecType)) return vec.size(); \
+        if (type == typeid(PtrType)) return ptr ? 1 : 0; \
         return 0; \
     }
 

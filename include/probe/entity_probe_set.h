@@ -10,7 +10,7 @@
 #include <memory>
 #include <cstdint>
 #include <tbb/concurrent_hash_map.h>
-#include "probe_instance.h"
+#include "probe/probe_instance.h"
 
 namespace sim {
 struct io_entity;
@@ -23,15 +23,21 @@ class structure_registry;
 
 namespace probe {
 
-/// Per-entity probe management with thread-safe registration.
-/// Handles concurrent probe registration from TBB threads.
+/// Per-entity probe management. The sim thread only looks up (record()).
+/// Inserts and traversals happen on one other thread (GUI / headless loop).
 class entity_probe_set {
     sim::io_entity* owner_;
     core::structure_registry* structure_;
 
-    // Thread-safe map for concurrent probe registration from TBB threads
+    // Lookup only (#249): a lookup concurrent with insert is safe, but it may
+    // rehash a bucket, so the map is never traversed.
     // Key: hash of (element pointer, probe name)
     tbb::concurrent_hash_map<std::size_t, std::unique_ptr<probe_instance>> instances_;
+
+    // Every instance, in creation order. Written by get_or_create() and read by
+    // all_instances()/update_observers(), all on the GUI thread (headless: the
+    // run loop). The sim thread never touches it.
+    std::vector<probe_instance*> list_;
 
 public:
     entity_probe_set();

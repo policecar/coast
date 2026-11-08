@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "color_types.h"
+#include "gui_vis/core/color_types.h"
 #include "imgui.h"
 
 // Forward declare OpenGL types to avoid including heavy headers

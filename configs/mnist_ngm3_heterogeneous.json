@@ -1,0 +1,390 @@
+{
+    "datasets": {
+        "mnist": {
+            "default": {
+                "image_file": "./data/mnist/train-images-idx3-ubyte",
+                "label_file": "./data/mnist/train-labels-idx1-ubyte",
+                "change_interval": 1,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0,
+                "shuffle": false
+            }
+        },
+        "dsprites": {
+            "default": {
+                "hdf5_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "emnist": {
+            "default": {
+                "image_file": "",
+                "label_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "kmnist": {
+            "default": {
+                "image_file": "",
+                "label_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "cifar10": {
+            "default": {
+                "data_dir": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0,
+                "use_test_set": false
+            }
+        },
+        "cifar100": {
+            "default": {
+                "data_dir": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0,
+                "use_test_set": false,
+                "use_coarse_labels": false
+            }
+        },
+        "chairs3d": {
+            "default": {
+                "data_dir": "",
+                "image_width": 64,
+                "image_height": 64,
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        },
+        "color_mnist": {
+            "default": {
+                "image_file": "",
+                "label_file": "",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        }
+    },
+    "ngm2": {
+        "dendrites": {
+            "default": {
+                "type": "proximal",
+                "input_channels": [],
+                "permanence_threshold": 0.3,
+                "max_branch_level": 3,
+                "rnd_seed": 0,
+                "default_primary_learning_rate": 0.01,
+                "default_secondary_learning_rate": 0.0001,
+                "default_mismatch_act_thres": 0.8,
+                "default_mismatch_smoothing": 0.001,
+                "default_accumulated_theta_thres": 2.0,
+                "default_min_mismatch_deviation": 1.0,
+                "default_min_mismatch_percentage": 0.002
+            }
+        },
+        "neurons": {
+            "default": {
+                "input_channels": [],
+                "dendrites": [],
+                "channel_mappings": [],
+                "default_branch_interval": 5000,
+                "random_seed": 0,
+                "default_neuron_noise_range": [
+                    0.01,
+                    0.05
+                ]
+            }
+        },
+        "neuron_groups": {
+            "default": {
+                "input_channels": [],
+                "neurons": [],
+                "channel_mappings": [],
+                "default_local_inhibition_strength": 10.0,
+                "default_common_learning_rate": 0.0001,
+                "default_weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33
+                },
+                "default_stochastic_win_thres": 0.8,
+                "random_seed": 0
+            }
+        }
+    },
+    "ngm3": {
+        "neuron_groups": {
+            "L4-mnist-ngm3": {
+                "neuron_cnt": 50,
+                "apical_cnt": 0,
+                "proximal_cnt": 5,
+                "max_branch_level": 3,
+                "permanence_threshold": 0.30000001192092896,
+                "local_inhibition_strength": 10.0,
+                "stochastic_win_thres": 0.800000011920929,
+                "weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33
+                },
+                "common_learning_rate": 9.999999747378752e-05,
+                "primary_learning_rate": 0.009999999776482582,
+                "secondary_learning_rate": 9.999999747378752e-05,
+                "mismatch_act_thres": 0.800000011920929,
+                "mismatch_smoothing": 0.0010000000474974513,
+                "branch_interval": 5000,
+                "min_mismatch_deviation": 1.0,
+                "accumulated_theta_thres": 2.0,
+                "min_mismatch_percentage": 0.0020000000949949026,
+                "neuron_noise_range": [
+                    0.009999999776482582,
+                    0.05000000074505806
+                ],
+                "inputs": [
+                    {
+                        "channel_name": "in_proximal",
+                        "bank": "proximal"
+                    }
+                ],
+                "random_seed": 0
+            }
+        }
+    },
+    "sim": {
+        "nodes": [
+            {
+                "id": 0,
+                "label": "mnist",
+                "entity_type": "mnist_input_gpu",
+                "entity_cfg": "default",
+                "inputs": [],
+                "random_seed_offset": 0
+            },
+            {
+                "id": 1,
+                "label": "ngm3 group",
+                "entity_type": "ngm3_neuron_group_gpu",
+                "entity_cfg": "L4-mnist-ngm3",
+                "inputs": [
+                    [
+                        0,
+                        "in_proximal"
+                    ]
+                ],
+                "random_seed_offset": 0
+            }
+        ],
+        "node_sets": []
+    },
+    "vis_hints": {
+        "datasets": {
+            "mnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "dsprites": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 64,
+                        "height": 64,
+                        "num_channels": 1,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "emnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "kmnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "cifar10": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 32,
+                        "height": 32,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "cifar100": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 32,
+                        "height": 32,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "chairs3d": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 64,
+                        "height": 64,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            },
+            "color_mnist": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 3,
+                        "update_interval": 1000
+                    }
+                }
+            }
+        },
+        "ngm2": {
+            "neuron_groups": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    },
+                    "ngm_tree_vis": {
+                        "rep_width": 28,
+                        "rep_height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000,
+                        "bg_r": 30,
+                        "bg_g": 30,
+                        "bg_b": 30,
+                        "bg_a": 255,
+                        "edge_thickness_min": 2.0,
+                        "edge_thickness_max": 10.0,
+                        "edge_r": 0,
+                        "edge_g": 121,
+                        "edge_b": 241,
+                        "edge_a": 255,
+                        "apical_edge_r": 90,
+                        "apical_edge_g": 200,
+                        "apical_edge_b": 120,
+                        "apical_edge_a": 255,
+                        "texture_scale_divisor": 1500.0,
+                        "root_node_radius": 6.0,
+                        "branch_node_radius": 3.0,
+                        "root_r": 255,
+                        "root_g": 161,
+                        "root_b": 0,
+                        "root_a": 255,
+                        "branch_r": 100,
+                        "branch_g": 180,
+                        "branch_b": 255,
+                        "branch_a": 255
+                    }
+                }
+            }
+        },
+        "ngm3": {
+            "neuron_groups": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 28,
+                        "height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    },
+                    "ngm_tree_vis": {
+                        "rep_width": 28,
+                        "rep_height": 28,
+                        "num_channels": 1,
+                        "update_interval": 10000,
+                        "bg_r": 30,
+                        "bg_g": 30,
+                        "bg_b": 30,
+                        "bg_a": 255,
+                        "edge_thickness_min": 2.0,
+                        "edge_thickness_max": 10.0,
+                        "edge_r": 0,
+                        "edge_g": 121,
+                        "edge_b": 241,
+                        "edge_a": 255,
+                        "apical_edge_r": 90,
+                        "apical_edge_g": 200,
+                        "apical_edge_b": 120,
+                        "apical_edge_a": 255,
+                        "texture_scale_divisor": 1500.0,
+                        "root_node_radius": 6.0,
+                        "branch_node_radius": 3.0,
+                        "root_r": 255,
+                        "root_g": 161,
+                        "root_b": 0,
+                        "root_a": 255,
+                        "branch_r": 100,
+                        "branch_g": 180,
+                        "branch_b": 255,
+                        "branch_a": 255
+                    }
+                }
+            }
+        },
+        "buffer_vis": {
+            "update_interval": 100,
+            "ring_length": 500
+        }
+    },
+    "observe": {
+        "output_dir": "./observe_out",
+        "groups": {}
+    },
+    "snapshot_dir": "snapshots"
+}

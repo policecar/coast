@@ -1,0 +1,166 @@
+{
+    "frozen": true,
+    "datasets": {
+        "mnist": {
+            "default": {
+                "image_file": "./data/mnist/train-images-idx3-ubyte",
+                "label_file": "./data/mnist/train-labels-idx1-ubyte",
+                "change_interval": 15,
+                "noise_range": [
+                    0.0,
+                    0.0
+                ],
+                "random_seed": 0,
+                "index_manifest": "",
+                "shuffle": false
+            }
+        }
+    },
+    "ngm25": {
+        "neuron_groups": {
+            "L4-mnist": {
+                "neuron_cnt": 50,
+                "apical_cnt": 0,
+                "proximal_cnt": 5,
+                "max_branch_level": 3,
+                "permanence_threshold": 0.3,
+                "local_inhibition_strength": 10.0,
+                "stochastic_win_thres": 0.8,
+                "weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33
+                },
+                "common_learning_rate": 0.0001,
+                "primary_learning_rate": 0.01,
+                "secondary_learning_rate": 0.0001,
+                "mismatch_act_thres": 0.8,
+                "mismatch_smoothing": 0.001,
+                "branch_interval": 5000,
+                "min_mismatch_deviation": 1.0,
+                "accumulated_theta_thres": 2.0,
+                "min_mismatch_percentage": 0.002,
+                "neuron_noise_range": [
+                    0.01,
+                    0.05
+                ],
+                "penalty_policy": "stochastic",
+                "inputs": [
+                    {
+                        "channel_name": "on",
+                        "bank": "proximal"
+                    },
+                    {
+                        "channel_name": "off",
+                        "bank": "proximal"
+                    }
+                ],
+                "random_seed": 0,
+                "inhibition_cfg": "ab_pinned"
+            }
+        },
+        "inhibitions": {
+            "ab_pinned": {
+                "type": "max_softmax",
+                "strength": 10.0
+            }
+        }
+    },
+    "retina": {
+        "on": {
+            "width": 28,
+            "height": 28,
+            "channels": 1,
+            "luminance": false,
+            "center_sigma": 1.0,
+            "surround_sigma": 3.0,
+            "surround_weight": 0.7,
+            "gain": 0.38,
+            "noise_range": [
+                0.0,
+                0.05
+            ],
+            "random_seed": 1,
+            "polarity": "on",
+            "normalize": true,
+            "norm_sigma": 0.025
+        },
+        "off": {
+            "width": 28,
+            "height": 28,
+            "channels": 1,
+            "luminance": false,
+            "center_sigma": 1.0,
+            "surround_sigma": 3.0,
+            "surround_weight": 0.7,
+            "gain": 0.38,
+            "noise_range": [
+                0.0,
+                0.05
+            ],
+            "random_seed": 2,
+            "polarity": "off",
+            "normalize": true,
+            "norm_sigma": 0.025
+        }
+    },
+    "sim": {
+        "nodes": [
+            {
+                "id": 0,
+                "label": "mnist",
+                "entity_type": "mnist_input",
+                "entity_cfg": "default",
+                "inputs": [],
+                "random_seed_offset": 0
+            },
+            {
+                "id": 10,
+                "label": "retina on",
+                "entity_type": "retina",
+                "entity_cfg": "on",
+                "inputs": [
+                    [
+                        0,
+                        "in"
+                    ]
+                ],
+                "random_seed_offset": 0
+            },
+            {
+                "id": 11,
+                "label": "retina off",
+                "entity_type": "retina",
+                "entity_cfg": "off",
+                "inputs": [
+                    [
+                        0,
+                        "in"
+                    ]
+                ],
+                "random_seed_offset": 0
+            },
+            {
+                "id": 1,
+                "label": "ngm25 group",
+                "entity_type": "ngm25_neuron_group",
+                "entity_cfg": "L4-mnist",
+                "inputs": [
+                    [
+                        10,
+                        "on"
+                    ],
+                    [
+                        11,
+                        "off"
+                    ]
+                ],
+                "random_seed_offset": 0
+            }
+        ],
+        "node_sets": []
+    },
+    "observe": {
+        "output_dir": "./observe_out",
+        "groups": {}
+    }
+}

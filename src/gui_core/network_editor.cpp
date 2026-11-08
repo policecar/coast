@@ -1,4 +1,4 @@
-#include "network_editor.h"
+#include "gui_core/network_editor.h"
 #include "ImNodeFlow.h"
 
 #include <algorithm>
@@ -16,9 +16,14 @@ auto filter_any = [](ImFlow::Pin*, ImFlow::Pin*) { return true; };
 std::shared_ptr<ImFlow::NodeStyle> get_node_style(sim::io_entity_type_t type) {
     switch (type) {
         case sim::io_entity_type_t::ngm2_neuron_group:
+        case sim::io_entity_type_t::ngm3_neuron_group:
+        case sim::io_entity_type_t::ngm3_neuron_group_gpu:
+        case sim::io_entity_type_t::ngm25_neuron_group:
+        case sim::io_entity_type_t::ngm25_neuron_group_gpu:
             return ImFlow::NodeStyle::cyan();
         // MNIST-family datasets
         case sim::io_entity_type_t::mnist_input:
+        case sim::io_entity_type_t::mnist_input_gpu:
         case sim::io_entity_type_t::emnist_input:
         case sim::io_entity_type_t::kmnist_input:
         case sim::io_entity_type_t::color_mnist_input:
@@ -29,6 +34,8 @@ std::shared_ptr<ImFlow::NodeStyle> get_node_style(sim::io_entity_type_t type) {
         case sim::io_entity_type_t::cifar100_input:
         case sim::io_entity_type_t::chairs3d_input:
             return ImFlow::NodeStyle::brown();
+        case sim::io_entity_type_t::retina:
+            return ImFlow::NodeStyle::red();
         default:
             return ImFlow::NodeStyle::cyan();
     }
@@ -36,18 +43,7 @@ std::shared_ptr<ImFlow::NodeStyle> get_node_style(sim::io_entity_type_t type) {
 
 // Entity type names for display
 const char* get_entity_type_name(sim::io_entity_type_t type) {
-    switch (type) {
-        case sim::io_entity_type_t::ngm2_neuron_group:  return "NGM2 Group";
-        case sim::io_entity_type_t::mnist_input:        return "MNIST Input";
-        case sim::io_entity_type_t::emnist_input:       return "EMNIST Input";
-        case sim::io_entity_type_t::kmnist_input:       return "KMNIST Input";
-        case sim::io_entity_type_t::color_mnist_input:  return "Color MNIST Input";
-        case sim::io_entity_type_t::dsprites_input:     return "dSprites Input";
-        case sim::io_entity_type_t::cifar10_input:      return "CIFAR-10 Input";
-        case sim::io_entity_type_t::cifar100_input:     return "CIFAR-100 Input";
-        case sim::io_entity_type_t::chairs3d_input:     return "3D Chairs Input";
-        default: return "Unknown";
-    }
+    return sim::entity_type_display_name(type);   // canonical (sim_builder_cfg.h)
 }
 
 } // anonymous namespace
@@ -161,15 +157,17 @@ const sim::sim_node_t* network_editor::find_node_by_id(sim::sim_node_id_t id) co
 
 std::vector<std::string> network_editor::get_input_channels(const sim::sim_node_t& node) const {
     // Dataset nodes have no input pins
-    if (node.entity_type == sim::io_entity_type_t::mnist_input   ||
-        node.entity_type == sim::io_entity_type_t::emnist_input  ||
-        node.entity_type == sim::io_entity_type_t::kmnist_input  ||
-        node.entity_type == sim::io_entity_type_t::color_mnist_input ||
-        node.entity_type == sim::io_entity_type_t::dsprites_input ||
-        node.entity_type == sim::io_entity_type_t::cifar10_input  ||
-        node.entity_type == sim::io_entity_type_t::cifar100_input ||
-        node.entity_type == sim::io_entity_type_t::chairs3d_input) {
+    if (sim::is_dataset_entity_type(node.entity_type)) {
         return {};
+    }
+
+    // A retina node reads exactly one image under whatever channel name the config
+    // gives it; offer that name so the link resolves, "in" for an unwired node.
+    if (node.entity_type == sim::io_entity_type_t::retina) {
+        std::vector<std::string> channels;
+        for (const auto& inp : node.inputs) channels.push_back(inp.second);
+        if (channels.empty()) channels.push_back("in");
+        return channels;
     }
 
     // For neuron groups, get input_channels from the entity config
@@ -177,6 +175,32 @@ std::vector<std::string> network_editor::get_input_channels(const sim::sim_node_
         auto it = config.ngm2.neuron_groups.find(node.entity_cfg);
         if (it != config.ngm2.neuron_groups.end()) {
             return it->second.input_channels;
+        }
+    }
+
+    // For ngm3 groups (CPU and GPU — GPU shares ngm3 group configs),
+    // derive channel list from the input routes
+    if (node.entity_type == sim::io_entity_type_t::ngm3_neuron_group ||
+        node.entity_type == sim::io_entity_type_t::ngm3_neuron_group_gpu) {
+        auto it = config.ngm3.neuron_groups.find(node.entity_cfg);
+        if (it != config.ngm3.neuron_groups.end()) {
+            std::vector<std::string> channels;
+            channels.reserve(it->second.inputs.size());
+            for (const auto& r : it->second.inputs) channels.push_back(r.channel_name);
+            return channels;
+        }
+    }
+
+    // ngm2.5 groups (CPU and GPU — GPU shares ngm2.5 group configs): same flat
+    // inputs schema as ngm3.
+    if (node.entity_type == sim::io_entity_type_t::ngm25_neuron_group ||
+        node.entity_type == sim::io_entity_type_t::ngm25_neuron_group_gpu) {
+        auto it = config.ngm25.neuron_groups.find(node.entity_cfg);
+        if (it != config.ngm25.neuron_groups.end()) {
+            std::vector<std::string> channels;
+            channels.reserve(it->second.inputs.size());
+            for (const auto& r : it->second.inputs) channels.push_back(r.channel_name);
+            return channels;
         }
     }
 
@@ -270,59 +294,15 @@ void network_editor::render(bool* p_open) {
             if (node == nullptr) {
                 // Background right-click - add node menu
                 if (ImGui::BeginMenu("Add Node")) {
-                    if (ImGui::MenuItem("NGM2 Neuron Group")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::ngm2_neuron_group, "new_group");
-                            needs_rebuild = true;
-                        }
-                    }
-                    ImGui::Separator();
-                    if (ImGui::MenuItem("MNIST Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::mnist_input, "mnist");
-                            needs_rebuild = true;
-                        }
-                    }
-                    if (ImGui::MenuItem("EMNIST Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::emnist_input, "emnist");
-                            needs_rebuild = true;
-                        }
-                    }
-                    if (ImGui::MenuItem("KMNIST Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::kmnist_input, "kmnist");
-                            needs_rebuild = true;
-                        }
-                    }
-                    if (ImGui::MenuItem("Color MNIST Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::color_mnist_input, "color_mnist");
-                            needs_rebuild = true;
-                        }
-                    }
-                    ImGui::Separator();
-                    if (ImGui::MenuItem("dSprites Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::dsprites_input, "dsprites");
-                            needs_rebuild = true;
-                        }
-                    }
-                    if (ImGui::MenuItem("CIFAR-10 Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::cifar10_input, "cifar10");
-                            needs_rebuild = true;
-                        }
-                    }
-                    if (ImGui::MenuItem("CIFAR-100 Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::cifar100_input, "cifar100");
-                            needs_rebuild = true;
-                        }
-                    }
-                    if (ImGui::MenuItem("3D Chairs Input")) {
-                        if (edit_callbacks_.add_node) {
-                            edit_callbacks_.add_node(sim::io_entity_type_t::chairs3d_input, "chairs3d");
+                    // One item per entity type (sim::entity_types), a separator
+                    // between kinds. The new node's label is its type's config
+                    // name; the user renames it.
+                    const sim::entity_type_info_t* prev = nullptr;
+                    for (const auto& t : sim::entity_types) {
+                        if (prev != nullptr && prev->kind != t.kind) ImGui::Separator();
+                        prev = &t;
+                        if (ImGui::MenuItem(t.display_name) && edit_callbacks_.add_node) {
+                            edit_callbacks_.add_node(t.type, t.name);
                             needs_rebuild = true;
                         }
                     }

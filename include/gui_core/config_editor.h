@@ -7,8 +7,8 @@
 
 #include "imgui.h"
 #include "imfilebrowser.h"
-#include "json_loader.h"
-#include "network_editor.h"
+#include "json_cfg/json_loader.h"
+#include "gui_core/network_editor.h"
 
 namespace coast {
 
@@ -100,10 +100,15 @@ private:
 
     // Render sections
     void render_dataset_configs();
+    void render_retina_configs();
     void render_ngm2_configs();
+    void render_ngm3_configs();
+    void render_ngm25_configs();
     void render_simulation_graph();
+    void render_run_settings();
     void render_logging_settings();
     void render_visualization_hints();
+    void render_observe_configs();
 
     // Network editor (ImNodeFlow-based)
     std::unique_ptr<network_editor> net_editor;

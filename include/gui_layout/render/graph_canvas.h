@@ -6,7 +6,7 @@
 #define COAST_GRAPH_CANVAS_H
 
 #include "gui_layout/layout_graph.h"
-#include "node_renderer.h"
+#include "gui_layout/render/node_renderer.h"
 
 #include "imgui.h"
 

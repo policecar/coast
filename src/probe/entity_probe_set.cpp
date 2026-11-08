@@ -32,36 +32,20 @@ void entity_probe_set::record(const core::entity_element* element,
                                double value) {
     std::size_t key = make_key(element, name);
 
-    // Fast path: lookup existing instance (read-only access)
+    // Lookup only, never insert (#249): record() runs on the sim thread, and
+    // instances are created by discover()/activate() on the GUI thread, which
+    // also owns list_. The probe browser finds the names through
+    // probe_name_registry, not through this map.
     typename decltype(instances_)::const_accessor reader;
-    if (instances_.find(reader, key)) {
-        auto* instance = reader->second.get();
+    if (!instances_.find(reader, key)) return;
 
-        // Check if active (single relaxed load - very fast when inactive)
-        if (!instance->active.load(std::memory_order_relaxed)) {
-            return;
-        }
-
-        // Record value (handles decimation internally)
-        instance->record(value);
-        return;
-    }
-
-    // Slow path: first time seeing this probe - register for discovery
-    typename decltype(instances_)::accessor writer;
-    if (instances_.insert(writer, key)) {
-        const core::structure_entry* entry = structure_ ? structure_->find(element) : nullptr;
-        writer->second = std::make_unique<probe_instance>(element, entry, name);
-    }
-    // Don't record on first registration - just make it discoverable
+    auto* instance = reader->second.get();
+    if (!instance->active.load(std::memory_order_relaxed)) return;
+    instance->record(value);   // handles decimation internally
 }
 
 std::vector<probe_instance*> entity_probe_set::all_instances() {
-    std::vector<probe_instance*> result;
-    for (auto& pair : instances_) {
-        result.push_back(pair.second.get());
-    }
-    return result;
+    return list_;
 }
 
 probe_instance* entity_probe_set::find_instance(const core::entity_element* element,
@@ -82,6 +66,7 @@ probe_instance* entity_probe_set::get_or_create(const core::entity_element* elem
         if (instances_.insert(writer, key)) {
             const core::structure_entry* entry = structure_ ? structure_->find(element) : nullptr;
             writer->second = std::make_unique<probe_instance>(element, entry, name);
+            list_.push_back(writer->second.get());
         }
     }
     return writer->second.get();
@@ -116,11 +101,8 @@ void entity_probe_set::set_decimation(probe_instance* instance, std::uint32_t de
 }
 
 void entity_probe_set::update_observers() {
-    for (auto& pair : instances_) {
-        if (pair.second->active.load(std::memory_order_relaxed)) {
-            pair.second->update_observers();
-        }
-    }
+    for (auto* instance : list_)
+        if (instance->active.load(std::memory_order_relaxed)) instance->update_observers();
 }
 
 } // namespace probe

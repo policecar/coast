@@ -1,0 +1,22 @@
+//
+// COAST build info — CMake-generated via configure_file().
+// Provides verbatim git SHA + dirty flag + build type + compiler + target CPU, captured
+// AT CMAKE CONFIGURE TIME.
+// The COAST git SHA is captured INSIDE COAST so a coast_runtime.json can always
+// be traced back to the exact commit of the binary that emitted it.
+//
+
+#ifndef COAST_SIM_CORE_COAST_BUILD_INFO_H
+#define COAST_SIM_CORE_COAST_BUILD_INFO_H
+
+namespace sim {
+
+inline constexpr const char* COAST_GIT_SHA    = "@COAST_GIT_SHA@";
+inline constexpr bool        COAST_GIT_DIRTY  = @COAST_GIT_DIRTY_BOOL@;
+inline constexpr const char* COAST_BUILD_TYPE = "@CMAKE_BUILD_TYPE@";
+inline constexpr const char* COAST_COMPILER   = "@COAST_COMPILER@";    // e.g. "GNU 16.2.1"
+inline constexpr const char* COAST_TARGET_CPU = "@COAST_TARGET_CPU@";  // -march=native, resolved
+
+} // namespace sim
+
+#endif // COAST_SIM_CORE_COAST_BUILD_INFO_H

@@ -1,4 +1,4 @@
-#include "sdl_app.h"
+#include "gui_core/sdl_app.h"
 
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -8,10 +8,13 @@
 #include "imgui_impl_opengl3.h"
 #include "implot.h"
 
+#include "diag/diag.h"
+
 #include <stdexcept>
 #include <ranges>
 #include <cstdlib>
 #include <cstdio>
+#include <filesystem>
 
 namespace coast {
 
@@ -51,7 +54,8 @@ static float get_display_scale()
     return 1.0f;
 }
 
-sdl_app::sdl_app(const char* title)
+sdl_app::sdl_app(const char* title, sdl_app_paths paths)
+    : paths_(std::move(paths))
 {
     init_sdl();
 
@@ -127,15 +131,33 @@ void sdl_app::init_imgui()
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
+    // Persisted UI layout file. io.IniFilename borrows this const char*, so it
+    // must point at storage that outlives the ImGui context — paths_.imgui_ini
+    // (an sdl_app member) provides it. Empty keeps ImGui's default ("imgui.ini").
+    if (!paths_.imgui_ini.empty()) {
+        io.IniFilename = paths_.imgui_ini.c_str();
+    }
+
     // Get display scale factor for HiDPI support (especially for Wayland fractional scaling)
     float scale = get_display_scale();
 
     // Setup style
     ImGui::StyleColorsDark();
 
-    // Load custom font with DPI-aware size
+    // Load the custom font with a DPI-aware size. paths_.font is an absolute path
+    // (the build-copied COAST_FONT_PATH, or an app-config override), so the GUI
+    // finds its font from any CWD. If it is empty or missing, fall back to ImGui's
+    // built-in default font rather than asserting inside AddFontFromFileTTF.
     float base_font_size = 16.0f;
-    io.Fonts->AddFontFromFileTTF("./3rd_party/DejaVuSans.ttf", base_font_size * scale);
+    if (!paths_.font.empty() && std::filesystem::exists(paths_.font)) {
+        io.Fonts->AddFontFromFileTTF(paths_.font.c_str(), base_font_size * scale);
+    } else {
+        if (!paths_.font.empty()) {
+            COAST_WARN("gui", "GUI font '{}' not found; using the built-in default.",
+                       paths_.font);
+        }
+        io.Fonts->AddFontDefault();
+    }
 
     // Setup platform/renderer backends
 #ifdef __APPLE__
@@ -194,7 +216,9 @@ void sdl_app::run()
             continue;
         }
 
-        // State update phase
+        // State update phase — outside the ImGui frame. Single-shot deferrals
+        // (e.g. GL frees posted from other threads) run here, before the frame.
+        run_single_shots();
         for (auto& [id, func] : state_fs) {
             func();
         }
@@ -224,6 +248,9 @@ void sdl_app::run()
     for (auto& [id, func] : shutdown_fs) {
         func();
     }
+    // Drain any single-shots posted during the final frame while the GL context is
+    // still current (it is destroyed later in ~sdl_app).
+    run_single_shots();
 }
 
 void sdl_app::quit()
@@ -241,6 +268,25 @@ std::size_t sdl_app::register_state_func(const std::function<void()>& func)
 void sdl_app::deregister_state_func(std::size_t id)
 {
     state_fs.erase(id);
+}
+
+void sdl_app::register_single_shot_func(std::function<void()> func)
+{
+    if (!func) return;
+    std::scoped_lock lk(single_shot_mutex_);
+    single_shot_fs.push_back(std::move(func));
+}
+
+void sdl_app::run_single_shots()
+{
+    // Swap out under the lock, then run unlocked — a callback may register another
+    // single-shot (it lands in the now-empty list and runs next drain).
+    std::vector<std::function<void()>> pending;
+    {
+        std::scoped_lock lk(single_shot_mutex_);
+        pending.swap(single_shot_fs);
+    }
+    for (auto& fn : pending) fn();
 }
 
 std::size_t sdl_app::register_gui_func(const std::function<void()>& func)

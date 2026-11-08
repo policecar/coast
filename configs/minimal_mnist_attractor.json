@@ -154,16 +154,6 @@
                     }
                 ],
                 "default_branch_interval": 5000,
-                "default_activity_learning_window": [
-                    {
-                        "steepness": 0.6600000262260437,
-                        "transition_point": 0.33000001311302185
-                    },
-                    {
-                        "steepness": 0.6600000262260437,
-                        "transition_point": 0.6600000262260437
-                    }
-                ],
                 "random_seed": 0
             },
             "double_input": {
@@ -191,16 +181,6 @@
                     }
                 ],
                 "default_branch_interval": 5000,
-                "default_activity_learning_window": [
-                    {
-                        "steepness": 0.66,
-                        "transition_point": 0.33
-                    },
-                    {
-                        "steepness": 0.66,
-                        "transition_point": 0.66
-                    }
-                ],
                 "random_seed": 0
             }
         },
@@ -229,7 +209,7 @@
                         "to_channel": "nb"
                     }
                 ],
-                "default_local_inhibition_strength": 5.0,
+                "default_local_inhibition_strength": 10.0,
                 "default_common_learning_rate": 9.999999747378752e-05,
                 "default_weight_filter": {
                     "steepness": 0.5,
@@ -256,7 +236,7 @@
                         "to_channel": "na"
                     }
                 ],
-                "default_local_inhibition_strength": 5.0,
+                "default_local_inhibition_strength": 10.0,
                 "default_common_learning_rate": 9.999999747378752e-05,
                 "default_weight_filter": {
                     "steepness": 0.5,
@@ -283,7 +263,7 @@
                         "to_channel": "na"
                     }
                 ],
-                "default_local_inhibition_strength": 5.0,
+                "default_local_inhibition_strength": 10.0,
                 "default_common_learning_rate": 0.0001,
                 "default_weight_filter": {
                     "steepness": 0.5,

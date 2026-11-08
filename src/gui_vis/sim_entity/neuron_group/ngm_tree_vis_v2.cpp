@@ -8,12 +8,12 @@
 #include <thread>
 #include <unordered_map>
 
-#include "sim_entity/neuron_group/ngm_tree_vis_v2.h"
-#include "vis_registry.h"
-#include "sim_env.h"
-#include "inc_on_exit.h"
+#include "gui_vis/sim_entity/neuron_group/ngm_tree_vis_v2.h"
+#include "gui_vis/vis_registry.h"
+#include "sim_core/sim_env.h"
+#include "tools/inc_on_exit.h"
 #include "imgui.h"
-#include "imgui_scaling.h"
+#include "gui_core/imgui_scaling.h"
 
 namespace coast {
 
@@ -55,6 +55,7 @@ void tree_node_renderer::render(ImDrawList* draw_list,
 
     // Check if this node belongs to selected/hovered neuron and should show texture
     bool show_texture = is_display_neuron &&
+                        data->type == tree_node_type::leaf &&
                         !data->pixel_data.empty() &&
                         data->texture.is_valid();
 
@@ -113,7 +114,8 @@ ImVec2 tree_node_renderer::get_size(const layout::node_t& node, float zoom) {
 
     // For texture nodes that are being displayed
     bool is_display_neuron = (display_neurons_.count(data->neuron_idx) > 0);
-    if (is_display_neuron && !data->pixel_data.empty() && data->texture.is_valid()) {
+    if (is_display_neuron && data->type == tree_node_type::leaf &&
+        !data->pixel_data.empty() && data->texture.is_valid()) {
         constexpr float reference_size = 28.0f;
         float max_dim = std::max(static_cast<float>(data->texture.get_width()),
                                  static_cast<float>(data->texture.get_height()));
@@ -341,8 +343,11 @@ void ngm_tree_vis_v2::create_model(const ngm2::neuron_group_t& ng) {
                 }
             }
 
-            // Second pass: create nodes for all needed segments
-            for (uint16_t seg = 1; seg <= max_segment; ++seg) {
+            // Second pass: create nodes for all needed segments. The counter is
+            // std::size_t: a u16 counter never fails `seg <= max_segment` when
+            // max_segment is 65535 (#237).
+            for (std::size_t s = 1; s <= max_segment; ++s) {
+                const auto seg = static_cast<uint16_t>(s);
                 if (segments_needed[seg] == 0) continue;
                 if (segment_base + seg >= nodes_.size()) continue;
 
@@ -445,6 +450,32 @@ void ngm_tree_vis_v2::update_model(const ngm2::neuron_group_t& ng) {
             std::size_t segment_base = branch_lu_[branch_base_idx + branch_idx];
             const auto& synapses = cur_branch.get_synapses();
             std::size_t syn_cnt = synapses.size();
+
+            // Reclassify existing nodes against the current leaf mask. A node
+            // that has since grown children is no longer a leaf: demote it to
+            // a branch and free its (now meaningless) representation texture.
+            // Promotion (branch->leaf) is handled defensively for symmetry,
+            // though new leaves normally arrive as freshly-created nodes below.
+            for (std::size_t s = 1; s <= max_segment; ++s) {   // not u16: see create_model (#237)
+                const auto seg = static_cast<uint16_t>(s);
+                if (segment_base + seg >= nodes_.size()) continue;
+                auto& n_info = nodes_[segment_base + seg];
+                if (n_info.node_id == layout::invalid_node_id || !n_info.data) continue;
+                bool is_leaf = (seg < leaf_mask.size() && leaf_mask[seg]);
+                if (is_leaf && n_info.data->type != tree_node_type::leaf) {
+                    n_info.data->type = tree_node_type::leaf;
+                    if (n_info.data->pixel_data.empty()) {
+                        get_pixel_data(params_.rep_width, params_.rep_height,
+                            seg, max_segment, synapses, n_info.data->pixel_data);
+                        n_info.data->texture = gl_texture(params_.rep_width,
+                            params_.rep_height, n_info.data->pixel_data.data());
+                    }
+                } else if (!is_leaf && n_info.data->type == tree_node_type::leaf) {
+                    n_info.data->texture.release();
+                    n_info.data->pixel_data.clear();
+                    n_info.data->type = tree_node_type::branch;
+                }
+            }
 
             // Get root position for new nodes
             float root_x = 0.0f, root_y = 0.0f;
@@ -577,6 +608,14 @@ void ngm_tree_vis_v2::update_model(const ngm2::neuron_group_t& ng) {
 void ngm_tree_vis_v2::update_representations(const ngm2::neuron_group_t& ng) {
     std::size_t neuron_cnt = ng.get_neuron_count();
     for (std::size_t neuron_idx = 0; neuron_idx < neuron_cnt; ++neuron_idx) {
+        // Only refresh textures that are actually shown. Representations render
+        // exclusively for the display set (selected + hovered) leaf nodes, so
+        // refreshing non-displayed neurons every interval is wasted work. Their
+        // textures already exist from create_model/update_model and stay frozen
+        // until shown again — invisible while not rendered.
+        const bool displayed = selected_neurons_.count(neuron_idx) > 0 ||
+                               (show_on_hover_ && hovered_neuron_idx_ == neuron_idx);
+        if (!displayed) continue;
         const ngm2::neuron_t& cur_neuron = ng.get_neuron(neuron_idx);
         std::size_t branch_base_idx = branch_start_lu_[neuron_idx];
         std::size_t branch_cnt = cur_neuron.get_dendrite_count();
@@ -1120,11 +1159,13 @@ public:
     }
 
     ~ngm_tree_vis_v2_instance() override {
+        // Removal is synchronous (#235): once both calls return, neither hook is
+        // running or will run again, so nothing on the sim thread touches `this`.
+        // update() runs on this (GUI) thread, so no update is in flight either; the
+        // former spin on sync_state_ == idle is not needed (and could hang if a
+        // signal fired before its barrier hook was applied).
         sim_env_.remove_post_swap_hook(hook_id_);
         sim_env_.remove_post_swap_barrier_hook(barrier_hook_id_);
-        while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            std::this_thread::yield();
-        }
     }
 
     void update() override {
@@ -1135,6 +1176,9 @@ public:
                                                  static_cast<int>(sync_state::updating),
                                                  std::memory_order_acq_rel)) {
             vis_.update_model(ng_);
+            // Refresh leaf textures so representations track learning, not just
+            // structural changes. Runs on the same update interval as update_model.
+            vis_.update_representations(ng_);
             // Note: Don't call update_root_positions() here - it would reset
             // the dynamic spacing calculated by update_tree_spacing() during
             // initial settling. Trees keep their established positions.
@@ -1202,7 +1246,10 @@ private:
 
         auto start = std::chrono::steady_clock::now();
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT) {
+            // Give up early while a hook removal waits for this phase (#235):
+            // the remover is usually the GUI thread this loop is waiting for.
+            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT ||
+                sim_env_.hook_removal_waiting()) {
                 int expected = static_cast<int>(sync_state::requested);
                 if (sync_state_.compare_exchange_strong(expected,
                                                          static_cast<int>(sync_state::idle),

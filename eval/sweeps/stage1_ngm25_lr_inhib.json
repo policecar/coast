@@ -1,0 +1,23 @@
+{
+ "schema": "coast-eval-sweep-spec/1",
+ "template": "eval/configs/mnist_ngm25_frozen_eval.json",
+ "axes": {
+  "/ngm25/neuron_groups/L4-mnist/primary_learning_rate": [0.01, 0.03, 0.1, 0.3],
+  "/ngm25/neuron_groups/L4-mnist/secondary_learning_rate": {
+   "ratio_of": "/ngm25/neuron_groups/L4-mnist/primary_learning_rate",
+   "factors": [0.001, 0.01, 0.1]
+  },
+  "/ngm25/inhibitions/ab_pinned/strength": [1, 5, 10, 20],
+  "/ngm25/neuron_groups/L4-mnist/common_learning_rate": [0.0001, 0.001]
+ },
+ "seeds": [0, 1],
+ "lengths": [250000, 500000],
+ "conditions": [
+  "clean",
+  "brightness", "canny_edges", "dotted_line", "fog", "glass_blur", "impulse_noise",
+  "motion_blur", "rotate", "scale", "shear", "shot_noise", "spatter", "stripe",
+  "translate", "zigzag",
+  "zeros"
+ ],
+ "tuning_images": 1000
+}

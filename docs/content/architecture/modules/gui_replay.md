@@ -27,10 +27,18 @@ Reads HDF5 files produced by `buffer_logger`. Provides random access by frame in
 
 - `open(path)` — Reads metadata and topology
 - `read_frame_data(buffer_id, frame_idx, out)` — Single frame via hyperslab selection
-- `read_frame_stats(buffer_id, frame_idx)` — Frame statistics (sum, avg, min, max, nse)
+- `read_frame_range(buffer_id, start_frame, count, out)` — Consecutive frames of one buffer
 - `get_step(frame_idx)` / `get_timestamp(frame_idx)` — Lazy-loaded time data
 
-Topology includes: buffer IDs, sizes, names, connectivity edges, optional vis hints.
+Topology includes: buffer IDs, sizes, names, connectivity edges, optional vis hints. `buffer_logger` writes the vis hints guessed from each buffer's size (square → image, RGB if divisible by 3, else common widths); the config's `vis_hints` are not consulted, since they are keyed by config entry and the logger sees only entity types.
+
+Every dataset is shape-checked against what `buffer_logger` writes (1-D ids, sizes,
+names, steps and timestamps; `[n, 2]` connectivity; `[n, 3]` vis hints;
+`[frames, size]` data) before a buffer is sized from it — see "Reading files COAST
+did not write" in the logging module. Every check runs once, in `open()`: a mismatch
+refuses the file, with the object named in the error log. The exception is the
+optional vis hints, which only steer the display: hints of another shape or a
+non-numeric type are skipped with a warning and the buffers get computed defaults.
 
 ## replay_node_renderer
 
@@ -39,7 +47,7 @@ Extends `node_renderer` with three visualization modes:
 | Mode | Rendering |
 |------|-----------|
 | `image_2d` | Reshape buffer to 2D grid, apply colormap (grayscale) or direct RGB |
-| `stats_color` | Single color based on aggregate stat (avg/sum/min/max/nse) |
+| `stats_color` | Single color based on aggregate stat (avg/sum/min/max) |
 | `delta_flow` | Blue→red gradient showing change from previous frame |
 
 Each buffer node stores its data in `buffer_node_data` (inside `node_t::user_data` as `shared_ptr`), holding the GL texture, current/previous frame data, and per-buffer visualization config.

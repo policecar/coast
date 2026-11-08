@@ -2,23 +2,26 @@
 // Created by jk on 08.09.25.
 //
 
-#include "core/gradient.h"
-#include "core/colormap.h"
-#include "inc_on_exit.h"
+#include "gui_vis/core/gradient.h"
+#include "gui_vis/core/colormap.h"
+#include "tools/inc_on_exit.h"
 
-#include "sim_entity/neuron_group/ngm_flat_vis.h"
-#include "vis_registry.h"
-#include "sim_env.h"
+#include "gui_vis/sim_entity/neuron_group/ngm_flat_vis.h"
+#include "gui_vis/vis_registry.h"
+#include "sim_core/sim_env.h"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <string>
 #include <thread>
 #include <oneapi/tbb/task_arena.h>
 
+#include "diag/diag.h"
+
 #include "imgui.h"
-#include "imgui_scaling.h"
+#include "gui_core/imgui_scaling.h"
 
 namespace coast {
 
@@ -101,11 +104,14 @@ void ngm_flat_vis::update()
             vec_group_vis vis{params.vis_params};
             const uint32_t rep_cnt = dendrite.get_representation_count();
             if (rep_cnt > max_rep_cnt) {
-                std::printf("too many representations: %u vs %u\n", rep_cnt, max_rep_cnt);
-                auto mask = dendrite.get_leaf_mask();
-                for (auto m : mask)
-                    std::printf("%u,", m);
-                std::printf("\n");
+                // Capacity mismatch: the loop below still iterates r < rep_cnt into
+                // a vis sized for max_rep_cnt. Keep this at WARN (visible by default)
+                // rather than DEBUG — it flags a real over-iteration condition, not
+                // routine chatter. (leaf_mask is only built on this cold branch.)
+                std::string leaf_mask;
+                for (auto m : dendrite.get_leaf_mask()) leaf_mask += std::to_string(m) + ",";
+                COAST_WARN("vis", "too many representations: {} vs {} (leaf mask: {})",
+                           rep_cnt, max_rep_cnt, leaf_mask);
             }
             for (uint32_t r = 0; r < rep_cnt; ++r)
                 vis.update_vec<5>(r, dendrite.get_representation(r), def_grad,
@@ -387,12 +393,13 @@ public:
 
     ~ngm_flat_vis_instance() override
     {
+        // Removal is synchronous (#235): once both calls return, neither hook is
+        // running or will run again, so nothing on the sim thread touches `this`.
+        // update() runs on this (GUI) thread, so no update is in flight either; the
+        // former spin on sync_state_ == idle is not needed (and could hang if a
+        // signal fired before its barrier hook was applied).
         sim_env_.remove_post_swap_hook(hook_id_);
         sim_env_.remove_post_swap_barrier_hook(barrier_hook_id_);
-
-        while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            std::this_thread::yield();
-        }
     }
 
     /**
@@ -471,7 +478,10 @@ private:
 
         auto start = std::chrono::steady_clock::now();
         while (sync_state_.load(std::memory_order_acquire) != static_cast<int>(sync_state::idle)) {
-            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT) {
+            // Give up early while a hook removal waits for this phase (#235):
+            // the remover is usually the GUI thread this loop is waiting for.
+            if (std::chrono::steady_clock::now() - start > SYNC_TIMEOUT ||
+                sim_env_.hook_removal_waiting()) {
                 int expected = static_cast<int>(sync_state::requested);
                 if (sync_state_.compare_exchange_strong(expected,
                                                          static_cast<int>(sync_state::idle),

@@ -1,0 +1,35 @@
+# COAST clang-tidy configuration.
+#
+# Conservative starting subset chosen for low-noise high-signal:
+#   - bugprone-*           : real-bug checks (the headline category)
+#   - performance-*        : real perf cliffs (often actionable)
+#   - readability-redundant-*  : safe readability cleanup
+#   - modernize-use-nullptr    : trivial fix; never wrong
+#
+# Explicitly disabled:
+#   - cppcoreguidelines-*  : aggressive; many false positives in numerical code
+#   - hicpp-*              : duplicates other categories with stricter framing
+#   - google-*             : Google-internal house style
+#   - cert-*               : security-focused; mostly aliases
+#   - fuchsia-*            : Fuchsia-specific
+#   - llvm-*               : LLVM project conventions
+#   - readability-magic-numbers : pervasively false-positive in scientific code
+#
+# Expand the rule set as warnings drop to zero in the current set.
+# `cmake --build build --target coast_tidy` runs it.
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  readability-redundant-*,
+  modernize-use-nullptr,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '^(include|src|tools|tests)/(?!third_party)'
+
+CheckOptions:
+  - key: bugprone-suspicious-string-compare.WarnOnImplicitComparison
+    value: 'true'

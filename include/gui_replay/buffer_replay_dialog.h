@@ -5,8 +5,8 @@
 #ifndef COAST_BUFFER_REPLAY_DIALOG_H
 #define COAST_BUFFER_REPLAY_DIALOG_H
 
-#include "buffer_log_reader.h"
-#include "replay_node_renderer.h"
+#include "gui_replay/buffer_log_reader.h"
+#include "gui_replay/replay_node_renderer.h"
 #include "gui_layout/layout_graph.h"
 #include "gui_layout/force_layout.h"
 #include "gui_layout/render/graph_canvas.h"
@@ -17,6 +17,8 @@
 #include <memory>
 #include <chrono>
 #include <filesystem>
+
+namespace hdf5 { class executor; }
 
 namespace coast::replay {
 
@@ -30,7 +32,10 @@ enum class playback_state {
 /// Buffer replay dialog with force-directed graph visualization
 class buffer_replay_dialog {
 public:
-    buffer_replay_dialog();
+    /// @param h5_exec  Process-wide HDF5 executor. Must outlive the dialog;
+    ///                 forwarded to the internal buffer_log_reader so every
+    ///                 libhdf5 call routes through the executor's worker.
+    explicit buffer_replay_dialog(hdf5::executor& h5_exec);
     ~buffer_replay_dialog();
 
     buffer_replay_dialog(const buffer_replay_dialog&) = delete;

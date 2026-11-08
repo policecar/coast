@@ -51,10 +51,6 @@
                     }
                 ],
                 "default_branch_interval": 5000,
-                "default_activity_learning_window": [
-                    {"steepness": 0.66, "transition_point": 0.33},
-                    {"steepness": 0.66, "transition_point": 0.66}
-                ],
                 "random_seed": 0
             }
         },
@@ -75,7 +71,7 @@
                         "to_channel": "na"
                     }
                 ],
-                "default_local_inhibition_strength": 5.0,
+                "default_local_inhibition_strength": 10.0,
                 "default_common_learning_rate": 0.0001,
                 "default_weight_filter": {"steepness": 0.5, "transition_point": 0.33},
                 "default_stochastic_win_thres": 0.8,

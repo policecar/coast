@@ -16,18 +16,17 @@ include/gui_vis/
 │   ├── color_types.h          # RGBA color struct
 │   ├── colormap.h             # Colormap enum + mapping functions
 │   ├── gl_texture.h           # RAII OpenGL texture wrapper
-│   ├── gradient.h             # N-stop linear color gradient
-│   └── vis_hints.h            # Visualization config from JSON
+│   └── gradient.h             # N-stop linear color gradient
 ├── primitives/
 │   ├── vec_vis.h              # Single float vector → 2D pixel grid
 │   └── vec_group_vis.h        # Multiple vec_vis in layout
 ├── io_buffer/
 │   └── vec_ring_buffer.h      # Scrolling time-series visualization
-├── layout/
-│   └── fbgd.h                 # Force-based graph drawing (original)
 └── sim_entity/neuron_group/
-    ├── ngm_flat_vis.h         # "Dendritic Representations" grid view
-    └── ngm_tree_vis.h         # "Neuron Tree" force-directed tree
+    ├── ngm_flat_vis.h         # ngm2 "Dendritic Representations" grid view
+    ├── ngm_tree_vis_v2.h      # ngm2 "Neuron Tree" (force layout via gui_layout)
+    ├── ngm3_flat_vis.h        # ngm3/ngm25 grid view, templated on the group type
+    └── ngm3_tree_vis.h        # ngm3/ngm25 tree view, templated on the group type
 
 src/gui_vis/
 ├── vis_registry.cpp           # Registry singleton + registration logic
@@ -39,11 +38,11 @@ src/gui_vis/
 │   └── vec_group_vis.cpp
 ├── io_buffer/
 │   └── vec_ring_buffer.cpp    # Ring buffer rendering
-├── layout/
-│   └── fbgd.cpp               # Grid-based force simulation
 └── sim_entity/neuron_group/
-    ├── ngm_flat_vis.cpp       # 545 lines: texture grid + zoom/pan
-    └── ngm_tree_vis.cpp       # 1001 lines: tree layout + textures
+    ├── ngm_flat_vis.cpp       # texture grid + zoom/pan
+    ├── ngm_tree_vis_v2.cpp    # tree layout + textures
+    ├── ngm3_flat_vis.cpp      # registers ngm3/ngm25 flat vis (+ GPU variants)
+    └── ngm3_tree_vis.cpp      # registers ngm3/ngm25 tree vis (+ GPU variants)
 ```
 
 ## Visualization Registry
@@ -68,7 +67,11 @@ Each visualization type has a file-scope static registrar that calls `register_e
 
 ## Visualization Hints (vis_hints_t)
 
-Hierarchical config from JSON, matching entity names to rendering parameters:
+Hierarchical config from JSON, matching entity names to rendering parameters.
+The structs live in `include/core/vis_hints.h`, not in this module: they are a
+plain config POD that `json_loader` parses and `buffer_logger` writes into the
+HDF5 topology, both of which happen in a headless build with no `gui_vis` in it.
+Their nlohmann serializers are in `include/json_cfg/vis_hints_json.h`.
 
 ```
 vis_hints_t
@@ -80,6 +83,7 @@ vis_hints_t
 │   └── neuron_groups: map<string, neuron_group_hints_t>
 │       ├── ngm_flat_vis: {width, height, num_channels, update_interval}
 │       └── ngm_tree_vis: {rep_width, rep_height, colors, radii, ...}
+├── ngm3: ngm3_hints_t        (same neuron_groups map; also used by ngm25)
 └── buffer_vis: {update_interval, ring_length}
 ```
 
@@ -95,14 +99,28 @@ Flat 2D grid of all neuron dendritic representations. Each representation is a c
 - Colormap selector (grayscale, viridis, plasma, inferno, etc.)
 - Thread-safe update via 3-state atomic FSM: `idle → requested → updating → idle`
 
-### ngm_tree_vis — "Neuron Tree"
+### ngm_tree_vis_v2 — "Neuron Tree"
 
-Force-directed tree showing the dendritic binary tree structure per neuron:
+Force-directed tree showing the dendritic binary tree structure per neuron,
+built on the `gui_layout` graph, force layout and canvas (registered under the
+id `ngm_tree_vis`):
 - Root nodes (orange circles) = neurons
 - Branch nodes (blue circles) = internal tree segments
 - Leaf textures = synapse permanence patterns
-- Adaptive layout: larger trees get stronger repulsion
-- Click to select a neuron and see its leaf textures
+- Repulsion acts only between nodes of the same neuron, boosted around visible leaf textures
+- Click to select a neuron (or hover, if enabled) and see its leaf textures
+
+### ngm3_flat_vis / ngm3_tree_vis — ngm3 and ngm25 views
+
+The flat and tree views for ngm3 and ngm25, templated on the neuron-group
+type (`ngm3_flat_vis` is a class template, `ngm3_tree_vis` has member templates). Each group type that satisfies the duck-typed accessor
+contract (`get_*_representation`, `refresh_vis_mirror()`, ...) gets its own
+registration: `ngm3_flat_vis` / `ngm3_tree_vis` for ngm3, `ngm25_flat_vis` /
+`ngm25_tree_vis` for ngm25, and, under `COAST_WITH_GPU`, the `*_gpu` variants
+for the GPU groups of both models, whose `refresh_vis_mirror()` does a GPU→CPU
+readback. The apical and proximal dendrites of each neuron are listed apical
+block first; the tree view colour-codes apical and proximal edges. ngm25
+resolves its hints from the `ngm3` hints tree.
 
 ### vec_ring_buffer — "Time Series"
 
@@ -117,10 +135,3 @@ Scrolling 2D texture: columns = time steps, rows = buffer elements. Auto-normali
 | `gradient<N>` | N-stop linear color interpolation |
 | `vec_vis` | Float vector → 2D pixel grid (grayscale/colormap or RGB) |
 | `vec_group_vis` | Multiple vec_vis in vertical/horizontal/grid layout |
-
-## fbgd — Original Force Layout
-
-Grid-based spatial decomposition for the ngm_tree_vis. Fixed-region force simulation with:
-- Cell-based neighbor queries
-- Configurable repulsion/attraction forces
-- Node target position animation for smooth tree repositioning

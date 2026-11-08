@@ -7,4 +7,4 @@ weight = 40
 
 The core concepts and design patterns you need to "think in" when working with COAST. These are the mental building blocks — understand these and the rest follows.
 
-{{% children depth="1" %}}
+{{% pages display="tree" levels="1" %}}

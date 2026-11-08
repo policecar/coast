@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "sim_builder_cfg.h"
+#include "tools/sim_builder_cfg.h"
 #include "core/vis_hints.h"
 
 namespace sim {

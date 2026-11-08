@@ -1,0 +1,135 @@
+{
+    "datasets": {
+        "dsprites": {
+            "default": {
+                "hdf5_file": "./data/dsprites/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.hdf5",
+                "change_interval": 1,
+                "noise_range": [
+                    0.0,
+                    0.05
+                ],
+                "random_seed": 0
+            }
+        }
+    },
+    "ngm3": {
+        "neuron_groups": {
+            "L4-dsprites-ngm3": {
+                "neuron_cnt": 50,
+                "apical_cnt": 0,
+                "proximal_cnt": 5,
+                "max_branch_level": 3,
+                "permanence_threshold": 0.3,
+                "local_inhibition_strength": 10.0,
+                "stochastic_win_thres": 0.8,
+                "weight_filter": {
+                    "steepness": 0.5,
+                    "transition_point": 0.33
+                },
+                "common_learning_rate": 0.0001,
+                "primary_learning_rate": 0.01,
+                "secondary_learning_rate": 0.0001,
+                "mismatch_act_thres": 0.8,
+                "mismatch_smoothing": 0.001,
+                "branch_interval": 5000,
+                "min_mismatch_deviation": 1.0,
+                "accumulated_theta_thres": 2.0,
+                "min_mismatch_percentage": 0.002,
+                "inputs": [
+                    {
+                        "channel_name": "in_proximal",
+                        "bank": "proximal"
+                    }
+                ],
+                "random_seed": 0
+            }
+        }
+    },
+    "sim": {
+        "nodes": [
+            {
+                "id": 0,
+                "label": "dsprites",
+                "entity_type": "dsprites_input",
+                "entity_cfg": "default",
+                "inputs": [],
+                "random_seed_offset": 0
+            },
+            {
+                "id": 1,
+                "label": "ngm3 group",
+                "entity_type": "ngm3_neuron_group",
+                "entity_cfg": "L4-dsprites-ngm3",
+                "inputs": [
+                    [
+                        0,
+                        "in_proximal"
+                    ]
+                ],
+                "random_seed_offset": 0
+            }
+        ],
+        "node_sets": []
+    },
+    "vis_hints": {
+        "datasets": {
+            "dsprites": {
+                "default": {
+                    "ngm_flat_vis": {
+                        "width": 64,
+                        "height": 64,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    }
+                }
+            }
+        },
+        "ngm3": {
+            "neuron_groups": {
+                "L4-dsprites-ngm3": {
+                    "ngm_flat_vis": {
+                        "width": 50,
+                        "height": 1,
+                        "num_channels": 1,
+                        "update_interval": 10000
+                    },
+                    "ngm_tree_vis": {
+                        "rep_width": 64,
+                        "rep_height": 64,
+                        "num_channels": 1,
+                        "update_interval": 10000,
+                        "bg_r": 30,
+                        "bg_g": 30,
+                        "bg_b": 30,
+                        "bg_a": 255,
+                        "edge_thickness_min": 2.0,
+                        "edge_thickness_max": 10.0,
+                        "edge_r": 0,
+                        "edge_g": 121,
+                        "edge_b": 241,
+                        "edge_a": 255,
+                        "apical_edge_r": 90,
+                        "apical_edge_g": 200,
+                        "apical_edge_b": 120,
+                        "apical_edge_a": 255,
+                        "texture_scale_divisor": 1500.0,
+                        "root_node_radius": 6.0,
+                        "branch_node_radius": 3.0,
+                        "root_r": 255,
+                        "root_g": 161,
+                        "root_b": 0,
+                        "root_a": 255,
+                        "branch_r": 100,
+                        "branch_g": 180,
+                        "branch_b": 255,
+                        "branch_a": 255
+                    }
+                }
+            }
+        },
+        "buffer_vis": {
+            "update_interval": 100,
+            "ring_length": 500
+        }
+    }
+}

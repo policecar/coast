@@ -1,30 +1,36 @@
-#include "config_editor.h"
+#include "gui_core/config_editor.h"
 
 #include <algorithm>
 #include <array>
 #include <filesystem>
 #include <format>
+#include <stdexcept>
 #include <fstream>
 #include <string>
 
 #include <nlohmann/json.hpp>
 
-#include "mnist_cfg.h"
-#include "dsprites_cfg.h"
-#include "emnist_cfg.h"
-#include "kmnist_cfg.h"
-#include "cifar10_cfg.h"
-#include "cifar100_cfg.h"
-#include "chairs3d_cfg.h"
-#include "color_mnist_cfg.h"
-#include "hd_ngm2_cfg.h"
-#include "sim_builder_cfg.h"
+#include "io/mnist_cfg.h"
+#include "io/dsprites_cfg.h"
+#include "io/emnist_cfg.h"
+#include "io/kmnist_cfg.h"
+#include "io/cifar10_cfg.h"
+#include "io/cifar100_cfg.h"
+#include "io/chairs3d_cfg.h"
+#include "io/color_mnist_cfg.h"
+#include "hd_ngm2/hd_ngm2_cfg.h"
+#include "inhibition/inhibition_cfg.h"
+#include "tools/sim_builder_cfg.h"
 
 // Include JSON serialization headers
-#include "ngm2_json.h"
-#include "sim_json.h"
-#include "dataset_json.h"
-#include "gui_vis_json.h"
+#include "json_cfg/ngm2_json.h"
+#include "json_cfg/ngm3_json.h"
+#include "json_cfg/ngm25_json.h"
+#include "json_cfg/sim_json.h"
+#include "json_cfg/dataset_json.h"
+#include "json_cfg/retina_json.h"
+#include "retina/retina.h"
+#include "json_cfg/vis_hints_json.h"
 
 namespace coast {
 
@@ -80,6 +86,20 @@ bool DragDoubleRange2(const char* label, double& v_min, double& v_max,
     return false;
 }
 
+// Helper: InputScalar wrapper for a seed_t or seed_offset_t, edited as its uint32
+// value (core/seed.h)
+template <class Seed>
+bool InputSeed(const char* label, Seed& seed)
+{
+    const std::uint32_t step = 1;
+    auto v = std::to_underlying(seed);
+    if (ImGui::InputScalar(label, ImGuiDataType_U32, &v, &step)) {
+        seed = Seed{ v };
+        return true;
+    }
+    return false;
+}
+
 // Helper: Get scaled width for input widgets (accounts for HiDPI font scaling)
 float scaled_width(float base_width)
 {
@@ -116,6 +136,44 @@ static bool render_string_list(const char* label, std::vector<std::string>& list
     return modified;
 }
 
+// Helper: Render the sequencing fields every sequenced dataset loader shares.
+// All seven loaders publicly derive from dataset::sequence_params_t, so they pass
+// their cfg here by base reference. Rendering the block once keeps a new
+// cross-cutting field a single edit — mirroring the single serialiser in
+// dataset_json.h. chairs3d is deliberately excluded (no sequencer) and keeps its
+// own inline fields.
+static bool render_sequence_params(dataset::sequence_params_t& cfg)
+{
+    bool modified = false;
+
+    int change_interval = static_cast<int>(cfg.change_interval);
+    if (ImGui::InputInt("Change Interval", &change_interval)) {
+        cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
+        modified = true;
+    }
+
+    if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                           0.01f, 0.0f, 1.0f)) {
+        modified = true;
+    }
+    if (InputSeed("Random Seed", cfg.random_seed)) {
+        modified = true;
+    }
+    if (ImGui::Checkbox("Shuffle", &cfg.shuffle)) {
+        modified = true;
+    }
+
+    if (InputTextString("Index Manifest", cfg.index_manifest)) {
+        modified = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Path to a text file of sample indices restricting presentation\n"
+                          "to that subset. Empty = full dataset.");
+    }
+
+    return modified;
+}
+
 // Helper: Render MNIST config (returns true if modified, sets remove_requested if remove clicked)
 static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& cfg, bool& remove_requested)
 {
@@ -129,17 +187,7 @@ static bool render_mnist_config(const std::string& name, mnist::mnist_param_t& c
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
 
@@ -163,20 +211,7 @@ static bool render_dsprites_config(const std::string& name, dsprites::dsprites_p
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
-            modified = true;
-        }
-        if (ImGui::Checkbox("Randomize Readout", &cfg.randomize_readout)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
 
@@ -203,17 +238,7 @@ static bool render_emnist_config(const std::string& name, emnist::emnist_param_t
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
 
@@ -240,17 +265,7 @@ static bool render_kmnist_config(const std::string& name, kmnist::kmnist_param_t
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
 
@@ -274,17 +289,7 @@ static bool render_cifar10_config(const std::string& name, cifar10::cifar10_para
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
         if (ImGui::Checkbox("Use Test Set", &cfg.use_test_set)) {
@@ -311,17 +316,7 @@ static bool render_cifar100_config(const std::string& name, cifar100::cifar100_p
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
         if (ImGui::Checkbox("Use Test Set", &cfg.use_test_set)) {
@@ -332,6 +327,59 @@ static bool render_cifar100_config(const std::string& name, cifar100::cifar100_p
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Use 20 superclasses instead of 100 fine classes");
+        }
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Helper: Render retina config (returns true if modified, sets remove_requested if remove clicked)
+static bool render_retina_config(const std::string& name, retina::retina_param_t& cfg, bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (ImGui::InputInt("Width", &cfg.width))       { cfg.width    = std::max(1, cfg.width);    modified = true; }
+        if (ImGui::InputInt("Height", &cfg.height))     { cfg.height   = std::max(1, cfg.height);   modified = true; }
+        if (ImGui::InputInt("Channels", &cfg.channels)) { cfg.channels = std::max(1, cfg.channels); modified = true; }
+        if (ImGui::Checkbox("Luminance (RGB -> Y)", &cfg.luminance)) modified = true;
+        int pol = cfg.polarity == retina::polarity_t::off ? 1 : 0;
+        if (ImGui::Combo("Polarity", &pol, "on\0off\0")) {
+            cfg.polarity = pol == 1 ? retina::polarity_t::off : retina::polarity_t::on;
+            modified = true;
+        }
+        // unclamped, like k: validate() is the range authority (see below)
+        if (ImGui::InputDouble("Center Sigma", &cfg.center_sigma, 0.1, 1.0, "%.3f"))     modified = true;
+        if (ImGui::InputDouble("Surround Sigma", &cfg.surround_sigma, 0.1, 1.0, "%.3f")) modified = true;
+        // unclamped: validate() accepts any k >= 0, and a slider would snap k > 1 back
+        if (ImGui::InputDouble("Surround Weight (k)", &cfg.surround_weight, 0.05, 0.1, "%.3f")) modified = true;
+        if (SliderDouble("Gain", cfg.gain, 0.1f, 20.0f)) modified = true;
+        if (ImGui::Checkbox("Divisive Normalisation", &cfg.normalize)) modified = true;
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("d = gain * x / (norm_sigma + RMS(x)), per output plane");
+        }
+        ImGui::BeginDisabled(!cfg.normalize);
+        // unclamped, like the sigmas: validate() is the range authority
+        if (ImGui::InputDouble("Norm Sigma", &cfg.norm_sigma, 0.01, 0.1, "%.4f")) modified = true;
+        ImGui::EndDisabled();
+        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
+                               0.001f, 0.0f, static_cast<float>(retina::max_noise))) {
+            modified = true;
+        }
+        if (InputSeed("Random Seed", cfg.random_seed)) modified = true;
+
+        // validate() is the one authority on what the node accepts; show its verdict
+        // here instead of mirroring its ranges in the widgets.
+        try {
+            retina::validate(cfg);
+        } catch (const std::invalid_argument& e) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", e.what());
         }
 
         ImGui::Separator();
@@ -373,7 +421,7 @@ static bool render_chairs3d_config(const std::string& name, chairs3d::chairs3d_p
                                0.01f, 0.0f, 1.0f)) {
             modified = true;
         }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (InputSeed("Random Seed", cfg.random_seed)) {
             modified = true;
         }
 
@@ -400,17 +448,7 @@ static bool render_color_mnist_config(const std::string& name, color_mnist::colo
             modified = true;
         }
 
-        int change_interval = static_cast<int>(cfg.change_interval);
-        if (ImGui::InputInt("Change Interval", &change_interval)) {
-            cfg.change_interval = static_cast<std::size_t>(std::max(1, change_interval));
-            modified = true;
-        }
-
-        if (DragDoubleRange2("Noise Range", cfg.noise_range.first, cfg.noise_range.second,
-                               0.01f, 0.0f, 1.0f)) {
-            modified = true;
-        }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (render_sequence_params(cfg)) {
             modified = true;
         }
 
@@ -449,12 +487,12 @@ static bool render_dendrite_config(const std::string& name, ngm2::dendrite_param
         }
 
         int max_branch = cfg.max_branch_level;
-        if (ImGui::SliderInt("Max Branch Level", &max_branch, 1, 10)) {
+        if (ImGui::SliderInt("Max Branch Level", &max_branch, 0, 4)) {
             cfg.max_branch_level = static_cast<uint8_t>(max_branch);
             modified = true;
         }
 
-        if (ImGui::InputInt("Random Seed", &cfg.rnd_seed)) {
+        if (InputSeed("Random Seed", cfg.rnd_seed)) {
             modified = true;
         }
 
@@ -608,23 +646,7 @@ static bool render_neuron_config(const std::string& name, ngm2::neuron_params_t&
             modified = true;
         }
 
-        if (ImGui::TreeNode("Activity Learning Window")) {
-            if (SliderDouble("Pre Steepness", cfg.default_activity_learning_window.first.steepness, 0.0f, 1.0f)) {
-                modified = true;
-            }
-            if (SliderDouble("Pre Transition", cfg.default_activity_learning_window.first.transition_point, 0.0f, 1.0f)) {
-                modified = true;
-            }
-            if (SliderDouble("Post Steepness", cfg.default_activity_learning_window.second.steepness, 0.0f, 1.0f)) {
-                modified = true;
-            }
-            if (SliderDouble("Post Transition", cfg.default_activity_learning_window.second.transition_point, 0.0f, 1.0f)) {
-                modified = true;
-            }
-            ImGui::TreePop();
-        }
-
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (InputSeed("Random Seed", cfg.random_seed)) {
             modified = true;
         }
 
@@ -668,6 +690,120 @@ static bool render_neuron_set(ngm2::neuron_set_t& ns, const ngm2::cfg_store& sto
 }
 
 // Helper: Render neuron group config (returns true if modified, sets remove_requested if remove clicked)
+// ---- inhibition (shared between ngm2 and ngm3; same inhibition_params_t) ----
+
+static const char* inhibition_type_name(inhibition::inhibition_type_t t)
+{
+    switch (t) {
+        case inhibition::inhibition_type_t::random_index: return "random_index";
+        case inhibition::inhibition_type_t::max_softmax: return "max_softmax";
+        case inhibition::inhibition_type_t::TYPE_COUNT: break;
+    }
+    return "?";
+}
+
+static const char* random_index_variant_name(inhibition::random_index_variant_t v)
+{
+    switch (v) {
+        case inhibition::random_index_variant_t::threshold_linear: return "threshold_linear";
+        case inhibition::random_index_variant_t::TYPE_COUNT: break;
+    }
+    return "?";
+}
+
+// Render one named inhibition config entry (type combo + type-specific fields).
+static bool render_inhibition_config(const std::string& name,
+                                     inhibition::inhibition_params_t& cfg,
+                                     bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        if (ImGui::BeginCombo("Type", inhibition_type_name(cfg.type))) {
+            for (int i = 0; i < static_cast<int>(inhibition::inhibition_type_t::TYPE_COUNT); ++i) {
+                const auto t = static_cast<inhibition::inhibition_type_t>(i);
+                const bool selected = (cfg.type == t);
+                if (ImGui::Selectable(inhibition_type_name(t), selected)) { cfg.type = t; modified = true; }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        // type-specific fields
+        if (cfg.type == inhibition::inhibition_type_t::max_softmax) {
+            if (SliderDouble("Beta", cfg.strength, 0.1f, 50.0f)) modified = true;
+        }
+        if (cfg.type == inhibition::inhibition_type_t::random_index) {
+            if (ImGui::BeginCombo("Variant", random_index_variant_name(cfg.ri_variant))) {
+                for (int i = 0; i < static_cast<int>(inhibition::random_index_variant_t::TYPE_COUNT); ++i) {
+                    const auto v = static_cast<inhibition::random_index_variant_t>(i);
+                    const bool selected = (cfg.ri_variant == v);
+                    if (ImGui::Selectable(random_index_variant_name(v), selected)) { cfg.ri_variant = v; modified = true; }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            if (SliderDouble("Reach", cfg.ri_reach, 0.0f, 1.0f)) modified = true;
+            if (SliderDouble("RI Strength", cfg.ri_strength, 0.0f, 1.0f)) modified = true;
+            if (InputSeed("Seed", cfg.ri_seed)) modified = true;
+            if (ImGui::Checkbox("Seed from time", &cfg.ri_seed_from_time)) modified = true;
+        }
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) remove_requested = true;
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// Name-reference combo for a neuron group's inhibition_cfg. The empty/default
+// entry "(legacy strength)" selects the synthesized max_softmax (beta = the group's
+// local inhibition strength).
+static bool render_inhibition_ref_combo(
+    std::string& ref,
+    const std::unordered_map<std::string, inhibition::inhibition_params_t>& dict)
+{
+    bool modified = false;
+    const char* preview = ref.empty() ? "(legacy strength)" : ref.c_str();
+    if (ImGui::BeginCombo("Inhibition Config", preview)) {
+        if (ImGui::Selectable("(legacy strength)", ref.empty())) { ref.clear(); modified = true; }
+        for (const auto& [key, val] : dict) {
+            const bool selected = (ref == key);
+            if (ImGui::Selectable(key.c_str(), selected)) { ref = key; modified = true; }
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    return modified;
+}
+
+// Render a named inhibition-config dictionary (iterate / edit / remove / add).
+static bool render_inhibition_dict(
+    std::unordered_map<std::string, inhibition::inhibition_params_t>& dict,
+    const char* add_id)
+{
+    bool modified = false;
+    std::string to_remove;
+    for (auto& [name, cfg] : dict) {
+        ImGui::PushID(name.c_str());
+        bool remove_requested = false;
+        if (render_inhibition_config(name, cfg, remove_requested)) modified = true;
+        if (remove_requested) to_remove = name;
+        ImGui::PopID();
+    }
+    if (!to_remove.empty()) { dict.erase(to_remove); modified = true; }
+    static std::unordered_map<std::string, std::string> new_names;  // per add_id buffer
+    std::string& new_name = new_names[add_id];
+    ImGui::PushID(add_id);
+    InputTextString("##newinhib", new_name, 64);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("+ Add Inhibition Config") && !new_name.empty()) {
+        dict[new_name] = {};
+        new_name.clear();
+        modified = true;
+    }
+    ImGui::PopID();
+    return modified;
+}
+
 static bool render_neuron_group_config(const std::string& name, ngm2::neuron_group_params_t& cfg,
                                         const ngm2::cfg_store& store, bool& remove_requested)
 {
@@ -728,7 +864,17 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
             ImGui::TreePop();
         }
 
-        if (SliderDouble("Local Inhibition", cfg.default_local_inhibition_strength, 0.1f, 20.0f)) {
+        // The slider only feeds the synthesized max_softmax on the legacy/empty
+        // selection; a named config supplies its own strength, so grey the
+        // slider out then rather than leave a draggable no-op.
+        ImGui::BeginDisabled(!cfg.inhibition_cfg.empty());
+        if (SliderDouble("Local Inhibition (beta)", cfg.default_local_inhibition_strength, 0.1f, 50.0f)) {
+            modified = true;
+        }
+        ImGui::EndDisabled();
+        // Inhibition selector: empty => "(legacy strength)" uses the slider above
+        // (synthesized max_softmax); a named entry overrides it.
+        if (render_inhibition_ref_combo(cfg.inhibition_cfg, store.inhibitions)) {
             modified = true;
         }
         if (SliderDouble("Common Learning Rate", cfg.default_common_learning_rate, 0.00001f, 0.01f, "%.5f")) {
@@ -736,7 +882,7 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
         }
 
         if (ImGui::TreeNode("Weight Filter")) {
-            if (SliderDouble("Steepness", cfg.default_weight_filter.steepness, 0.0f, 1.0f)) {
+            if (SliderDouble("Steepness", cfg.default_weight_filter.steepness, 0.0f, 0.999f)) {
                 modified = true;
             }
             if (SliderDouble("Transition Point", cfg.default_weight_filter.transition_point, 0.0f, 1.0f)) {
@@ -748,7 +894,7 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
         if (SliderDouble("Stochastic Win Threshold", cfg.default_stochastic_win_thres, 0.0f, 1.0f)) {
             modified = true;
         }
-        if (ImGui::InputInt("Random Seed", &cfg.random_seed)) {
+        if (InputSeed("Random Seed", cfg.random_seed)) {
             modified = true;
         }
 
@@ -762,21 +908,193 @@ static bool render_neuron_group_config(const std::string& name, ngm2::neuron_gro
     return modified;
 }
 
+// ---- ngm3 ------------------------------------------------------------------
+
+// One input-route row, shared by the ngm3 and the ngm2.5 form (both use
+// ngm::input_route_t, ngm/bank.h).
+static bool render_input_route(ngm::input_route_t& r)
+{
+    bool modified = false;
+    if (InputTextStringWidth("##channel_name", r.channel_name, 200)) modified = true;
+    ImGui::SameLine();
+    int bank_idx = (r.bank == ngm::bank_t::apical) ? 0 : 1;
+    static constexpr std::array bank_labels = { "apical", "proximal" };
+    if (ImGui::Combo("##bank", &bank_idx, bank_labels.data(),
+                     static_cast<int>(bank_labels.size())))
+    {
+        r.bank = (bank_idx == 0) ? ngm::bank_t::apical : ngm::bank_t::proximal;
+        modified = true;
+    }
+    return modified;
+}
+
+static bool render_ngm3_group_config(const std::string& name,
+                                     ngm3::neuron_group_params_t& cfg,
+                                     const ngm3::cfg_store& store,
+                                     bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+
+        // structural ints
+        int neuron_cnt    = static_cast<int>(cfg.neuron_cnt);
+        int apical_cnt    = static_cast<int>(cfg.apical_cnt);
+        int proximal_cnt  = static_cast<int>(cfg.proximal_cnt);
+        int branch_depth  = static_cast<int>(cfg.max_branch_level);
+        if (ImGui::InputInt("Neuron Count",        &neuron_cnt))   { cfg.neuron_cnt   = static_cast<std::size_t>(std::max(0, neuron_cnt));   modified = true; }
+        if (ImGui::InputInt("Apical Count",        &apical_cnt))   { cfg.apical_cnt   = static_cast<std::size_t>(std::max(0, apical_cnt));   modified = true; }
+        if (ImGui::InputInt("Proximal Count",      &proximal_cnt)) { cfg.proximal_cnt = static_cast<std::size_t>(std::max(1, proximal_cnt)); modified = true; }
+        if (ImGui::SliderInt("Branch Depth (1-4)", &branch_depth, 1, 4)) { cfg.max_branch_level = static_cast<uint8_t>(branch_depth); modified = true; }
+
+        // algorithmic floats
+        if (ImGui::SliderFloat("Permanence Threshold",     &cfg.permanence_threshold,     0.0f, 1.0f))                modified = true;
+        // Slider only feeds the synthesized max_softmax on the empty selection; a
+        // named config overrides it, so grey it out then (see ngm2 path above).
+        ImGui::BeginDisabled(!cfg.inhibition_cfg.empty());
+        if (ImGui::SliderFloat("Local Inhibition (beta)",  &cfg.local_inhibition_strength, 0.1f, 50.0f))               modified = true;
+        ImGui::EndDisabled();
+        // Inhibition selector: empty => "(legacy strength)" uses the slider above.
+        if (render_inhibition_ref_combo(cfg.inhibition_cfg, store.inhibitions))                                       modified = true;
+        if (ImGui::SliderFloat("Stochastic Win Threshold", &cfg.stochastic_win_thres,      0.0f, 1.0f))                modified = true;
+        if (ImGui::SliderFloat("Common Learning Rate",     &cfg.common_learning_rate,      0.00001f, 0.01f, "%.5f"))   modified = true;
+        if (ImGui::SliderFloat("Primary Learning Rate",    &cfg.primary_learning_rate,     0.0001f, 0.1f,  "%.5f"))    modified = true;
+        if (ImGui::SliderFloat("Secondary Learning Rate",  &cfg.secondary_learning_rate,   0.00001f, 0.01f,"%.5f"))    modified = true;
+        if (ImGui::SliderFloat("Mismatch Act Threshold",   &cfg.mismatch_act_thres,        0.0f, 1.0f))                modified = true;
+        if (ImGui::SliderFloat("Mismatch Smoothing",       &cfg.mismatch_smoothing,        0.0001f, 0.1f, "%.5f"))     modified = true;
+
+        int branch_interval = static_cast<int>(cfg.branch_interval);
+        if (ImGui::InputInt("Branch Interval", &branch_interval)) { cfg.branch_interval = static_cast<std::size_t>(std::max(1, branch_interval)); modified = true; }
+
+        if (ImGui::SliderFloat("Min Mismatch Deviation",   &cfg.min_mismatch_deviation,   0.0f, 5.0f))                 modified = true;
+        if (ImGui::SliderFloat("Accumulated Theta Thres",  &cfg.accumulated_theta_thres,  0.0f, 10.0f))                modified = true;
+        if (ImGui::SliderFloat("Min Mismatch Percentage",  &cfg.min_mismatch_percentage,  0.0f, 0.1f, "%.4f"))         modified = true;
+
+
+        // weight filter
+        if (ImGui::TreeNode("Weight Filter")) {
+            if (SliderDouble("Steepness",         cfg.weight_filter.steepness,         0.0f, 0.999f)) modified = true;
+            if (SliderDouble("Transition Point",  cfg.weight_filter.transition_point,  0.0f, 1.0f)) modified = true;
+            ImGui::TreePop();
+        }
+
+        // input routes
+        if (ImGui::TreeNode("Input Routes")) {
+            for (std::size_t i = 0; i < cfg.inputs.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (render_input_route(cfg.inputs[i])) modified = true;
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) {
+                    cfg.inputs.erase(cfg.inputs.begin() + static_cast<std::ptrdiff_t>(i));
+                    modified = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Route")) {
+                cfg.inputs.push_back({});
+                modified = true;
+            }
+            ImGui::TreePop();
+        }
+
+        if (InputSeed("Random Seed", cfg.random_seed)) modified = true;
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) {
+            remove_requested = true;
+        }
+
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
+// --- ngm2.5 group config form (mirrors the ngm3 form; flat schema differs only
+//     in max_branch_level range, the penalty_policy selector, and neuron noise) ---
+static bool render_ngm25_group_config(const std::string& name,
+                                      ngm25::neuron_group_params_t& cfg,
+                                      const ngm25::cfg_store& store,
+                                      bool& remove_requested)
+{
+    bool modified = false;
+    remove_requested = false;
+    if (ImGui::TreeNode(name.c_str())) {
+        int neuron_cnt   = static_cast<int>(cfg.neuron_cnt);
+        int apical_cnt   = static_cast<int>(cfg.apical_cnt);
+        int proximal_cnt = static_cast<int>(cfg.proximal_cnt);
+        int branch_depth = static_cast<int>(cfg.max_branch_level);
+        if (ImGui::InputInt("Neuron Count",   &neuron_cnt))   { cfg.neuron_cnt   = static_cast<std::size_t>(std::max(0, neuron_cnt));   modified = true; }
+        if (ImGui::InputInt("Apical Count",   &apical_cnt))   { cfg.apical_cnt   = static_cast<std::size_t>(std::max(0, apical_cnt));   modified = true; }
+        if (ImGui::InputInt("Proximal Count", &proximal_cnt)) { cfg.proximal_cnt = static_cast<std::size_t>(std::max(1, proximal_cnt)); modified = true; }
+        if (ImGui::SliderInt("Branch Depth (1-6)", &branch_depth, 1, 6)) { cfg.max_branch_level = static_cast<uint8_t>(branch_depth); modified = true; }
+
+        // Penalty-draw policy (the §8 research seam).
+        int policy_idx = static_cast<int>(cfg.penalty_policy);
+        static constexpr std::array policy_labels = { "stochastic", "expected_value", "none" };
+        if (ImGui::Combo("Penalty Policy", &policy_idx, policy_labels.data(),
+                         static_cast<int>(policy_labels.size())))
+        { cfg.penalty_policy = static_cast<ngm25::penalty_policy_t>(policy_idx); modified = true; }
+
+        if (ImGui::SliderFloat("Permanence Threshold", &cfg.permanence_threshold, 0.0f, 1.0f)) modified = true;
+        ImGui::BeginDisabled(!cfg.inhibition_cfg.empty());
+        if (ImGui::SliderFloat("Local Inhibition (beta)", &cfg.local_inhibition_strength, 0.1f, 50.0f)) modified = true;
+        ImGui::EndDisabled();
+        if (render_inhibition_ref_combo(cfg.inhibition_cfg, store.inhibitions)) modified = true;
+        if (ImGui::SliderFloat("Stochastic Win Threshold", &cfg.stochastic_win_thres, 0.0f, 1.0f)) modified = true;
+        if (ImGui::SliderFloat("Common Learning Rate",  &cfg.common_learning_rate,  0.00001f, 0.01f, "%.5f")) modified = true;
+        if (ImGui::SliderFloat("Primary Learning Rate", &cfg.primary_learning_rate, 0.0001f, 0.1f, "%.5f")) modified = true;
+        if (ImGui::SliderFloat("Secondary Learning Rate", &cfg.secondary_learning_rate, 0.00001f, 0.01f, "%.5f")) modified = true;
+        if (ImGui::SliderFloat("Mismatch Act Threshold", &cfg.mismatch_act_thres, 0.0f, 1.0f)) modified = true;
+        if (ImGui::SliderFloat("Mismatch Smoothing", &cfg.mismatch_smoothing, 0.0001f, 0.1f, "%.5f")) modified = true;
+
+        int branch_interval = static_cast<int>(cfg.branch_interval);
+        if (ImGui::InputInt("Branch Interval", &branch_interval)) { cfg.branch_interval = static_cast<std::size_t>(std::max(1, branch_interval)); modified = true; }
+
+        if (ImGui::SliderFloat("Min Mismatch Deviation",  &cfg.min_mismatch_deviation,  0.0f, 5.0f)) modified = true;
+        if (ImGui::SliderFloat("Accumulated Theta Thres", &cfg.accumulated_theta_thres, 0.0f, 10.0f)) modified = true;
+        if (ImGui::SliderFloat("Min Mismatch Percentage", &cfg.min_mismatch_percentage, 0.0f, 0.1f, "%.4f")) modified = true;
+
+        if (ImGui::SliderFloat("Neuron Noise Min", &cfg.neuron_noise_range.first,  0.0f, 0.2f, "%.3f")) modified = true;
+        if (ImGui::SliderFloat("Neuron Noise Max", &cfg.neuron_noise_range.second, 0.0f, 0.2f, "%.3f")) modified = true;
+
+
+        if (ImGui::TreeNode("Weight Filter")) {
+            if (SliderDouble("Steepness",        cfg.weight_filter.steepness,        0.0f, 0.999f)) modified = true;
+            if (SliderDouble("Transition Point", cfg.weight_filter.transition_point, 0.0f, 1.0f)) modified = true;
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("Input Routes")) {
+            for (std::size_t i = 0; i < cfg.inputs.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (render_input_route(cfg.inputs[i])) modified = true;
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) {
+                    cfg.inputs.erase(cfg.inputs.begin() + static_cast<std::ptrdiff_t>(i));
+                    modified = true;
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            if (ImGui::SmallButton("+ Add Route")) { cfg.inputs.push_back({}); modified = true; }
+            ImGui::TreePop();
+        }
+
+        if (InputSeed("Random Seed", cfg.random_seed)) modified = true;
+
+        ImGui::Separator();
+        if (ImGui::SmallButton("Remove Config")) remove_requested = true;
+        ImGui::TreePop();
+    }
+    return modified;
+}
+
 // Helper: Get entity type name
 static std::string_view get_entity_type_name(sim::io_entity_type_t type)
 {
-    switch (type) {
-        case sim::io_entity_type_t::ngm2_neuron_group:  return "Neuron Group";
-        case sim::io_entity_type_t::mnist_input:        return "MNIST Input";
-        case sim::io_entity_type_t::dsprites_input:     return "dSprites Input";
-        case sim::io_entity_type_t::emnist_input:       return "EMNIST Input";
-        case sim::io_entity_type_t::kmnist_input:       return "KMNIST Input";
-        case sim::io_entity_type_t::cifar10_input:      return "CIFAR-10 Input";
-        case sim::io_entity_type_t::cifar100_input:     return "CIFAR-100 Input";
-        case sim::io_entity_type_t::chairs3d_input:     return "3D Chairs Input";
-        case sim::io_entity_type_t::color_mnist_input:  return "Color MNIST Input";
-        default: return "Unknown";
-    }
+    return sim::entity_type_display_name(type);   // canonical (sim_builder_cfg.h)
 }
 
 // Helper: Render simulation node (returns true if modified)
@@ -796,101 +1114,65 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
         modified = true;
     }
 
-    // Entity type dropdown
-    static constexpr std::array type_names = {
-        "Neuron Group", "MNIST Input", "dSprites Input",
-        "EMNIST Input", "KMNIST Input", "CIFAR-10 Input",
-        "CIFAR-100 Input", "3D Chairs Input", "Color MNIST Input"
-    };
+    // Entity type dropdown. Built from the canonical label fn in enum order so it
+    // is index-aligned with io_entity_type_t by construction — the previous
+    // hand-maintained array omitted the GPU types and so misaligned every entry
+    // from index 2 on (a GPU group showed as "MNIST Input", and editing the combo
+    // wrote back the wrong type).
+    static const auto type_names = [] {
+        std::array<const char*, static_cast<std::size_t>(sim::io_entity_type_t::ENTITY_COUNT)> names{};
+        for (std::size_t i = 0; i < names.size(); ++i)
+            names[i] = sim::entity_type_display_name(static_cast<sim::io_entity_type_t>(i));
+        return names;
+    }();
     int type_idx = static_cast<int>(node.entity_type);
     if (ImGui::Combo("Entity Type", &type_idx, type_names.data(), static_cast<int>(type_names.size()))) {
         node.entity_type = static_cast<sim::io_entity_type_t>(type_idx);
         modified = true;
     }
 
-    // Entity config dropdown - show configs from appropriate store
+    // Entity config dropdown - show configs from appropriate store. A dataset's
+    // store is its family's map (entity_types); a GPU type shares its CPU
+    // sibling's configs.
     if (ImGui::BeginCombo("Entity Config", node.entity_cfg.c_str())) {
-        switch (node.entity_type) {
-            case sim::io_entity_type_t::ngm2_neuron_group:
-                for (const auto& [key, val] : cfg.ngm2.neuron_groups) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
+        auto list = [&](const auto& configs) {
+            for (const auto& [key, val] : configs) {
+                if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
+                    node.entity_cfg = key;
+                    modified = true;
                 }
-                break;
-            case sim::io_entity_type_t::mnist_input:
-                for (const auto& [key, val] : cfg.datasets.mnist) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::dsprites_input:
-                for (const auto& [key, val] : cfg.datasets.dsprites) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::emnist_input:
-                for (const auto& [key, val] : cfg.datasets.emnist) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::kmnist_input:
-                for (const auto& [key, val] : cfg.datasets.kmnist) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::cifar10_input:
-                for (const auto& [key, val] : cfg.datasets.cifar10) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::cifar100_input:
-                for (const auto& [key, val] : cfg.datasets.cifar100) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::chairs3d_input:
-                for (const auto& [key, val] : cfg.datasets.chairs3d) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            case sim::io_entity_type_t::color_mnist_input:
-                for (const auto& [key, val] : cfg.datasets.color_mnist) {
-                    if (ImGui::Selectable(key.c_str(), node.entity_cfg == key)) {
-                        node.entity_cfg = key;
-                        modified = true;
-                    }
-                }
-                break;
-            default:
-                break;
+            }
+        };
+        const auto* info = sim::find_entity_type(node.entity_type);
+        if (info != nullptr && info->dataset_family != nullptr) {
+            dataset::for_each_family(cfg.datasets, [&](std::string_view family, const auto& configs) {
+                if (family == info->dataset_family) list(configs);
+            });
+        } else {
+            switch (node.entity_type) {
+                case sim::io_entity_type_t::ngm2_neuron_group:
+                    list(cfg.ngm2.neuron_groups);
+                    break;
+                case sim::io_entity_type_t::ngm3_neuron_group:
+                case sim::io_entity_type_t::ngm3_neuron_group_gpu:
+                    list(cfg.ngm3.neuron_groups);
+                    break;
+                case sim::io_entity_type_t::ngm25_neuron_group:
+                case sim::io_entity_type_t::ngm25_neuron_group_gpu:
+                    list(cfg.ngm25.neuron_groups);
+                    break;
+                case sim::io_entity_type_t::retina:
+                    list(cfg.retina);
+                    break;
+                default:   // datasets: above
+                    break;
+            }
         }
         ImGui::EndCombo();
     }
 
     // Random seed offset
-    if (ImGui::InputInt("Seed Offset", &node.random_seed_offset)) {
+    if (InputSeed("Seed Offset", node.random_seed_offset)) {
         modified = true;
     }
     ImGui::SetItemTooltip("Additive offset applied to all RNG seeds for this node");
@@ -923,6 +1205,14 @@ static bool render_sim_node(sim::sim_node_t& node, const loader::global_cfg_t& c
             node.inputs.emplace_back(0, "");
             modified = true;
         }
+        // sim_builder refuses a node that repeats a channel name; say so before the rebuild
+        for (std::size_t i = 0; i < node.inputs.size(); ++i)
+            for (std::size_t j = i + 1; j < node.inputs.size(); ++j)
+                if (node.inputs[i].second == node.inputs[j].second) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "channel \"%s\" is listed more than once",
+                                       node.inputs[i].second.c_str());
+                    i = j = node.inputs.size();   // one message is enough
+                }
         ImGui::TreePop();
     }
     return modified;
@@ -971,8 +1261,13 @@ void config_editor::render(bool* p_open)
     if (ImGui::Begin(title.c_str(), p_open, ImGuiWindowFlags_MenuBar)) {
         render_menu_bar();
         render_dataset_configs();
+        render_retina_configs();
         render_ngm2_configs();
+        render_ngm3_configs();
+        render_ngm25_configs();
         render_simulation_graph();
+        render_observe_configs();
+        render_run_settings();
         render_logging_settings();
         render_visualization_hints();
     }
@@ -1406,6 +1701,36 @@ void config_editor::render_dataset_configs()
     }
 }
 
+void config_editor::render_retina_configs()
+{
+    if (ImGui::CollapsingHeader("Retina Configurations")) {
+        std::string to_remove;
+        for (auto& [name, cfg] : config.retina) {
+            ImGui::PushID(name.c_str());
+            bool remove_requested = false;
+            if (render_retina_config(name, cfg, remove_requested)) {
+                mark_dirty();
+            }
+            if (remove_requested) {
+                to_remove = name;
+            }
+            ImGui::PopID();
+        }
+        if (!to_remove.empty()) {
+            config.retina.erase(to_remove);
+            mark_dirty();
+        }
+        static std::string new_retina_name;
+        InputTextString("##newretina", new_retina_name, 64);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Add Retina Config") && !new_retina_name.empty()) {
+            config.retina[new_retina_name] = {};
+            new_retina_name.clear();
+            mark_dirty();
+        }
+    }
+}
+
 void config_editor::render_ngm2_configs()
 {
     if (ImGui::CollapsingHeader("Neural Model Configurations")) {
@@ -1502,6 +1827,94 @@ void config_editor::render_ngm2_configs()
             }
             ImGui::TreePop();
         }
+
+        // Inhibition configs (referenced by a group's "Inhibition Config" combo)
+        if (ImGui::TreeNode("Inhibition Configs")) {
+            if (render_inhibition_dict(config.ngm2.inhibitions, "ngm2_inhib")) {
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+void config_editor::render_ngm3_configs()
+{
+    if (ImGui::CollapsingHeader("NGM3 Neural Model Configurations")) {
+
+        // Neuron group configs
+        if (ImGui::TreeNode("NGM3 Group Configs")) {
+            std::string group_to_remove;
+            for (auto& [name, cfg] : config.ngm3.neuron_groups) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_ngm3_group_config(name, cfg, config.ngm3, remove_requested)) {
+                    mark_dirty();
+                }
+                if (remove_requested) {
+                    group_to_remove = name;
+                }
+                ImGui::PopID();
+            }
+            if (!group_to_remove.empty()) {
+                config.ngm3.neuron_groups.erase(group_to_remove);
+                mark_dirty();
+            }
+            static std::string new_ngm3_group_name;
+            if (InputTextString("##newngm3group", new_ngm3_group_name, 64)) {
+                // Text changed
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add NGM3 Group Config") && !new_ngm3_group_name.empty()) {
+                config.ngm3.neuron_groups[new_ngm3_group_name] = {};
+                new_ngm3_group_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+
+        // Inhibition configs (referenced by a group's "Inhibition Config" combo)
+        if (ImGui::TreeNode("NGM3 Inhibition Configs")) {
+            if (render_inhibition_dict(config.ngm3.inhibitions, "ngm3_inhib")) {
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+void config_editor::render_ngm25_configs()
+{
+    if (ImGui::CollapsingHeader("NGM2.5 Configuration")) {
+        if (ImGui::TreeNode("NGM2.5 Group Configs")) {
+            std::string group_to_remove;
+            for (auto& [name, cfg] : config.ngm25.neuron_groups) {
+                ImGui::PushID(name.c_str());
+                bool remove_requested = false;
+                if (render_ngm25_group_config(name, cfg, config.ngm25, remove_requested))
+                    mark_dirty();
+                if (remove_requested) group_to_remove = name;
+                ImGui::PopID();
+            }
+            if (!group_to_remove.empty()) {
+                config.ngm25.neuron_groups.erase(group_to_remove);
+                mark_dirty();
+            }
+            static std::string new_ngm25_group_name;
+            if (InputTextString("##newngm25group", new_ngm25_group_name, 64)) { /* text changed */ }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+ Add NGM2.5 Group Config") && !new_ngm25_group_name.empty()) {
+                config.ngm25.neuron_groups[new_ngm25_group_name] = {};
+                new_ngm25_group_name.clear();
+                mark_dirty();
+            }
+            ImGui::TreePop();
+        }
+        if (ImGui::TreeNode("NGM2.5 Inhibition Configs")) {
+            if (render_inhibition_dict(config.ngm25.inhibitions, "ngm25_inhib"))
+                mark_dirty();
+            ImGui::TreePop();
+        }
     }
 }
 
@@ -1567,10 +1980,11 @@ bool config_editor::request_add_link(sim::sim_node_id_t src, sim::sim_node_id_t 
     }
     if (!src_exists) return false;
 
-    // Check if link already exists
+    // One link per channel name: sim_builder refuses a node that repeats a
+    // channel name, so a second source on a wired channel is refused here too
     for (const auto& [existing_src, existing_ch] : dst_node->inputs) {
-        if (existing_src == src && existing_ch == channel) {
-            return false;  // Already exists
+        if (existing_ch == channel) {
+            return false;
         }
     }
 
@@ -1979,6 +2393,157 @@ static bool render_neuron_group_hint(const std::string& name, neuron_group_hints
     return modified;
 }
 
+void config_editor::render_observe_configs()
+{
+    if (!ImGui::CollapsingHeader("Observe Configuration")) {
+        return;
+    }
+
+    auto& obs_cfg = config.observe;
+
+    // ---- output_dir ----
+    if (InputTextString("Output Directory", obs_cfg.output_dir)) {
+        mark_dirty();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Directory where per-group <name>.observe.h5 files are written.\n"
+            "A relative name is placed under the app config's config_base\n"
+            "(default <config_dir>/<config>/); an absolute path is used as-is.");
+    }
+
+    ImGui::Separator();
+
+    // ---- groups ----
+    if (obs_cfg.groups.empty()) {
+        ImGui::TextDisabled("(no groups configured)");
+    }
+
+    // Collect mutations to apply after the iteration (cannot erase from
+    // std::map while iterating it).
+    std::string group_to_remove;
+
+    for (auto& [group_name, group_cfg] : obs_cfg.groups) {
+        ImGui::PushID(group_name.c_str());
+
+        if (ImGui::TreeNodeEx(group_name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+
+            // Combine mode combo
+            {
+                const char* items[] = { "or", "and" };
+                int current = (group_cfg.combine == observe::combine_mode_t::AND_) ? 1 : 0;
+                ImGui::SetNextItemWidth(scaled_width(120.0f));
+                if (ImGui::Combo("Combine", &current, items, IM_ARRAYSIZE(items))) {
+                    group_cfg.combine = (current == 1)
+                        ? observe::combine_mode_t::AND_
+                        : observe::combine_mode_t::OR_;
+                    mark_dirty();
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "OR  : capture when range_hit OR programmatic trigger is active.\n"
+                        "AND : capture when both are active simultaneously.");
+                }
+            }
+
+            // Ranges list
+            ImGui::TextUnformatted("Ranges (inclusive [start, stop]):");
+            ImGui::Indent();
+
+            int range_to_remove = -1;
+            for (std::size_t i = 0; i < group_cfg.ranges.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+
+                std::uint64_t start_v = group_cfg.ranges[i].start_step;
+                std::uint64_t stop_v  = group_cfg.ranges[i].stop_step;
+
+                ImGui::SetNextItemWidth(scaled_width(140.0f));
+                if (ImGui::InputScalar("##start", ImGuiDataType_U64, &start_v)) {
+                    group_cfg.ranges[i].start_step = start_v;
+                    mark_dirty();
+                }
+                ImGui::SameLine();
+                ImGui::TextUnformatted("..");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(scaled_width(140.0f));
+                if (ImGui::InputScalar("##stop", ImGuiDataType_U64, &stop_v)) {
+                    group_cfg.ranges[i].stop_step = stop_v;
+                    mark_dirty();
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("X")) {
+                    range_to_remove = static_cast<int>(i);
+                }
+
+                ImGui::PopID();
+            }
+
+            if (ImGui::SmallButton("+ Add Range")) {
+                group_cfg.ranges.push_back(observe::step_range_t{0, 0});
+                mark_dirty();
+            }
+
+            if (range_to_remove >= 0) {
+                group_cfg.ranges.erase(group_cfg.ranges.begin() + range_to_remove);
+                mark_dirty();
+            }
+
+            ImGui::Unindent();
+
+            // Remove group button
+            ImGui::Spacing();
+            if (ImGui::SmallButton("Remove Group")) {
+                group_to_remove = group_name;
+            }
+
+            ImGui::TreePop();
+        }
+
+        ImGui::PopID();
+    }
+
+    if (!group_to_remove.empty()) {
+        obs_cfg.groups.erase(group_to_remove);
+        mark_dirty();
+    }
+
+    // ---- add new group ----
+    ImGui::Separator();
+    static std::string new_group_name;
+    ImGui::SetNextItemWidth(scaled_width(220.0f));
+    InputTextString("##new_observe_group", new_group_name, 64);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("+ Add Group") && !new_group_name.empty()) {
+        if (!obs_cfg.groups.contains(new_group_name)) {
+            obs_cfg.groups.emplace(new_group_name, observe::group_cfg_t{});
+            mark_dirty();
+        }
+        new_group_name.clear();
+    }
+}
+
+void config_editor::render_run_settings()
+{
+    if (ImGui::CollapsingHeader("Run Settings")) {
+        if (ImGui::Checkbox("Frozen (inference only)", &config.frozen)) {
+            mark_dirty();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("A frozen run: every neuron group makes each step a pure forward pass\n"
+                              "(no winner selection, adaptation, branching or running-activity-max\n"
+                              "update).");
+        }
+        if (InputTextString("Run ID", config.run_id)) {
+            mark_dirty();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Datasets continue their sequences from a checkpoint only when it\n"
+                              "was written by this run ID; otherwise they start fresh. \"auto\"\n"
+                              "draws a fresh ID. Enter a checkpoint's ID to continue it.");
+        }
+    }
+}
+
 void config_editor::render_logging_settings()
 {
     if (ImGui::CollapsingHeader("Logging Settings")) {
@@ -1986,7 +2551,10 @@ void config_editor::render_logging_settings()
             mark_dirty();
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Directory for auto-save snapshots (relative to config file or absolute)");
+            ImGui::SetTooltip(
+                "Directory for auto-save snapshots. A relative name is placed under\n"
+                "the app config's config_base (default <config_dir>/<config>/); an\n"
+                "absolute path is used as-is.");
         }
     }
 }
@@ -2256,10 +2824,10 @@ void config_editor::render_visualization_hints()
             ImGui::TreePop();
         }
 
-        // NGM2 hints
+        // NGM2 / NGM3 hints
         if (ImGui::TreeNode("Neural Model Hints")) {
-            // Neuron group hints
-            if (ImGui::TreeNode("Neuron Groups")) {
+            // NGM2 Neuron group hints
+            if (ImGui::TreeNode("NGM2 Neuron Groups")) {
                 std::string to_remove;
                 for (auto& [name, hint] : config.vis_hints.ngm2.neuron_groups) {
                     ImGui::PushID(name.c_str());
@@ -2276,15 +2844,41 @@ void config_editor::render_visualization_hints()
                     config.vis_hints.ngm2.neuron_groups.erase(to_remove);
                     mark_dirty();
                 }
-                // Add new hint
                 static std::string new_ngm2_hint_name;
-                if (InputTextString("##newngm2hint", new_ngm2_hint_name, 64)) {
-                    // Text changed
-                }
+                if (InputTextString("##newngm2hint", new_ngm2_hint_name, 64)) {}
                 ImGui::SameLine();
-                if (ImGui::SmallButton("+ Add Neuron Group Hint") && !new_ngm2_hint_name.empty()) {
+                if (ImGui::SmallButton("+ Add NGM2 Group Hint") && !new_ngm2_hint_name.empty()) {
                     config.vis_hints.ngm2.neuron_groups[new_ngm2_hint_name] = {{50, 1}};
                     new_ngm2_hint_name.clear();
+                    mark_dirty();
+                }
+                ImGui::TreePop();
+            }
+
+            // NGM3 Neuron group hints
+            if (ImGui::TreeNode("NGM3 Neuron Groups")) {
+                std::string to_remove;
+                for (auto& [name, hint] : config.vis_hints.ngm3.neuron_groups) {
+                    ImGui::PushID(name.c_str());
+                    bool remove_requested = false;
+                    if (render_neuron_group_hint(name, hint, remove_requested)) {
+                        mark_dirty();
+                    }
+                    if (remove_requested) {
+                        to_remove = name;
+                    }
+                    ImGui::PopID();
+                }
+                if (!to_remove.empty()) {
+                    config.vis_hints.ngm3.neuron_groups.erase(to_remove);
+                    mark_dirty();
+                }
+                static std::string new_ngm3_hint_name;
+                if (InputTextString("##newngm3hint", new_ngm3_hint_name, 64)) {}
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+ Add NGM3 Group Hint") && !new_ngm3_hint_name.empty()) {
+                    config.vis_hints.ngm3.neuron_groups[new_ngm3_hint_name] = {{28, 28}};
+                    new_ngm3_hint_name.clear();
                     mark_dirty();
                 }
                 ImGui::TreePop();

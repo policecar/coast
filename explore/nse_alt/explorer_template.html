@@ -1,0 +1,595 @@
+<title>Beyond NSE</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+<style>
+/* Layout: lab notebook — one reading column of findings, then a full-width bench of linked panels driven by one control bar. */
+:root {
+  --page: #f2f4f5;
+  --surface: #fcfcfb;
+  --ink: #0e1214;
+  --ink-2: #4c5459;
+  --muted: #858c90;
+  --grid: #e1e3e1;
+  --axis: #c0c5c4;
+  --rule: rgba(14,18,20,0.10);
+  --select: #0e1214;
+  --select-ink: #fcfcfb;
+  --s-real: #2a78d6;
+  --s-perm: #eb6834;
+  --s-unif: #1baf7a;
+  --gate: #6250d6;
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.125rem;
+  --step-2: 1.5rem;
+  --step-3: 2.25rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101213; --surface: #1a1a19; --ink: #eef0ef; --ink-2: #bfc4c2; --muted: #8b918f;
+    --grid: #2c2c2a; --axis: #3d3e3b; --rule: rgba(255,255,255,0.10);
+    --select: #eef0ef; --select-ink: #101213;
+    --s-real: #3987e5; --s-perm: #d95926; --s-unif: #199e70; --gate: #9085e9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #101213; --surface: #1a1a19; --ink: #eef0ef; --ink-2: #bfc4c2; --muted: #8b918f;
+  --grid: #2c2c2a; --axis: #3d3e3b; --rule: rgba(255,255,255,0.10);
+  --select: #eef0ef; --select-ink: #101213;
+  --s-real: #3987e5; --s-perm: #d95926; --s-unif: #199e70; --gate: #9085e9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--page); color: var(--ink); font-family: var(--font-body);
+  font-size: var(--step-0); line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 40px; }
+.prose { max-width: 68ch; display: grid; gap: 14px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: var(--step-3); letter-spacing: -0.01em; }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-family: var(--font-body); font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-data); font-size: var(--step--1); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+code, .mono { font-family: var(--font-data); font-size: 0.92em; }
+.muted { color: var(--ink-2); }
+.small { font-size: var(--step--1); }
+.findings { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.finding { display: grid; grid-template-columns: 2.2rem minmax(0,1fr); gap: 12px; padding-block: 14px; border-bottom: 1px solid var(--rule); }
+.finding .n { font-family: var(--font-data); color: var(--ink-2); font-size: var(--step--1); padding-top: 3px; }
+.finding p { max-width: 74ch; }
+.uses { width: 100%; border-collapse: collapse; font-size: var(--step--1); }
+.uses th, .uses td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.uses th { font-weight: 600; color: var(--ink-2); }
+.tablewrap { overflow-x: auto; }
+
+/* control bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--page);
+  padding-block: 10px; border-bottom: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page); }
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.ctl > label, .ctl > .lbl { font-family: var(--font-data); font-size: var(--step--1); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: var(--step--1); padding: 5px 10px; border: 0; background: var(--surface); color: var(--ink); cursor: pointer; border-right: 1px solid var(--rule); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--select); color: var(--select-ink); }
+.seg button:disabled { color: var(--muted); cursor: not-allowed; }
+select, input[type=range] { font: inherit; font-size: var(--step--1); accent-color: var(--ink); }
+select { background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 5px 8px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--s-real); outline-offset: 2px; }
+.stepval { font-family: var(--font-data); font-size: var(--step--1); min-width: 7ch; font-variant-numeric: tabular-nums; }
+
+/* bench */
+.bench { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 18px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.panel header { display: grid; gap: 2px; }
+.span-7 { grid-column: span 7; } .span-5 { grid-column: span 5; } .span-6 { grid-column: span 6; } .span-12 { grid-column: span 12; }
+@media (max-width: 900px) { .span-7, .span-5, .span-6 { grid-column: span 12; } }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--ink-2); font-family: var(--font-data); font-size: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--step--1); color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.sw.line { height: 2px; width: 14px; border-radius: 1px; }
+.sep { width: 100%; border-collapse: collapse; font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+.sep th, .sep td { padding: 5px 6px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.sep th { color: var(--ink-2); font-weight: 500; font-family: var(--font-data); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.sep tbody tr { cursor: pointer; }
+.sep tbody tr:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.sep tbody tr[aria-selected="true"] { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.sep tbody tr[aria-selected="true"] td:first-child { font-weight: 600; }
+.cellbar { display: grid; grid-template-columns: 2.6em 0.9em minmax(18px,1fr); align-items: center; gap: 6px; font-family: var(--font-data); }
+.cellbar i { display: block; height: 6px; border-radius: 0 3px 3px 0; background: var(--ink-2); opacity: 0.55; }
+.cellbar b { font-weight: 400; color: var(--ink-2); }
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.kv div { border-top: 2px solid var(--c); padding-top: 6px; display: grid; gap: 0; }
+.kv .v { font-family: var(--font-data); font-size: var(--step-1); font-variant-numeric: tabular-nums; }
+.kv .k { font-size: var(--step--1); color: var(--ink-2); }
+.sliders { display: grid; grid-template-columns: auto minmax(0,1fr) 6ch; gap: 6px 10px; align-items: center; font-size: var(--step--1); }
+.sliders output { font-family: var(--font-data); font-variant-numeric: tabular-nums; text-align: right; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { font: inherit; font-size: var(--step--1); padding: 5px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.btn:hover { border-color: var(--ink-2); }
+.ex { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.ex .col { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.ex .imgs { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 4px; }
+.ex img { width: 100%; image-rendering: pixelated; border-radius: 3px; border: 1px solid var(--rule); background: #000; }
+.note { font-size: var(--step--1); color: var(--ink-2); max-width: 80ch; }
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--surface); color: var(--ink); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 6px 8px; font-family: var(--font-data); font-size: 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); max-width: 260px; }
+.methods { display: grid; gap: 10px; max-width: 80ch; font-size: var(--step--1); color: var(--ink-2); }
+.methods ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+@media (prefers-reduced-motion: no-preference) { .seg button, .btn { transition: background 120ms, color 120ms, border-color 120ms; } }
+</style>
+
+<div class="wrap">
+  <section class="prose">
+    <div class="eyebrow">COAST · ngm2 · branch expl/nse-alt</div>
+    <h1>Beyond NSE: telling signal from noise in a neuron group</h1>
+    <p>ngm2 uses the normalised Shannon entropy (NSE) of a vector, passed through a sigmoid window, to decide whether a vector carries signal or noise and to scale learning and inhibition accordingly. This page measures how NSE and eleven scale-free alternatives (plus two absolute level measures) behave on real ngm2 responses, recorded at twelve checkpoints over 500k training steps on six datasets (mnist and kmnist continued to 5M), and on two kinds of noise input.</p>
+    <div class="tablewrap">
+      <table class="uses">
+        <thead><tr><th>Where NSE acts</th><th>Vector it reads</th><th>Window</th></tr></thead>
+        <tbody>
+          <tr><td>soft-WTA inhibition exponent<br><code>src/inhibition/soft_wta.cpp:43</code></td><td>group activity before inhibition (n = 50)</td><td><code>f = 1 − σ((NSE − 0.8)/0.2)</code>; exponent <code>1 + (S−1)·f</code></td></tr>
+          <tr><td>dendrite response<br><code>src/hd_ngm2/hd_ngm2_dendrite.cpp:246</code></td><td>each input buffer: image or upstream group output</td><td>min-combined across inputs</td></tr>
+          <tr><td>dendrite learning attenuation<br><code>hd_ngm2_dendrite.cpp:410</code></td><td>each input buffer</td><td><code>1 − σ((NSE − 0.8)/0.2)·(1 − σ(avg))</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted" id="windowNote"></p>
+  </section>
+
+  <section class="prose">
+    <h2>What the data says</h2>
+    <div class="findings"><!--__FINDINGS__--></div>
+  </section>
+
+  <section style="display:grid; gap:18px;">
+    <div class="bar" role="toolbar" aria-label="Explorer controls">
+      <div class="ctl"><span class="lbl">Dataset</span><div class="seg" id="dsSeg"></div></div>
+      <div class="ctl"><span class="lbl">Vector</span><div class="seg" id="kindSeg"></div></div>
+      <div class="ctl"><label for="measureSel">Measure</label><select id="measureSel"></select></div>
+      <div class="ctl"><label for="stepRange">Checkpoint</label><input type="range" id="stepRange" min="0" max="9" step="1"><span class="stepval" id="stepVal"></span></div>
+    </div>
+
+    <div class="bench">
+      <div class="panel span-7">
+        <header><h3 id="trajTitle">Over training</h3><p class="small muted" id="trajSub"></p></header>
+        <div class="legend" id="legTraj"></div>
+        <div id="traj"></div>
+      </div>
+      <div class="panel span-5">
+        <header><h3>Separation at this checkpoint</h3><p class="small muted">|2·AUC − 1| on all 2,000 vectors per condition: 0 = identical distributions, 1 = no overlap. The arrow shows whether real inputs score higher (↑) or lower (↓). Click a row to select the measure.</p></header>
+        <div class="tablewrap"><table class="sep" id="sepTable"></table></div>
+      </div>
+
+      <div class="panel span-6">
+        <header><h3>Distribution</h3><p class="small muted" id="histSub"></p></header>
+        <div class="legend" id="legHist"></div>
+        <div id="hist"></div>
+        <div id="gateCurve"></div>
+      </div>
+      <div class="panel span-6">
+        <header><h3>Level against shape</h3><p class="small muted" id="scatSub"></p></header>
+        <div class="legend" id="legScat"></div>
+        <div id="scat"></div>
+      </div>
+
+      <div class="panel span-6">
+        <header><h3>Window tuner</h3><p class="small muted">Gate the selected measure the way soft-WTA gates NSE: <span class="mono">f = σ((m − c)/w)</span> (or 1 − σ). Here f is the sharpening factor; the inhibition exponent becomes 1 + (S − 1)·f with S = 5. The curve under the distribution shows f.</p></header>
+        <div class="sliders">
+          <label for="gC">centre c</label><input type="range" id="gC" min="0" max="1000" step="1"><output id="gCv"></output>
+          <label for="gW">width w</label><input type="range" id="gW" min="0" max="1000" step="1"><output id="gWv"></output>
+        </div>
+        <div class="btnrow">
+          <div class="seg" id="gPol"></div>
+          <button class="btn" id="gAuto" type="button">Fit between real and unif</button>
+          <button class="btn" id="gModel" type="button">Model's NSE window</button>
+        </div>
+        <div class="kv" id="gateKv"></div>
+        <p class="note" id="gateNote"></p>
+      </div>
+      <div class="panel span-6">
+        <header><h3 id="exTitle">Example vectors</h3><p class="small muted" id="exSub"></p></header>
+        <div class="ex" id="examples"></div>
+      </div>
+
+      <div class="panel span-12">
+        <header><h3>Synthetic lab</h3><p class="small muted">200 signal vectors <span class="mono">clip(b + a·U(0,1) + peaks)</span> against 200 noise vectors <span class="mono">clip(b + a·U(0,1))</span>, generated in your browser with the same measure code. The pedestal b is the knob NSE is most sensitive to.</p></header>
+        <div class="bench" style="gap:18px;">
+          <div class="span-5" style="display:grid; gap:12px; align-content:start; min-width:0;">
+            <div class="sliders">
+              <label for="lN">length n</label><input type="range" id="lN" min="0" max="5" step="1"><output id="lNv"></output>
+              <label for="lB">pedestal b</label><input type="range" id="lB" min="0" max="60" step="1"><output id="lBv"></output>
+              <label for="lA">noise a</label><input type="range" id="lA" min="0" max="60" step="1"><output id="lAv"></output>
+              <label for="lK">peaks k</label><input type="range" id="lK" min="0" max="200" step="1"><output id="lKv"></output>
+              <label for="lH">peak height h</label><input type="range" id="lH" min="0" max="100" step="1"><output id="lHv"></output>
+            </div>
+            <div class="btnrow">
+              <button class="btn" type="button" data-preset="group">Like a trained group</button>
+              <button class="btn" type="button" data-preset="image">Like an MNIST image</button>
+              <button class="btn" type="button" data-preset="pedestal">Clean peaks, high pedestal</button>
+            </div>
+            <div class="legend"><span><i class="sw" style="background:var(--s-real)"></i>signal (sorted, one example)</span><span><i class="sw" style="background:var(--s-unif)"></i>noise (sorted, one example)</span></div>
+            <div id="labPlot"></div>
+          </div>
+          <div class="span-7 tablewrap" style="min-width:0;"><table class="sep" id="labTable"></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="methods">
+    <h2 style="color:var(--ink)">How the numbers were made</h2>
+    <ul>
+      <li>Model: ngm2, one group of 50 neurons with 5 proximal dendrites each, configs <code>configs/&lt;dataset&gt;.json</code> unchanged. Training was chained from checkpoints at steps 1, 500, 2k, 5k, 10k, 20k, 50k, 100k, 200k, 300k, 400k and 500k (<code>--load-state</code> → <code>-n Δ</code> → <code>--save-state</code>); mnist and kmnist continue through 600k, 700k, 800k, 1M, 1.25M, 1.5M and then every 500k to 5M. Chained save/resume is exact: 200k → 300k → 400k → 500k reproduces a single 300k-step run bit for bit (mnist and dsprites, 0 of 4,072 state datasets differ).</li>
+      <li>Probe: each checkpoint was loaded into a frozen copy of the config (no winner draw, adaptation or branching; verified by diffing state files: only RNG states, the data cursor and io buffers changed) whose inhibitor is <code>random_index</code> with <code>ri_strength = 0</code>. That makes it <code>clamp(raw, 0, 1)</code>, an exact identity because the neuron already clamps its activity to [0, 1]. Each probe ran 2,000 steps with <code>--log-buffers</code>, a fresh input seed and the model's own inference noise.</li>
+      <li>Post-inhibition vectors are soft-WTA (S = 5) applied in Python to the pre-inhibition vectors. The mirror matches a frozen run with the real inhibitor to 1.2·10⁻⁷ (one float32 ulp); 75% of entries are bit-exact.</li>
+      <li>Noise inputs: <b>perm</b> = held-out images with pixel positions shuffled independently per image (same intensity histogram, so the same input NSE); <b>unif</b> = iid uniform pixels (dsprites: Bernoulli at the real pixel density). All conditions get the loader's additive input noise U(0, 0.05).</li>
+      <li>Held-out inputs: cifar10 uses its test batch. mnist, emnist, kmnist, dsprites and chairs3d ship training files only here, so their probes draw from the training images in a different order.</li>
+      <li id="provenance"></li>
+    </ul>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>
+/*__MEASURES_JS__*/
+</script>
+<script>
+(() => {
+"use strict";
+const D = JSON.parse(document.getElementById("data").textContent);
+const DS = Object.keys(D.datasets);
+let STEPS = [];  // checkpoints of the selected dataset, set in renderAll
+const CONDS = ["real", "perm", "unif"];
+const COND_LABEL = { real: "real input", perm: "pixel-shuffled", unif: "uniform noise" };
+const COND_VAR = { real: "--s-real", perm: "--s-perm", unif: "--s-unif" };
+const KIND_LABEL = { pre: "before inhibition", post: "after soft-WTA", input: "input image" };
+const S = D.strength;
+
+const M = {
+  nse:          { label: "NSE", dir: -1, note: "H(p)/log₂n with p = v/Σv. The model's measure; 1 = flat." },
+  nse_minsub:   { label: "NSE, minimum removed", dir: -1, note: "NSE of v − min(v): strips a constant pedestal." },
+  nse_medsub:   { label: "NSE above median", dir: -1, note: "NSE of max(v − median(v), 0)." },
+  renyi2:       { label: "Rényi-2 entropy", dir: -1, note: "log(1/Σp²)/log n (collision entropy); 1 = flat." },
+  gini:         { label: "Gini coefficient", dir: 1, note: "Inequality of the values; 0 = flat, →1 = one-hot." },
+  hoyer:        { label: "Hoyer sparsity", dir: 1, note: "(√n − ‖v‖₁/‖v‖₂)/(√n − 1); 0 = flat, 1 = one-hot." },
+  kurtosis:     { label: "Excess kurtosis", dir: 1, note: "Tail weight of the value distribution." },
+  peak_to_mean: { label: "Peak / mean", dir: 1, note: "max(v)/mean(v)." },
+  cv:           { label: "Coefficient of variation", dir: 1, note: "std(v)/mean(v)." },
+  top10_mass:   { label: "Top-10% mass", dir: 1, note: "Share of Σv held by the largest 10% of entries." },
+  margin:       { label: "Top-1 margin", dir: 1, note: "(v₍₁₎ − v₍₂₎)/v₍₁₎: how far the winner leads." },
+  robust_z:     { label: "Robust z of max", dir: 1, note: "(max − median)/(1.4826·MAD)." },
+  mean:         { label: "Mean level", dir: 1, note: "mean(v). Absolute, not scale-free." },
+  max:          { label: "Max level", dir: 1, note: "max(v). Absolute, not scale-free." },
+  nbr_corr:     { label: "Neighbour correlation", dir: 1, note: "Mean correlation of adjacent pixels. Uses the image grid; images only." },
+};
+const SCALE_FREE = ["nse","nse_minsub","nse_medsub","renyi2","gini","hoyer","kurtosis","peak_to_mean","cv","top10_mass","margin","robust_z"];
+
+const st = { ds: DS[0], kind: "pre", measure: "nse", step: D.input_step, gate: { c: 0.9, w: 0.0134, pol: "low" } };
+try { const s = JSON.parse(localStorage.getItem("beyond-nse") || "{}"); if (s.ds && D.datasets[s.ds]) st.ds = s.ds; if (s.kind) st.kind = s.kind; if (s.measure && M[s.measure]) st.measure = s.measure; } catch (e) {}
+function save() { try { localStorage.setItem("beyond-nse", JSON.stringify({ ds: st.ds, kind: st.kind, measure: st.measure })); } catch (e) {} }
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const cc = (c) => `var(${COND_VAR[c]})`;
+const fmt = (x) => { if (!isFinite(x)) return "–"; const a = Math.abs(x); if (a !== 0 && (a < 1e-3 || a >= 1e5)) return x.toExponential(2); if (a >= 100) return x.toFixed(1); if (a >= 10) return x.toFixed(2); return x.toFixed(4); };
+const fmtStep = (s) => s >= 1e6 ? (s / 1e6) + "M" : s >= 1000 ? (s / 1000) + "k" : String(s);
+const cache = new Map();
+function f32(b64) { if (cache.has(b64)) return cache.get(b64); const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const a = new Float32Array(u.buffer); cache.set(b64, a); return a; }
+function u8(b64) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+
+// model window: sigma((nse-0.8)/0.2) with sigmoid({0.5,0.5}) == logistic((nse-0.9)/w)
+const INV = 1 / (1 - Math.pow(0.5, 0.1));
+const MODEL_W = 0.2 / INV;
+document.getElementById("windowNote").textContent =
+  `The model's sigmoid has steepness 0.5 and transition point 0.5, so σ((NSE − 0.8)/0.2) is a logistic centred at NSE = 0.9 with scale ${MODEL_W.toFixed(4)}: f falls from 0.95 to 0.05 between NSE ≈ ${(0.9 - 2.944 * MODEL_W).toFixed(3)} and ${(0.9 + 2.944 * MODEL_W).toFixed(3)}.`;
+
+const ds = () => D.datasets[st.ds];
+const kinds = () => ["pre", "post", "input"];
+const curStep = () => st.kind === "input" ? D.input_step : st.step;
+const group = (kind, step, cond) => ds().kinds[kind][`${step}|${cond}`];
+const measuresFor = (kind) => Object.keys(M).filter((k) => kind === "input" ? true : k !== "nbr_corr");
+
+// ---------- controls ----------
+function seg(el, items, cur, onPick, disabled = () => false) {
+  el.innerHTML = "";
+  for (const [val, text] of items) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = text;
+    b.setAttribute("aria-pressed", String(val === cur)); b.disabled = disabled(val);
+    b.addEventListener("click", () => onPick(val)); el.appendChild(b);
+  }
+}
+function renderControls() {
+  seg(document.getElementById("dsSeg"), DS.map((d) => [d, d]), st.ds, (v) => { st.ds = v; save(); renderAll(); });
+  seg(document.getElementById("kindSeg"), kinds().map((k) => [k, KIND_LABEL[k]]), st.kind, (v) => { st.kind = v; if (!measuresFor(v).includes(st.measure)) st.measure = "nse"; save(); autoGate(); renderAll(); });
+  const sel = document.getElementById("measureSel");
+  sel.innerHTML = measuresFor(st.kind).map((k) => `<option value="${k}"${k === st.measure ? " selected" : ""}>${M[k].label}</option>`).join("");
+  const r = document.getElementById("stepRange"); r.max = STEPS.length - 1; r.value = STEPS.indexOf(st.step); r.disabled = st.kind === "input";
+  document.getElementById("stepVal").textContent = st.kind === "input" ? fmtStep(D.input_step) + " only" : "step " + fmtStep(curStep());
+}
+document.getElementById("measureSel").addEventListener("change", (e) => { st.measure = e.target.value; save(); autoGate(); renderAll(); });
+document.getElementById("stepRange").addEventListener("input", (e) => { st.step = STEPS[+e.target.value]; renderAll(); });
+
+// ---------- svg helpers ----------
+const NS = "http://www.w3.org/2000/svg";
+function svg(w, h) { const s = document.createElementNS(NS, "svg"); s.setAttribute("viewBox", `0 0 ${w} ${h}`); s.setAttribute("role", "img"); return s; }
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function text(parent, x, y, s, attrs = {}) { const t = el("text", { x, y, ...attrs }, parent); t.textContent = s; return t; }
+function ticks(lo, hi, n = 5) {
+  const span = hi - lo || 1; const step0 = span / n; const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || mag * 10;
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toPrecision(12)); return out;
+}
+const tip = document.getElementById("tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; const pad = 14; let x = ev.clientX + pad, y = ev.clientY + pad; const r = tip.getBoundingClientRect(); if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad; if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - pad; tip.style.left = x + "px"; tip.style.top = y + "px"; }
+function hideTip() { tip.hidden = true; }
+function legend(id, items) { document.getElementById(id).innerHTML = items.map(([c, t, line]) => `<span><i class="sw${line ? " line" : ""}" style="background:${c}"></i>${t}</span>`).join(""); }
+
+// domain from sampled values of the visible groups, 1st–99th percentile
+function domainOf(arrays) {
+  const all = []; for (const a of arrays) for (const v of a) if (isFinite(v)) all.push(v);
+  all.sort((a, b) => a - b); if (!all.length) return [0, 1];
+  let lo = all[Math.floor(all.length * 0.01)], hi = all[Math.min(all.length - 1, Math.floor(all.length * 0.99))];
+  if (hi - lo < 1e-12) { const d = Math.abs(lo) * 0.01 || 0.01; lo -= d; hi += d; }
+  const pad = (hi - lo) * 0.04; return [lo - pad, hi + pad];
+}
+
+// ---------- trajectory ----------
+function renderTraj() {
+  const box = document.getElementById("traj"); box.innerHTML = "";
+  const m = st.measure;
+  document.getElementById("trajTitle").textContent = st.kind === "input" ? "Input vectors" : `${M[m].label} over training`;
+  if (st.kind === "input") {
+    document.getElementById("trajSub").textContent = "Inputs do not change with training, so there is no trajectory. Median and quartiles per condition:";
+    legend("legTraj", []);
+    const W = 640, H = 150, L = 110, R = 16; const s = svg(W, H); box.appendChild(s);
+    const qs = CONDS.map((c) => group("input", curStep(), c).q[m]);
+    const lo = Math.min(...qs.map((q) => q[0])), hi = Math.max(...qs.map((q) => q[4]));
+    const pad = (hi - lo) * 0.06 || 0.01; const x = (v) => L + (v - (lo - pad)) / ((hi + pad) - (lo - pad)) * (W - L - R);
+    for (const t of ticks(lo - pad, hi + pad)) { el("line", { x1: x(t), x2: x(t), y1: 6, y2: H - 22, stroke: css("--grid") }, s); text(s, x(t), H - 8, fmt(t), { "text-anchor": "middle" }); }
+    CONDS.forEach((c, i) => { const q = qs[i]; const y = 22 + i * 40;
+      text(s, L - 10, y + 4, COND_LABEL[c], { "text-anchor": "end" });
+      el("line", { x1: x(q[0]), x2: x(q[4]), y1: y, y2: y, stroke: cc(c), "stroke-width": 2 }, s);
+      el("rect", { x: x(q[1]), y: y - 8, width: Math.max(2, x(q[3]) - x(q[1])), height: 16, fill: cc(c), "fill-opacity": 0.25, stroke: cc(c), "stroke-width": 1.5, rx: 3 }, s);
+      el("line", { x1: x(q[2]), x2: x(q[2]), y1: y - 10, y2: y + 10, stroke: cc(c), "stroke-width": 3 }, s);
+      const hit = el("rect", { x: L, y: y - 16, width: W - L - R, height: 32, fill: "transparent" }, s);
+      hit.addEventListener("mousemove", (ev) => showTip(ev, `<b>${COND_LABEL[c]}</b><br>p10 ${fmt(q[0])} · p25 ${fmt(q[1])}<br>median ${fmt(q[2])}<br>p75 ${fmt(q[3])} · p90 ${fmt(q[4])}`));
+      hit.addEventListener("mouseleave", hideTip);
+    });
+    return;
+  }
+  document.getElementById("trajSub").textContent = `${KIND_LABEL[st.kind]}, ${st.ds}. Line = median, band = 25th–75th percentile over 2,000 vectors. Checkpoint marked.`;
+  legend("legTraj", CONDS.map((c) => [cc(c), COND_LABEL[c], true]));
+  const W = 640, H = 260, L = 56, R = 16, T = 10, B = 30; const s = svg(W, H); box.appendChild(s);
+  const qs = {}; let lo = Infinity, hi = -Infinity;
+  for (const c of CONDS) { qs[c] = STEPS.map((step) => group(st.kind, step, c).q[m]); for (const q of qs[c]) { lo = Math.min(lo, q[1]); hi = Math.max(hi, q[3]); } }
+  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.01 || 0.01; lo -= pad; hi += pad;
+  const lx = (step) => Math.log10(step); const x0 = lx(STEPS[0]), x1 = lx(STEPS[STEPS.length - 1]);
+  const x = (step) => L + (lx(step) - x0) / (x1 - x0) * (W - L - R);
+  const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
+  for (const t of ticks(lo, hi)) { el("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: css("--grid") }, s); text(s, L - 6, y(t) + 3, fmt(t), { "text-anchor": "end" }); }
+  el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: css("--axis") }, s);
+  let lastLab = -Infinity;
+  for (const step of STEPS) { if (x(step) - lastLab < 30) continue; lastLab = x(step); text(s, x(step), H - B + 16, fmtStep(step), { "text-anchor": "middle" }); }
+  text(s, W - R, H - 2, "training step (log)", { "text-anchor": "end" });
+  el("line", { x1: x(curStep()), x2: x(curStep()), y1: T, y2: H - B, stroke: css("--ink-2"), "stroke-dasharray": "3 3" }, s);
+  for (const c of CONDS) {
+    const top = STEPS.map((step, i) => `${x(step)},${y(qs[c][i][3])}`); const bot = STEPS.map((step, i) => `${x(step)},${y(qs[c][i][1])}`).reverse();
+    el("polygon", { points: top.concat(bot).join(" "), fill: cc(c), "fill-opacity": 0.14, stroke: "none" }, s);
+  }
+  for (const c of CONDS) {
+    el("polyline", { points: STEPS.map((step, i) => `${x(step)},${y(qs[c][i][2])}`).join(" "), fill: "none", stroke: cc(c), "stroke-width": 2, "stroke-linejoin": "round" }, s);
+    STEPS.forEach((step, i) => el("circle", { cx: x(step), cy: y(qs[c][i][2]), r: step === curStep() ? 4.5 : 2.5, fill: cc(c), stroke: css("--surface"), "stroke-width": 1.5 }, s));
+  }
+  const cross = el("line", { x1: 0, x2: 0, y1: T, y2: H - B, stroke: css("--axis"), visibility: "hidden" }, s);
+  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent", style: "cursor:pointer" }, s);
+  const nearest = (ev) => { const r = s.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W; let bi = 0, bd = Infinity; STEPS.forEach((step, i) => { const d = Math.abs(x(step) - px); if (d < bd) { bd = d; bi = i; } }); return bi; };
+  hit.addEventListener("mousemove", (ev) => { const i = nearest(ev); cross.setAttribute("x1", x(STEPS[i])); cross.setAttribute("x2", x(STEPS[i])); cross.setAttribute("visibility", "visible");
+    showTip(ev, `<b>step ${fmtStep(STEPS[i])}</b><br>` + CONDS.map((c) => `<span style="color:${cc(c)}">■</span> ${COND_LABEL[c]}: ${fmt(qs[c][i][2])} <span style="opacity:.7">[${fmt(qs[c][i][1])}, ${fmt(qs[c][i][3])}]</span>`).join("<br>")); });
+  hit.addEventListener("mouseleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); });
+  hit.addEventListener("click", (ev) => { st.step = STEPS[nearest(ev)]; renderAll(); });
+}
+
+// ---------- separation table ----------
+function renderSep() {
+  const t = document.getElementById("sepTable");
+  const A = ds().auc[st.kind][String(curStep())];
+  const cols = st.kind === "input" ? [["perm", "vs shuffled"], ["unif", "vs uniform"]] : [["perm", "vs shuffled"], ["unif", "vs uniform"], ["early", "vs step 1"]];
+  let h = `<thead><tr><th>measure</th>${cols.map(([, l]) => `<th style="min-width:6.5em">${l}</th>`).join("")}</tr></thead><tbody>`;
+  for (const k of measuresFor(st.kind)) {
+    h += `<tr data-m="${k}" aria-selected="${k === st.measure}" title="${M[k].note}"><td>${M[k].label}${SCALE_FREE.includes(k) ? "" : " <span class=muted>·abs</span>"}</td>`;
+    for (const [c] of cols) {
+      if (st.kind !== "input" && c === "early" && curStep() === STEPS[0]) { h += `<td class="muted">–</td>`; continue; }
+      const a = A[c][k]; const d = 2 * a - 1; const mag = Math.abs(d);
+      h += `<td><div class="cellbar"><span>${mag.toFixed(2)}</span><b>${mag < 0.05 ? "·" : d > 0 ? "↑" : "↓"}</b><i style="width:${(mag * 100).toFixed(0)}%"></i></div></td>`;
+    }
+    h += `</tr>`;
+  }
+  t.innerHTML = h + "</tbody>";
+  t.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => { st.measure = tr.dataset.m; save(); autoGate(); renderAll(); }));
+}
+
+// ---------- histogram + gate ----------
+function gateF(v) { const z = (v - st.gate.c) / Math.max(st.gate.w, 1e-12); const g = 1 / (1 + Math.exp(-z)); return st.gate.pol === "high" ? g : 1 - g; }
+function renderHist() {
+  const m = st.measure, step = curStep();
+  const arrs = CONDS.map((c) => f32(group(st.kind, step, c).s[m]));
+  const early = st.kind !== "input" && step !== STEPS[0] ? f32(group(st.kind, STEPS[0], "real").s[m]) : null;
+  const [lo, hi] = domainOf(early ? arrs.concat([early]) : arrs);
+  document.getElementById("histSub").textContent = `${M[m].label} · ${KIND_LABEL[st.kind]} · ${st.ds} · step ${fmtStep(step)} · ${D.n_sample} sampled vectors per condition. Values outside the 1st–99th percentile pile into the end bins.`;
+  legend("legHist", CONDS.map((c) => [cc(c), COND_LABEL[c]]).concat(early ? [[css("--ink-2"), "real at step 1 (outline)"]] : []));
+  const W = 600, H = 200, L = 40, R = 12, T = 8, B = 26, NB = 36;
+  const box = document.getElementById("hist"); box.innerHTML = ""; const s = svg(W, H); box.appendChild(s);
+  const bin = (v) => Math.min(NB - 1, Math.max(0, Math.floor((v - lo) / (hi - lo) * NB)));
+  const counts = arrs.map((a) => { const h = new Array(NB).fill(0); for (const v of a) if (isFinite(v)) h[bin(v)]++; return h; });
+  const ec = early ? (() => { const h = new Array(NB).fill(0); for (const v of early) if (isFinite(v)) h[bin(v)]++; return h; })() : null;
+  const ymax = Math.max(1, ...counts.flat(), ...(ec || []));
+  const x = (v) => L + (v - lo) / (hi - lo) * (W - L - R); const y = (c) => T + (1 - c / ymax) * (H - T - B);
+  for (const t of ticks(0, ymax, 3)) { el("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: css("--grid") }, s); text(s, L - 6, y(t) + 3, String(t), { "text-anchor": "end" }); }
+  for (const t of ticks(lo, hi, 6)) text(s, x(t), H - 8, fmt(t), { "text-anchor": "middle" });
+  el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: css("--axis") }, s);
+  const bw = (W - L - R) / NB;
+  counts.forEach((h, ci) => { const c = CONDS[ci]; let d = `M${L},${y(0)}`; h.forEach((n, i) => { d += `L${L + i * bw},${y(n)}L${L + (i + 1) * bw},${y(n)}`; }); d += `L${W - R},${y(0)}Z`;
+    el("path", { d, fill: cc(c), "fill-opacity": 0.22, stroke: cc(c), "stroke-width": 1.6, "stroke-linejoin": "round" }, s); });
+  if (ec) { let d = ""; ec.forEach((n, i) => { d += `${i ? "L" : "M"}${L + i * bw},${y(n)}L${L + (i + 1) * bw},${y(n)}`; }); el("path", { d, fill: "none", stroke: css("--ink-2"), "stroke-width": 1.2, "stroke-dasharray": "4 3" }, s); }
+  for (let i = 0; i < NB; i++) { const r = el("rect", { x: L + i * bw, y: T, width: bw, height: H - T - B, fill: "transparent" }, s);
+    r.addEventListener("mousemove", (ev) => showTip(ev, `<b>${fmt(lo + i * (hi - lo) / NB)} … ${fmt(lo + (i + 1) * (hi - lo) / NB)}</b><br>` + CONDS.map((c, ci) => `<span style="color:${cc(c)}">■</span> ${COND_LABEL[c]}: ${counts[ci][i]}`).join("<br>") + (ec ? `<br>real @ step 1: ${ec[i]}` : "")));
+    r.addEventListener("mouseleave", hideTip); }
+  // gate curve on its own 0..1 axis, same x
+  const gb = document.getElementById("gateCurve"); gb.innerHTML = ""; const G = svg(W, 92); gb.appendChild(G);
+  const gy = (f) => 6 + (1 - f) * 62;
+  for (const t of [0, 0.5, 1]) { el("line", { x1: L, x2: W - R, y1: gy(t), y2: gy(t), stroke: css("--grid") }, G); text(G, L - 6, gy(t) + 3, String(t), { "text-anchor": "end" }); }
+  let d = ""; for (let i = 0; i <= 200; i++) { const v = lo + (hi - lo) * i / 200; d += `${i ? "L" : "M"}${x(v)},${gy(gateF(v))}`; }
+  el("path", { d, fill: "none", stroke: "var(--gate)", "stroke-width": 2 }, G);
+  text(G, W - R, 86, "sharpening factor f under the current window", { "text-anchor": "end" });
+}
+
+// ---------- scatter ----------
+function renderScatter() {
+  const m = st.measure, step = curStep(); const xm = m === "mean" ? "max" : "mean";
+  document.getElementById("scatSub").textContent = `x = ${M[xm].label.toLowerCase()} (absolute), y = ${M[m].label}. Scale-free measures cannot see the x axis. On mnist, emnist and kmnist the pixel-shuffled responses differ from real ones mainly along it.`;
+  legend("legScat", CONDS.map((c) => [cc(c), COND_LABEL[c]]));
+  const xs = CONDS.map((c) => f32(group(st.kind, step, c).s[xm])), ys = CONDS.map((c) => f32(group(st.kind, step, c).s[m]));
+  const [xlo, xhi] = domainOf(xs), [ylo, yhi] = domainOf(ys);
+  const W = 600, H = 300, L = 56, R = 12, T = 8, B = 30;
+  const box = document.getElementById("scat"); box.innerHTML = ""; const s = svg(W, H); box.appendChild(s);
+  const x = (v) => L + (Math.min(xhi, Math.max(xlo, v)) - xlo) / (xhi - xlo) * (W - L - R);
+  const y = (v) => T + (yhi - Math.min(yhi, Math.max(ylo, v))) / (yhi - ylo) * (H - T - B);
+  for (const t of ticks(ylo, yhi)) { el("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: css("--grid") }, s); text(s, L - 6, y(t) + 3, fmt(t), { "text-anchor": "end" }); }
+  for (const t of ticks(xlo, xhi, 6)) text(s, x(t), H - 12, fmt(t), { "text-anchor": "middle" });
+  el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: css("--axis") }, s);
+  const pts = [];
+  CONDS.forEach((c, ci) => { for (let i = 0; i < xs[ci].length; i++) { const px = x(xs[ci][i]), py = y(ys[ci][i]); pts.push([px, py, c, xs[ci][i], ys[ci][i]]);
+    el("circle", { cx: px, cy: py, r: 2.6, fill: cc(c), "fill-opacity": 0.65, stroke: css("--surface"), "stroke-width": 0.6 }, s); } });
+  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, s);
+  hit.addEventListener("mousemove", (ev) => { const r = s.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W, py = (ev.clientY - r.top) / r.height * H;
+    let best = null, bd = 400; for (const p of pts) { const d = (p[0] - px) ** 2 + (p[1] - py) ** 2; if (d < bd) { bd = d; best = p; } }
+    if (best) showTip(ev, `<b>${COND_LABEL[best[2]]}</b><br>${M[xm].label}: ${fmt(best[3])}<br>${M[m].label}: ${fmt(best[4])}`); else hideTip(); });
+  hit.addEventListener("mouseleave", hideTip);
+}
+
+// ---------- window tuner ----------
+function gateRange() { const step = curStep(); return domainOf(CONDS.map((c) => f32(group(st.kind, step, c).s[st.measure]))); }
+function autoGate() {
+  if (st.kind === "input" && !ds().kinds.input) return;
+  const step = curStep(); const qr = group(st.kind, step, "real").q[st.measure][2], qu = group(st.kind, step, "unif").q[st.measure][2];
+  const [lo, hi] = gateRange();
+  st.gate.c = 0.5 * (qr + qu); st.gate.w = Math.max(Math.abs(qr - qu) / 6, (hi - lo) / 400);
+  // sharpen on the side where real inputs lie
+  st.gate.pol = qr >= qu ? "high" : "low";
+}
+function renderGate() {
+  const [lo, hi] = gateRange();
+  const cR = document.getElementById("gC"), wR = document.getElementById("gW");
+  cR.value = Math.round((st.gate.c - lo) / (hi - lo) * 1000);
+  const wmax = (hi - lo) / 2; wR.value = Math.round(Math.sqrt(Math.min(1, st.gate.w / wmax)) * 1000);
+  document.getElementById("gCv").textContent = fmt(st.gate.c); document.getElementById("gWv").textContent = fmt(st.gate.w);
+  seg(document.getElementById("gPol"), [["high", "sharpen when high"], ["low", "sharpen when low"]], st.gate.pol, (v) => { st.gate.pol = v; renderGate(); renderHist(); });
+  const step = curStep();
+  const stats = CONDS.map((c) => { const a = f32(group(st.kind, step, c).s[st.measure]); let sf = 0; for (const v of a) sf += gateF(v); return sf / a.length; });
+  document.getElementById("gateKv").innerHTML = CONDS.map((c, i) => `<div style="--c:${cc(c)}"><span class="v">f ${stats[i].toFixed(3)}</span><span class="k">${COND_LABEL[c]} · exponent ${(1 + (S - 1) * stats[i]).toFixed(2)}</span></div>`).join("");
+  const goodSplit = stats[0] - Math.max(stats[1], stats[2]);
+  document.getElementById("gateNote").textContent = st.kind === "input"
+    ? "Input vectors are not inhibited; the tuner shows how a window on this measure would split them, for example for the dendrite attenuation."
+    : `Mean f for real inputs minus the larger of the two noise conditions: ${goodSplit.toFixed(3)}. A useful window gives real inputs f near 1 and noise f near 0, or the reverse if inhibition should relax on signal.`;
+}
+document.getElementById("gC").addEventListener("input", (e) => { const [lo, hi] = gateRange(); st.gate.c = lo + (hi - lo) * e.target.value / 1000; renderGate(); renderHist(); });
+document.getElementById("gW").addEventListener("input", (e) => { const [lo, hi] = gateRange(); st.gate.w = Math.max(1e-9, (hi - lo) / 2 * (e.target.value / 1000) ** 2); renderGate(); renderHist(); });
+document.getElementById("gAuto").addEventListener("click", () => { autoGate(); renderGate(); renderHist(); });
+document.getElementById("gModel").addEventListener("click", () => { st.measure = "nse"; st.gate = { c: 0.9, w: MODEL_W, pol: "low" }; save(); renderAll(false); });
+
+// ---------- examples ----------
+function renderExamples() {
+  const box = document.getElementById("examples"); box.innerHTML = ""; const step = curStep();
+  if (st.kind === "input") {
+    document.getElementById("exTitle").textContent = "Example inputs";
+    document.getElementById("exSub").textContent = `Four random ${st.ds} inputs per condition, including the loader's additive input noise.`;
+    for (const c of CONDS) { const col = document.createElement("div"); col.className = "col";
+      col.innerHTML = `<div class="legend"><span><i class="sw" style="background:${cc(c)}"></i>${COND_LABEL[c]}</span></div><div class="imgs">${ds().images[c].map((u) => `<img alt="${COND_LABEL[c]} example" src="${u}">`).join("")}</div>`; box.appendChild(col); }
+    return;
+  }
+  document.getElementById("exTitle").textContent = "Example vectors";
+  document.getElementById("exSub").textContent = `${D.n_example} random vectors per condition, ${KIND_LABEL[st.kind]}, step ${fmtStep(step)}. Each strip is one vector of 50 activities sorted high to low, on a shared 0–1 scale.`;
+  for (const c of CONDS) {
+    const raw = u8(group(st.kind, step, c).ex); const n = raw.length / D.n_example;
+    const col = document.createElement("div"); col.className = "col";
+    col.innerHTML = `<div class="legend"><span><i class="sw" style="background:${cc(c)}"></i>${COND_LABEL[c]}</span></div>`;
+    const W = 200, rowH = 26, s = svg(W, rowH * D.n_example); col.appendChild(s);
+    for (let e = 0; e < D.n_example; e++) { const v = Array.from(raw.slice(e * n, (e + 1) * n), (q) => q / 255).sort((a, b) => b - a); const y0 = e * rowH; const bw = W / n;
+      el("line", { x1: 0, x2: W, y1: y0 + rowH - 3, y2: y0 + rowH - 3, stroke: css("--grid") }, s);
+      v.forEach((a, i) => el("rect", { x: i * bw + 0.3, y: y0 + rowH - 3 - a * (rowH - 5), width: Math.max(0.6, bw - 0.6), height: Math.max(0.5, a * (rowH - 5)), fill: cc(c) }, s));
+      const nseV = MEASURE_FNS.nse(v); const hit = el("rect", { x: 0, y: y0, width: W, height: rowH, fill: "transparent" }, s);
+      hit.addEventListener("mousemove", (ev) => showTip(ev, `max ${v[0].toFixed(3)} · mean ${(v.reduce((a, b) => a + b, 0) / n).toFixed(3)}<br>NSE ${nseV.toFixed(4)} (from 8-bit copy)`)); hit.addEventListener("mouseleave", hideTip); }
+    box.appendChild(col);
+  }
+}
+
+// ---------- synthetic lab ----------
+const LAB_N = [50, 100, 784, 3072, 4096, 12288];
+const lab = { n: 0, b: 15, a: 20, k: 3, h: 40 };
+const PRESETS = { group: { n: 0, b: 15, a: 20, k: 3, h: 30 }, image: { n: 2, b: 0, a: 5, k: 150, h: 100 }, pedestal: { n: 0, b: 50, a: 4, k: 3, h: 50 } };
+function rng(seed) { let t = seed >>> 0; return () => { t += 0x6D2B79F5; let r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; }; }
+function labVectors() {
+  const n = LAB_N[lab.n], b = lab.b / 100, a = lab.a / 100, h = lab.h / 100, k = Math.min(lab.k, n);
+  const R = rng(1234 + lab.n * 7 + lab.b * 131 + lab.a * 17 + lab.k * 3 + lab.h * 11);
+  const make = (peaks) => { const v = new Float64Array(n); for (let i = 0; i < n; i++) v[i] = b + a * R();
+    if (peaks) for (let j = 0; j < k; j++) { const i = Math.floor(R() * n); v[i] += h; }
+    for (let i = 0; i < n; i++) v[i] = Math.min(1, Math.max(0, v[i])); return v; };
+  const NV = n > 3000 ? 80 : 200; const sig = [], noi = [];
+  for (let i = 0; i < NV; i++) { sig.push(make(true)); noi.push(make(false)); }
+  return { sig, noi };
+}
+function aucJs(p, q) { let s = 0; for (const x of p) for (const y of q) s += x > y ? 1 : x === y ? 0.5 : 0; return s / (p.length * q.length); }
+function med(a) { const s = Float64Array.from(a).sort(); const n = s.length; return n % 2 ? s[(n - 1) / 2] : 0.5 * (s[n / 2 - 1] + s[n / 2]); }
+function renderLab() {
+  const n = LAB_N[lab.n];
+  for (const [id, v] of [["lN", lab.n], ["lB", lab.b], ["lA", lab.a], ["lK", lab.k], ["lH", lab.h]]) document.getElementById(id).value = v;
+  document.getElementById("lNv").textContent = n; document.getElementById("lBv").textContent = (lab.b / 100).toFixed(2); document.getElementById("lAv").textContent = (lab.a / 100).toFixed(2);
+  document.getElementById("lKv").textContent = lab.k; document.getElementById("lHv").textContent = (lab.h / 100).toFixed(2);
+  const { sig, noi } = labVectors();
+  const keys = Object.keys(MEASURE_FNS);
+  let h = `<thead><tr><th>measure</th><th>signal median</th><th>noise median</th><th>separation</th></tr></thead><tbody>`;
+  for (const k of keys) { const ps = sig.map(MEASURE_FNS[k]), qs = noi.map(MEASURE_FNS[k]); const d = 2 * aucJs(ps, qs) - 1; const mag = Math.abs(d);
+    h += `<tr><td>${M[k].label}${SCALE_FREE.includes(k) ? "" : " <span class=muted>·abs</span>"}</td><td class="mono">${fmt(med(ps))}</td><td class="mono">${fmt(med(qs))}</td><td><div class="cellbar"><span>${mag.toFixed(2)}</span><b>${mag < 0.05 ? "·" : d > 0 ? "↑" : "↓"}</b><i style="width:${(mag * 100).toFixed(0)}%"></i></div></td></tr>`; }
+  const fS = med(sig.map((v) => 1 - 1 / (1 + Math.exp(-(MEASURE_FNS.nse(v) - 0.9) / MODEL_W)))), fN = med(noi.map((v) => 1 - 1 / (1 + Math.exp(-(MEASURE_FNS.nse(v) - 0.9) / MODEL_W))));
+  h += `<tr><td colspan="4" class="muted" style="white-space:normal">Model's NSE window on these vectors: median f = ${fS.toFixed(3)} for signal, ${fN.toFixed(3)} for noise (soft-WTA exponent ${(1 + (S - 1) * fS).toFixed(2)} vs ${(1 + (S - 1) * fN).toFixed(2)}).</td></tr>`;
+  document.getElementById("labTable").innerHTML = h + "</tbody>";
+  const W = 420, H = 120, box = document.getElementById("labPlot"); box.innerHTML = ""; const s = svg(W, H); box.appendChild(s);
+  const show = Math.min(n, 120); const draw = (v, c, y0) => { const srt = Array.from(v).sort((a, b) => b - a).slice(0, show); const bw = W / show;
+    el("line", { x1: 0, x2: W, y1: y0 + 55, y2: y0 + 55, stroke: css("--grid") }, s);
+    srt.forEach((a, i) => el("rect", { x: i * bw + 0.2, y: y0 + 55 - a * 52, width: Math.max(0.5, bw - 0.4), height: Math.max(0.5, a * 52), fill: c }, s)); };
+  draw(sig[0], "var(--s-real)", 0); draw(noi[0], "var(--s-unif)", 62);
+  if (n > show) text(s, W, H - 1, `largest ${show} of ${n} entries`, { "text-anchor": "end" });
+}
+for (const [id, key] of [["lN", "n"], ["lB", "b"], ["lA", "a"], ["lK", "k"], ["lH", "h"]]) document.getElementById(id).addEventListener("input", (e) => { lab[key] = +e.target.value; renderLab(); });
+document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => { Object.assign(lab, PRESETS[b.dataset.preset]); renderLab(); }));
+
+function renderAll(refit = false) {
+  STEPS = ds().steps;
+  if (!STEPS.includes(st.step)) {  // keep the training step when switching dataset; else nearest in log scale
+    st.step = STEPS.reduce((b, s) => Math.abs(Math.log(s / st.step)) < Math.abs(Math.log(b / st.step)) ? s : b, STEPS[0]);
+  }
+  if (refit) autoGate();
+  renderControls(); renderTraj(); renderSep(); renderHist(); renderScatter(); renderGate(); renderExamples();
+}
+document.getElementById("provenance").innerHTML = D.provenance || "";
+st.gate = st.measure === "nse" && st.kind !== "input" ? { c: 0.9, w: MODEL_W, pol: "low" } : st.gate;
+if (st.measure !== "nse") autoGate();
+renderAll(); renderLab();
+let rt; matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { clearTimeout(rt); rt = setTimeout(() => { renderAll(); renderLab(); }, 50); });
+new MutationObserver(() => { renderAll(); renderLab(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>
